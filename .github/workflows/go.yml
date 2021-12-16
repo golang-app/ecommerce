@@ -7,8 +7,50 @@ on:
     branches: [ master ]
 
 jobs:
+  
+  integration-tests:
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ecommerce
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          # Maps tcp port 5432 on service container to the host
+          - 5432:5432
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
 
-  build:
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.17
+        
+    - name: Install migrate tool
+      run: |
+        export PATH=${PATH}:`go env GOPATH`/bin
+        go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+      
+    - name: Run migration
+      run: |
+        export PATH=${PATH}:`go env GOPATH`/bin
+        migrate -source file://migrations -database "postgres://postgres:postgres@localhost:5432/ecommerce?sslmode=disable" up
+
+    - name: Test
+      env:
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
+        POSTGRES_DB: ecommerce
+      run: cd ./backend && go test -v ./... -tags integration
+
+  quick-tests:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
