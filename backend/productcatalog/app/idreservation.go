@@ -1,4 +1,4 @@
-package domain
+package app
 
 import (
 	"context"
@@ -6,18 +6,16 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 )
 
 var ErrIDInUse = errors.New("the product id is already reserved or in use")
 var regexpMultipleDashes = regexp.MustCompile("-+")
 var productIDRegCleanUp = regexp.MustCompile(`[^\w\d\-]+`)
 
-type ProductIdReservation struct {
+type productIdReservation struct {
 	storage productIDReservationStorage
-}
-
-func NewProductIdReservation(storage productIDReservationStorage) ProductIdReservation {
-	return ProductIdReservation{storage: storage}
 }
 
 type productIDReservationStorage interface {
@@ -25,7 +23,7 @@ type productIDReservationStorage interface {
 }
 
 // for the given name of the product, it returns next reserved ID
-func (r ProductIdReservation) Reserve(ctx context.Context, name string) (productID, error) {
+func (r productIdReservation) Reserve(ctx context.Context, name string) (domain.ProductID, error) {
 	// remove all unnecessary characters
 	id := strings.TrimSpace(name)
 	id = productIDRegCleanUp.ReplaceAllString(name, "-")
@@ -40,10 +38,10 @@ func (r ProductIdReservation) Reserve(ctx context.Context, name string) (product
 		return "", fmt.Errorf("cannot reserve the product ID (%s): %w", id, err)
 	}
 
-	return productID(id), nil
+	return domain.ProductID(id), nil
 }
 
-func (r ProductIdReservation) reserveIterating(ctx context.Context, id string) (productID, error) {
+func (r productIdReservation) reserveIterating(ctx context.Context, id string) (domain.ProductID, error) {
 	for i := 1; ; i++ {
 		nid := fmt.Sprintf("%s-%d", id, i)
 
@@ -56,6 +54,6 @@ func (r ProductIdReservation) reserveIterating(ctx context.Context, id string) (
 			return "", fmt.Errorf("cannot reserve the product ID (%s): %w", id, err)
 		}
 
-		return productID(nid), nil
+		return domain.ProductID(nid), nil
 	}
 }

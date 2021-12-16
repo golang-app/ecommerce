@@ -1,9 +1,10 @@
-package domain
+package app
 
 import (
 	"context"
 	"testing"
 
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/matryer/is"
 )
 
@@ -11,7 +12,7 @@ func TestIDReservation(t *testing.T) {
 	is := is.New(t)
 	// given
 	storage := reservationStorage{}
-	reserv := ProductIdReservation{storage: storage}
+	reserv := productIdReservation{storage: storage}
 
 	// when
 	id, err := reserv.Reserve(context.Background(), "my name")
@@ -19,7 +20,7 @@ func TestIDReservation(t *testing.T) {
 	// then
 	is.NoErr(err)
 	t.Log(id)
-	is.True(id == productID("my-name"))
+	is.True(id == domain.ProductID("my-name"))
 }
 
 type reservationStorage struct {

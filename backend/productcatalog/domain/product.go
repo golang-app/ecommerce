@@ -1,9 +1,7 @@
 package domain
 
 import (
-	"context"
 	"errors"
-	"fmt"
 	"regexp"
 )
 
@@ -31,7 +29,7 @@ func (p Price) Currency() string {
 
 // Product is an entity that represents a single product visable in the product catalog
 type Product struct {
-	id          productID
+	id          ProductID
 	name        string
 	description string
 	price       Price
@@ -40,34 +38,17 @@ type Product struct {
 
 var productIDReg = regexp.MustCompile(`[\w\d\-]+`)
 
-type productID string
+type ProductID string
 
-func NewProductId(id string) (productID, error) {
+func NewProductId(id string) (ProductID, error) {
 	if !productIDReg.MatchString(id) {
-		return productID(""), errors.New("the ID doesn't match")
+		return ProductID(""), errors.New("the ID doesn't match")
 	}
 
-	return productID(id), nil
+	return ProductID(id), nil
 }
 
-type productBuilder struct {
-	reservation ProductIdReservation
-}
-
-func NewProductBuilder(reservation ProductIdReservation) productBuilder {
-	return productBuilder{reservation: reservation}
-}
-
-func (pb productBuilder) Build(ctx context.Context, name, description string, price Price, thumbnail string) (Product, error) {
-	id, err := pb.reservation.Reserve(ctx, name)
-	if err != nil {
-		return Product{}, fmt.Errorf("cannot build the product: %w", err)
-	}
-
-	return NewProduct(id, name, description, price, thumbnail)
-}
-
-func NewProduct(id productID, name, description string, price Price, thumbnail string) (Product, error) {
+func NewProduct(id ProductID, name, description string, price Price, thumbnail string) (Product, error) {
 	if name == "" {
 		return Product{}, errors.New("the name cannot be empty")
 	}
@@ -85,7 +66,7 @@ func NewProduct(id productID, name, description string, price Price, thumbnail s
 	}, nil
 }
 
-func (p Product) ID() productID {
+func (p Product) ID() ProductID {
 	return p.id
 }
 

@@ -10,7 +10,7 @@ import (
 )
 
 type HTTP struct {
-	serv app.Product
+	serv app.ProductService
 }
 
 type AllProductsResponse struct {

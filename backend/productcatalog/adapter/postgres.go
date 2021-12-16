@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	_ "github.com/lib/pq"
 )
@@ -115,5 +116,5 @@ func (db postgres) Reserve(ctx context.Context, name string) error {
 		return fmt.Errorf("cannot make the product ID reservation: %w", err)
 	}
 
-	return domain.ErrIDInUse
+	return app.ErrIDInUse
 }
