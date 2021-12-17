@@ -25,8 +25,7 @@ type productIDReservationStorage interface {
 // for the given name of the product, it returns next reserved ID
 func (r productIdReservation) Reserve(ctx context.Context, name string) (domain.ProductID, error) {
 	// remove all unnecessary characters
-	id := strings.TrimSpace(name)
-	id = productIDRegCleanUp.ReplaceAllString(name, "-")
+	id := productIDRegCleanUp.ReplaceAllString(strings.TrimSpace(name), "-")
 	id = regexpMultipleDashes.ReplaceAllString(id, "-")
 	err := r.storage.Reserve(ctx, id)
 
