@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 )
 
 type HTTP struct {
@@ -37,7 +38,7 @@ func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := json.Marshal(products)
+	body, err := json.Marshal(toAllProductsResponse(products))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		log.Printf("cannot marshal products: %s", err)
@@ -47,4 +48,23 @@ func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Header().Add("content-type", "application/json")
 	_, _ = w.Write(body)
+}
+
+func toAllProductsResponse(products []domain.Product) AllProductsResponse {
+	resp := AllProductsResponse{}
+
+	for _, prod := range products {
+		resp.Products = append(resp.Products, product{
+			ID:          string(prod.ID()),
+			Name:        prod.Name(),
+			Description: prod.Description(),
+			Price: price{
+				Amount:   prod.Price().Amount(),
+				Currency: prod.Price().Currency(),
+			},
+			Thumbnail: prod.Thumbnail(),
+		})
+	}
+
+	return resp
 }
