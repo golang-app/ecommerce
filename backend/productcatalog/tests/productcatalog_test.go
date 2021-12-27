@@ -31,6 +31,19 @@ func TestFetchingProductsInTheCatalog(t *testing.T) {
 	is.NoErr(productEquals(p, fetched))
 }
 
+func TestFetchingNonExistingProduct(t *testing.T) {
+	is := is.New(t)
+	// given
+	ctx := context.Background()
+	appServ := app.NewProductService(storage)
+
+	// when
+	_, err := appServ.Find(ctx, "i-dont-exist")
+
+	// then
+	is.True(errors.Is(err, domain.ErrProductNotFound))
+}
+
 func productEquals(p1, p2 domain.Product) error {
 	if p1.ID() != p2.ID() {
 		return errors.New("id misatch")
