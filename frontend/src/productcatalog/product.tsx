@@ -77,7 +77,7 @@ export class ProductListView extends React.Component<
         (result) => {
           this.setState({
             isLoaded: true,
-            products: result.Products,
+            products: result.data,
             error: "",
           });
         },
@@ -146,7 +146,7 @@ export class ShowProduct extends React.Component<
         (result) => {
           this.setState({
             isLoaded: true,
-            product: result,
+            product: result.data,
             error: "",
           });
         },
@@ -168,15 +168,17 @@ export class ShowProduct extends React.Component<
       return <div>Loading...</div>;
     } else {
       return (
-        <div>
-          <h3>{product.name}</h3>
-          <p>
-            {product.price.amount} {product.price.currency}
-          </p>
-          <p>
-            <img src={product.thumbnail} alt={product.name} width="300px" />
-          </p>
-        </div>
+        <Container>
+          <Row>
+            <h3>{product.name}</h3>
+            <p>
+              {product.price.amount} {product.price.currency}
+            </p>
+            <p>
+              <img src={product.thumbnail} alt={product.name} width="300px" />
+            </p>
+          </Row>
+        </Container>
       );
     }
   }
