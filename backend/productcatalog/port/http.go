@@ -1,10 +1,11 @@
 package port
 
 import (
-	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/gorilla/mux"
@@ -18,10 +19,6 @@ func NewHTTP(productStorage app.ProductStorage) HTTP {
 	return HTTP{
 		serv: app.NewProductService(productStorage),
 	}
-}
-
-type AllProductsResponse struct {
-	Products []product
 }
 
 type product struct {
@@ -40,50 +37,37 @@ type price struct {
 func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {
 	products, err := h.serv.AllProducts(r.Context())
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		https.InternalError(w, "cannot get list of all products:")
 		log.Printf("cannot get list of all products: %s", err)
 		return
 	}
 
-	body, err := json.Marshal(toAllProductsResponse(products))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("cannot marshal products: %s", err)
-		return
-	}
-
-	cors(w)
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
+	resp := toAllProductsResponse(products)
+	https.OK(w, resp)
 }
 
 func (h HTTP) Product(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["productID"]
 	product, err := h.serv.Find(r.Context(), id)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		if errors.Is(err, domain.ErrProductNotFound) {
+			https.NotFound(w, "product does not exists")
+		} else {
+			https.InternalError(w, "cannot get list of all products")
+		}
+
 		log.Printf("cannot get list of all products: %s", err)
 		return
 	}
 
-	body, err := json.Marshal(productsToResponse(product))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		log.Printf("cannot marshal products: %s", err)
-		return
-	}
-
-	cors(w)
-	w.Header().Add("content-type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
+	https.OK(w, productsToResponse(product))
 }
 
-func toAllProductsResponse(products []domain.Product) AllProductsResponse {
-	resp := AllProductsResponse{}
+func toAllProductsResponse(products []domain.Product) []product {
+	resp := []product{}
 
 	for _, prod := range products {
-		resp.Products = append(resp.Products, productsToResponse(prod))
+		resp = append(resp, productsToResponse(prod))
 	}
 
 	return resp
@@ -100,12 +84,4 @@ func productsToResponse(prod domain.Product) product {
 		},
 		Thumbnail: prod.Thumbnail(),
 	}
-}
-
-func cors(w http.ResponseWriter) {
-	var allowedHeaders = "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization,X-CSRF-Token"
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-	w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
-	w.Header().Set("Access-Control-Expose-Headers", "Authorization")
 }
