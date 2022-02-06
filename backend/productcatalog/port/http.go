@@ -15,9 +15,9 @@ type HTTP struct {
 	serv app.ProductService
 }
 
-func NewHTTP(productStorage app.ProductStorage) HTTP {
+func NewHTTP(appServ app.ProductService) HTTP {
 	return HTTP{
-		serv: app.NewProductService(productStorage),
+		serv: appServ,
 	}
 }
 

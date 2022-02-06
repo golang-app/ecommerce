@@ -15,15 +15,10 @@ type postgres struct {
 	db *sql.DB
 }
 
-func NewPostgres(connString string) (postgres, error) {
-	db, err := sql.Open("postgres", connString)
-	if err != nil {
-		return postgres{}, fmt.Errorf("cannot establishe the postgres connection: %w", err)
-	}
-
+func NewPostgres(db *sql.DB) postgres {
 	return postgres{
 		db: db,
-	}, nil
+	}
 }
 
 func (db postgres) Add(ctx context.Context, p domain.Product) error {

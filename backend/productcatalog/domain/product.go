@@ -36,6 +36,8 @@ type Product struct {
 	thumbnail   string
 }
 
+var EmptyProduct = Product{}
+
 var productIDReg = regexp.MustCompile(`[\w\d\-]+`)
 
 type ProductID string
@@ -50,11 +52,11 @@ func NewProductId(id string) (ProductID, error) {
 
 func NewProduct(id ProductID, name, description string, price Price, thumbnail string) (Product, error) {
 	if name == "" {
-		return Product{}, errors.New("the name cannot be empty")
+		return EmptyProduct, errors.New("the name cannot be empty")
 	}
 
 	if description == "" {
-		return Product{}, errors.New("the description cannot be empty")
+		return EmptyProduct, errors.New("the description cannot be empty")
 	}
 
 	return Product{

@@ -1,4 +1,4 @@
-package tests
+package productcatalog_test
 
 import (
 	"context"

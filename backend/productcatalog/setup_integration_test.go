@@ -1,10 +1,14 @@
 //go:build integration
 
-package tests
+package productcatalog_test
 
-import "fmt"
-import "github.com/bkielbasa/go-ecommerce/backend/productcatalog/adapter"
-import "os"
+import (
+	"database/sql"
+	"fmt"
+	"os"
+
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/adapter"
+)
 
 func init() {
 	pass := getEnv("POSTGRES_PASSWORD", "")
@@ -16,12 +20,12 @@ func init() {
 		conn = fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=disable", getEnv("POSTGRES_HOST", "localhost"), getEnv("POSTGRES_PORT", "5432"), getEnv("POSTGRES_USER", "bartlomiejklimczak"), getEnv("POSTGRES_DB", "ecommerce"))
 	}
 
-	s, err := adapter.NewPostgres(conn)
+	db, err := sql.Open("postgres", conn)
 	if err != nil {
 		panic("cannot establish connection to postgres: " + err.Error())
 	}
 
-	storage = s
+	storage = adapter.NewPostgres(db)
 }
 
 func getEnv(name, def string) string {

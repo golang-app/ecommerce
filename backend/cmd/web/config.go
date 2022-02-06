@@ -3,16 +3,16 @@ package main
 import "fmt"
 
 type config struct {
-	ServerPort int `default:"8080" envconfig:"SERVER_PORT"`
+	ServerPort int `conf:"default:8080,SERVER_PORT"`
 	Postgres   postgresConfig
 }
 
 type postgresConfig struct {
-	User     string `default:"postgres"`
+	User     string `conf:"default:postgres"`
 	Password string
-	Port     int    `default:"5432"`
-	Host     string `default:"localhost"`
-	Db       string `default:"ecommerce"`
+	Port     int    `conf:"default:5432"`
+	Host     string `conf:"default:localhost"`
+	Db       string `conf:"default:ecommerce"`
 }
 
 func (pc postgresConfig) connectionString() string {
