@@ -35,7 +35,10 @@ func New(ctx context.Context, port int) *App {
 }
 
 func (app *App) Run() error {
-	go http.ListenAndServe(":6060", nil)
+	go func() {
+		// it is used only for pprof debugging
+		_ = http.ListenAndServe(":6060", nil)
+	}()
 
 	err := app.httpServer.ListenAndServe()
 	if err != http.ErrServerClosed {
