@@ -5,17 +5,23 @@ import (
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
+	"sync"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/gorilla/mux"
 )
 
+// App is an instance of the whole application.
+// It holds the basic information about all dependencies it has
+// and application-wide configuration.
+// Any Module can be registered using the app.AddModule() function
 type App struct {
 	httpServer *http.Server
 	router     *mux.Router
 	deps       *dependency.DependencyManager
 }
 
+// New creates a new instance of the application.
 func New(ctx context.Context, port int) *App {
 	r := mux.NewRouter()
 	deps := dependency.New()
@@ -34,6 +40,7 @@ func New(ctx context.Context, port int) *App {
 	}
 }
 
+// For debugging purpose, it exports
 func (app *App) Run() error {
 	go func() {
 		// it is used only for pprof debugging
@@ -49,7 +56,24 @@ func (app *App) Run() error {
 }
 
 func (app *App) Close(ctx context.Context) error {
-	return app.httpServer.Shutdown(ctx)
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		app.httpServer.Shutdown(ctx)
+	}()
+
+	wg.Add(len(app.deps.All()))
+	for _, dep := range app.deps.All() {
+		func(dep dependency.Dependency) {
+			defer wg.Done()
+			_ = dep.Close()
+		}(dep)
+	}
+
+	wg.Wait()
+
+	return nil
 }
 
 type MuxRegister interface {
@@ -60,11 +84,11 @@ func (app *App) AddDependency(dep dependency.Dependency) {
 	app.deps.Add(dep)
 }
 
-func (app *App) AddModule(module Module) {
-	if m, ok := module.(MuxRegister); ok {
+func (app *App) AddBoundedContext(bc BoundedContext) {
+	if m, ok := bc.(MuxRegister); ok {
 		m.MuxRegister(app.router)
 	}
 }
 
-type Module interface {
+type BoundedContext interface {
 }

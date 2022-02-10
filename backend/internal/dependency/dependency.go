@@ -28,6 +28,10 @@ func (h *DependencyManager) Add(dep Dependency) {
 	h.dependencies = append(h.dependencies, dep)
 }
 
+func (h *DependencyManager) All() []Dependency {
+	return h.dependencies
+}
+
 func (h *DependencyManager) Healthy(w http.ResponseWriter, r *http.Request) {
 	for _, s := range h.dependencies {
 		if !s.Healthy(r.Context()) {

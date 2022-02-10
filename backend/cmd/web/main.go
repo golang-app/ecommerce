@@ -41,7 +41,7 @@ func main() {
 	}
 
 	app.AddDependency(dependency.NewSQL(db))
-	app.AddModule(productcatalog.New(db))
+	app.AddBoundedContext(productcatalog.New(db))
 
 	go func() {
 		_ = app.Run()

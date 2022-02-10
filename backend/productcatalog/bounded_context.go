@@ -10,20 +10,20 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func New(db *sql.DB) application.Module {
+func New(db *sql.DB) application.BoundedContext {
 	storage := adapter.NewPostgres(db)
 	appServ := app.NewProductService(storage)
 
-	return &module{
+	return &boundedContext{
 		httpHandler: port.NewHTTP(appServ),
 	}
 }
 
-type module struct {
+type boundedContext struct {
 	httpHandler port.HTTP
 }
 
-func (m module) MuxRegister(r *mux.Router) {
+func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/products", m.httpHandler.AllProducts)
 	r.HandleFunc("/product/{productID}", m.httpHandler.Product)
 }
