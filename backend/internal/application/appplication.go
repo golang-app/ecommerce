@@ -60,7 +60,7 @@ func (app *App) Close(ctx context.Context) error {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		app.httpServer.Shutdown(ctx)
+		_ = app.httpServer.Shutdown(ctx)
 	}()
 
 	wg.Add(len(app.deps.All()))
