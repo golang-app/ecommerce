@@ -63,8 +63,8 @@ func (app *App) Close(ctx context.Context) error {
 		_ = app.httpServer.Shutdown(ctx)
 	}()
 
-	wg.Add(len(app.deps.All()))
 	for _, dep := range app.deps.All() {
+		wg.Add(1)
 		func(dep dependency.Dependency) {
 			defer wg.Done()
 			_ = dep.Close()
