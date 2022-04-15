@@ -20,7 +20,7 @@ func TestCart_Adding_Products_To_Cart_Should_Change_Quantity(t *testing.T) {
 	c.Add(pID, 1)
 
 	// then
-	is.Equal(4.0, c.Quantity(pID.ID()))
+	is.Equal(4, c.Quantity(pID.ID()))
 }
 
 func TestCart_Adding_Products_To_Cart_Should_Change_Quantity_Of_Single_Product(t *testing.T) {
@@ -33,8 +33,8 @@ func TestCart_Adding_Products_To_Cart_Should_Change_Quantity_Of_Single_Product(t
 	c.Add(pID2, 3)
 
 	// then
-	is.Equal(1.0, c.Quantity(pID.ID()))
-	is.Equal(3.0, c.Quantity(pID2.ID()))
+	is.Equal(1, c.Quantity(pID.ID()))
+	is.Equal(3, c.Quantity(pID2.ID()))
 }
 
 func TestCart_CalculateTotalPrice(t *testing.T) {
@@ -47,7 +47,7 @@ func TestCart_CalculateTotalPrice(t *testing.T) {
 	c.Add(pID2, 3)
 
 	// then
-	is.Equal(4.0, c.TotalQuantity())
+	is.Equal(4, c.TotalQuantity())
 }
 
 func TestPriceService_CalculatingTotalPrice(t *testing.T) {
