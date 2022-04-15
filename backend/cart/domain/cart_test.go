@@ -16,8 +16,8 @@ func TestCart_Adding_Products_To_Cart_Should_Change_Quantity(t *testing.T) {
 	c := domain.NewCart(newMockPrice())
 
 	// when
-	c.Add(pID, 3)
-	c.Add(pID, 1)
+	_ = c.Add(pID, 3)
+	_ = c.Add(pID, 1)
 
 	// then
 	is.Equal(4, c.Quantity(pID.ID()))
@@ -27,10 +27,10 @@ func TestCart_Adding_Products_To_Cart_Should_Change_Quantity_Of_Single_Product(t
 	is := is.New(t)
 	// given
 	c := domain.NewCart(newMockPrice())
-	c.Add(pID, 1)
+	_ = c.Add(pID, 1)
 
 	// when
-	c.Add(pID2, 3)
+	_ = c.Add(pID2, 3)
 
 	// then
 	is.Equal(1, c.Quantity(pID.ID()))
@@ -43,8 +43,8 @@ func TestCart_CalculateTotalPrice(t *testing.T) {
 	c := domain.NewCart(newMockPrice())
 
 	// when
-	c.Add(pID, 1)
-	c.Add(pID2, 3)
+	_ = c.Add(pID, 1)
+	_ = c.Add(pID2, 3)
 
 	// then
 	is.Equal(4, c.TotalQuantity())
@@ -56,7 +56,7 @@ func TestPriceService_CalculatingTotalPrice(t *testing.T) {
 	serv := domain.NewCart(newMockPrice())
 
 	// when
-	serv.Add(pID, 3)
+	_ = serv.Add(pID, 3)
 	total, err := serv.TotalPrice()
 
 	// then

@@ -41,14 +41,6 @@ func buildCartService(pid string) app.CartService {
 	})
 }
 
-type mockCartStorage struct {
-	c *domain.Cart
-}
-
-func (m mockCartStorage) Get(ctx context.Context, key string) (*domain.Cart, error) {
-	return m.c, nil
-}
-
 func newMockPrice() mockPriceService {
 	return mockPriceService{}
 }
