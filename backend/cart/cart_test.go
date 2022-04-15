@@ -26,9 +26,9 @@ func TestAddItemToCart(t *testing.T) {
 		t.Errorf("could not get total price: %s", err)
 	}
 
-	expected := 100
+	expected := 100.0
 	if tp != expected {
-		t.Errorf("expected total price to be %d, got %d", expected, tp)
+		t.Errorf("expected total price to be %f, got %f", expected, tp)
 	}
 }
 
