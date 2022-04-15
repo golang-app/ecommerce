@@ -8,18 +8,18 @@ import (
 var ErrProductNotFound = errors.New("product not found")
 
 type Price struct {
-	amount   float32
+	amount   float64
 	currency string
 }
 
-func NewPrice(amount float32, currency string) Price {
+func NewPrice(amount float64, currency string) Price {
 	return Price{
 		amount:   amount,
 		currency: currency,
 	}
 }
 
-func (p Price) Amount() float32 {
+func (p Price) Amount() float64 {
 	return p.amount
 }
 

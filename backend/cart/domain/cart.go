@@ -1,19 +1,27 @@
 package domain
 
 type Cart struct {
-	products map[string]cartItem
-	ps       priceService
+	cartItems map[string]cartItem
+	ps        priceService
 }
 
 type cartItem struct {
 	product  Product
-	quantity float64
+	quantity int
+}
+
+func (ci cartItem) Product() Product {
+	return ci.product
+}
+
+func (ci cartItem) Quantity() int {
+	return ci.quantity
 }
 
 func NewCart(ps priceService) *Cart {
 	return &Cart{
-		products: map[string]cartItem{},
-		ps:       ps,
+		cartItems: map[string]cartItem{},
+		ps:        ps,
 	}
 }
 
@@ -21,13 +29,13 @@ type priceService interface {
 	PriceFor(productID string) (float64, error)
 }
 
-func (c *Cart) Add(product Product, quantity float64) error {
-	if _, ok := c.products[product.ID()]; ok {
-		ci := c.products[product.ID()]
+func (c *Cart) Add(product Product, quantity int) error {
+	if _, ok := c.cartItems[product.ID()]; ok {
+		ci := c.cartItems[product.ID()]
 		ci.quantity += quantity
-		c.products[product.ID()] = ci
+		c.cartItems[product.ID()] = ci
 	} else {
-		c.products[product.ID()] = cartItem{
+		c.cartItems[product.ID()] = cartItem{
 			product:  product,
 			quantity: quantity,
 		}
@@ -35,13 +43,17 @@ func (c *Cart) Add(product Product, quantity float64) error {
 	return nil
 }
 
-func (c *Cart) Quantity(productID string) float64 {
-	return c.products[productID].quantity
+func (c *Cart) Items() map[string]cartItem {
+	return c.cartItems
 }
 
-func (c *Cart) TotalQuantity() float64 {
-	total := 0.0
-	for _, quantity := range c.products {
+func (c *Cart) Quantity(productID string) int {
+	return c.cartItems[productID].quantity
+}
+
+func (c *Cart) TotalQuantity() int {
+	total := 0
+	for _, quantity := range c.cartItems {
 		total += quantity.quantity
 	}
 
@@ -50,8 +62,8 @@ func (c *Cart) TotalQuantity() float64 {
 
 func (c *Cart) TotalPrice() (float64, error) {
 	total := 0.0
-	for _, ci := range c.products {
-		total += float64(ci.product.price) * ci.quantity
+	for _, ci := range c.cartItems {
+		total += ci.product.price * float64(ci.quantity)
 	}
 
 	return total, nil

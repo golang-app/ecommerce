@@ -58,7 +58,7 @@ func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
 			return nil, fmt.Errorf("cannot rebuild the product ID: %w", err)
 		}
 
-		prod, err := domain.NewProduct(pid, name, description, domain.NewPrice(float32(amount), currency), thumbnail)
+		prod, err := domain.NewProduct(pid, name, description, domain.NewPrice(float64(amount), currency), thumbnail)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create product from data in the DB: %w", err)
 		}
@@ -94,7 +94,7 @@ func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) 
 		return domain.Product{}, fmt.Errorf("cannot build product: %w", err)
 	}
 
-	return domain.NewProduct(pId, name, description, domain.NewPrice(float32(amount), currency), thumbnail)
+	return domain.NewProduct(pId, name, description, domain.NewPrice(float64(amount), currency), thumbnail)
 }
 
 func (db postgres) Reserve(ctx context.Context, name string) error {

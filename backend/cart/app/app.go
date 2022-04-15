@@ -8,34 +8,33 @@ import (
 )
 
 type CartService struct {
-	storage        CartStorage
+	cart           *domain.Cart
 	productCatalog ProductCatalog
 }
 
 type CartStorage interface {
-	Get(ctx context.Context, key string) (domain.Cart, error)
+	Get(ctx context.Context, key string) (*domain.Cart, error)
 }
 
 type ProductCatalog interface {
 	Find(ctx context.Context, productID string) (domain.Product, error)
 }
 
-func NewCartService(cs CartStorage, pc ProductCatalog) CartService {
-	return CartService{storage: cs, productCatalog: pc}
+func NewCartService(cart *domain.Cart, pc ProductCatalog) CartService {
+	return CartService{cart: cart, productCatalog: pc}
 }
 
-func (c CartService) Add(ctx context.Context, cartID, productID string, quantity float64) error {
+func (c CartService) TotalPrice() (float64, error) {
+	return c.cart.TotalPrice()
+}
+
+func (c CartService) Add(ctx context.Context, productID string, quantity int) error {
 	p, err := c.productCatalog.Find(ctx, productID)
 	if err != nil {
-		return fmt.Errorf("could not find product %s in the product catalog: %w", productID, err)
+		return err
 	}
 
-	cart, err := c.storage.Get(ctx, cartID)
-	if err != nil {
-		return fmt.Errorf("could not get cart: %w", err)
-	}
-
-	if err = cart.Add(p, quantity); err != nil {
+	if err = c.cart.Add(p, quantity); err != nil {
 		return fmt.Errorf("could not add product %s to the cart: %w", productID, err)
 	}
 

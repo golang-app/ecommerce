@@ -31,7 +31,7 @@ type product struct {
 
 type price struct {
 	Currency string  `json:"currency"`
-	Amount   float32 `json:"amount"`
+	Amount   float64 `json:"amount"`
 }
 
 func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {

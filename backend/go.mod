@@ -10,4 +10,8 @@ require (
 	github.com/sirupsen/logrus v1.8.1
 )
 
-require golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
+require (
+	github.com/gorilla/securecookie v1.1.1 // indirect
+	github.com/gorilla/sessions v1.2.1 // indirect
+	golang.org/x/sys v0.0.0-20220319134239-a9b59b0215f8 // indirect
+)

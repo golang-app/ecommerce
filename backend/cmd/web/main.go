@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ardanlabs/conf"
+	"github.com/bkielbasa/go-ecommerce/backend/cart"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
@@ -41,7 +42,10 @@ func main() {
 	}
 
 	app.AddDependency(dependency.NewSQL(db))
-	app.AddBoundedContext(productcatalog.New(db))
+	pcBD, cartService := productcatalog.New(db)
+
+	app.AddBoundedContext(pcBD)
+	app.AddBoundedContext(cart.New(db, cartService))
 
 	go func() {
 		_ = app.Run()

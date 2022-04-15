@@ -10,13 +10,13 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func New(db *sql.DB) application.BoundedContext {
+func New(db *sql.DB) (application.BoundedContext, app.ProductService) {
 	storage := adapter.NewPostgres(db)
 	appServ := app.NewProductService(storage)
 
 	return &boundedContext{
 		httpHandler: port.NewHTTP(appServ),
-	}
+	}, appServ
 }
 
 type boundedContext struct {
