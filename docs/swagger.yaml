@@ -1,0 +1,88 @@
+openapi: 3.0.1
+info:
+  title: GoEcommerce
+  version: 1.0.0
+# Add servers when we'll have running one
+# servers:
+# - url: https://some-url.com
+paths:
+  /products:
+    get:
+      tags:
+        - product catalog
+      summary: List all products in the product catalog
+      responses:
+        200:
+          description: List all products in the product catalog
+          content:
+            application/json:
+              schema:
+                 $ref: "#/components/schemas/ProductCatalogProducts"
+  /product/{productID}:
+    get:
+      tags:
+        - product catalog
+      summary: Get detailed product's information
+      parameters:
+        - name: productID
+          in: path
+          description: Product ID
+          required: true
+          schema:
+            type: string
+      responses:
+        200:
+          description: Returns a single product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductCatalogGetProduct"
+components:
+  schemas:
+    ProductCatalogProducts:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductCatalogProduct"
+            
+    ProductCatalogGetProduct:
+      required:
+      - data
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ProductCatalogProduct"
+
+    ProductCatalogProduct:
+      type: object
+      required:
+          - id
+          - name
+          - description
+          - price
+          - thumbnail
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          $ref: "#/components/schemas/Price"
+        thumbnail:
+          type: string
+    Price:
+      type: object
+      required:
+        - amount
+        - currency
+      properties:
+        amount:
+          type: number
+        currency:
+          type: string
