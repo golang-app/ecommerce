@@ -12,5 +12,6 @@ type Dependency interface {
 ```
 
 `Healthy(context.Context) bool` method is used in Liveness Probe.
+
 `Ready(context.Context) bool` method is used in Readiness Probe.
 
