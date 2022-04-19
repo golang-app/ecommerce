@@ -20,6 +20,8 @@ func New(db *sql.DB, pc pcApp.ProductService) application.BoundedContext {
 	}
 }
 
+// transformProductCatalog is part of Anti-Corruption Layer that prevents leaking
+// productcatalog's types into the cart
 type transformProductCatalog struct {
 	pc pcApp.ProductService
 }
