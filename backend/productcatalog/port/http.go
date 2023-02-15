@@ -37,7 +37,7 @@ type price struct {
 func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {
 	products, err := h.serv.AllProducts(r.Context())
 	if err != nil {
-		https.InternalError(w, "cannot get list of all products:")
+		https.InternalError(w, "cannot get list of all products")
 		log.Printf("cannot get list of all products: %s", err)
 		return
 	}
