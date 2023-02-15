@@ -1,6 +1,5 @@
-FROM golang:1.17-alpine AS builder
+FROM golang:1.19-alpine AS builder
 
-RUN mkdir /build/
 WORKDIR /build/
 COPY go.* ./
 RUN go mod download
@@ -11,5 +10,5 @@ RUN go build -o webapp
 FROM alpine
 WORKDIR /app
 COPY --from=builder /build/cmd/web/webapp /
-ENTRYPOINT ./webapp
+ENTRYPOINT /webapp
 

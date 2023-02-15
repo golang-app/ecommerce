@@ -9,7 +9,7 @@ type config struct {
 
 type postgresConfig struct {
 	User     string `conf:"default:postgres"`
-	Password string
+	Password string `conf:"default:postgres"`
 	Port     int    `conf:"default:5432"`
 	Host     string `conf:"default:localhost"`
 	Db       string `conf:"default:ecommerce"`
