@@ -29,10 +29,21 @@ func (ps ProductService) Find(ctx context.Context, id string) (domain.Product, e
 	return ps.storage.Find(ctx, id)
 }
 
-func (ps ProductService) ProductBuilder() productBuilder {
-	return productBuilder{
-		reservation: productIdReservation{
-			storage: ps.storage,
-		},
+func (ps ProductService) Add(ctx context.Context, id, name, desc string, price float64, currency string) error {
+	pId, err := domain.NewProductId(id)
+	if err != nil {
+		return err
 	}
+
+	p, err := domain.NewProduct(pId, name, desc, domain.NewPrice(price, currency), "")
+	if err != nil {
+		return err
+	}
+
+	err = ps.storage.Add(ctx, p)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -1,18 +1,46 @@
 package domain
 
+import (
+	"errors"
+)
+
+var ErrProductNotFound = errors.New("product not found")
+
 type Product struct {
 	id    string
-	price float64
+	name  string
+	price price
 }
 
-func NewProduct(id string, price float64) Product {
-	return Product{id: id, price: price}
+func NewProduct(id string, name string, amount float64, currency string) Product {
+	return Product{id: id, name: name, price: price{amount: amount, currency: currency}}
 }
 
 func (p Product) ID() string {
 	return p.id
 }
 
-func (p Product) Price() float64 {
+func (p Product) Price() price {
 	return p.price
+}
+
+func (p Product) Name() string {
+	return p.name
+}
+
+type price struct {
+	amount   float64
+	currency string
+}
+
+func NewPrice(amount float64, currency string) price {
+	return price{amount: amount, currency: currency}
+}
+
+func (p price) Amount() float64 {
+	return p.amount
+}
+
+func (p price) Currency() string {
+	return p.currency
 }

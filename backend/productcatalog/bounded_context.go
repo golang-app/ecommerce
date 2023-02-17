@@ -24,6 +24,6 @@ type boundedContext struct {
 }
 
 func (m boundedContext) MuxRegister(r *mux.Router) {
-	r.HandleFunc("/products", m.httpHandler.AllProducts)
-	r.HandleFunc("/product/{productID}", m.httpHandler.Product)
+	r.HandleFunc("/api/v1/products", m.httpHandler.AllProducts)
+	r.HandleFunc("/api/v1/product/{productID}", m.httpHandler.Product)
 }

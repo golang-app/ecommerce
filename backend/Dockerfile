@@ -8,7 +8,7 @@ WORKDIR /build/cmd/web/
 RUN go build -o webapp
 
 FROM alpine
-WORKDIR /app
+WORKDIR /
 COPY --from=builder /build/cmd/web/webapp /
 ENTRYPOINT /webapp
 

@@ -32,12 +32,21 @@ func OK(w http.ResponseWriter, msg interface{}) {
 	_, _ = w.Write(body)
 }
 
+func NoContent(w http.ResponseWriter) {
+	cors(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func NotFound(w http.ResponseWriter, msg string) {
 	Error(w, msg, http.StatusNotFound)
 }
 
 func InternalError(w http.ResponseWriter, msg string) {
 	Error(w, msg, http.StatusInternalServerError)
+}
+
+func BadRequest(w http.ResponseWriter, msg string) {
+	Error(w, msg, http.StatusBadRequest)
 }
 
 func Error(w http.ResponseWriter, msg string, code int) {

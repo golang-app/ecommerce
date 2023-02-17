@@ -2,11 +2,34 @@ openapi: 3.0.1
 info:
   title: GoEcommerce
   version: 1.0.0
-# Add servers when we'll have running one
-# servers:
-# - url: https://some-url.com
+servers:
+ - url: http://localhost:8080
 paths:
-  /products:
+  /api/v1/cart:
+    post:
+      tags:
+        - cart
+      requestBody:
+        description: add product to the cart
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddToCart'
+      responses:
+        200:
+          description: OK
+    get:
+      tags:
+        - cart
+      responses:
+        200:
+          description: Returns all products in the cart
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CartResponse'
+  /api/v1/products:
     get:
       tags:
         - product catalog
@@ -18,7 +41,7 @@ paths:
             application/json:
               schema:
                  $ref: "#/components/schemas/ProductCatalogProducts"
-  /product/{productID}:
+  /api/v1/product/{productID}:
     get:
       tags:
         - product catalog
@@ -86,3 +109,31 @@ components:
           type: number
         currency:
           type: string
+          
+    AddToCart:
+      type: object
+      properties:
+        product_id:
+          type: string
+        qty:
+          type: number
+      required:
+        - product_id
+        - qty
+    
+    CartResponse:
+      type: array
+      items:
+        type: object
+        properties:
+          product_id:
+            type: string
+          qty:
+            type: number
+          price:
+            $ref: "#/components/schemas/Price"
+        required:
+          - product_id
+          - qty
+          - price
+
