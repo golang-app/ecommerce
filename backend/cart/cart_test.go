@@ -2,6 +2,7 @@ package cart_test
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"testing"
 
@@ -9,47 +10,74 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 )
 
-func TestAddItemToCart(t *testing.T) {
+var storage app.CartStorage
+
+func TestAddItemToCartSuccessfully(t *testing.T) {
 	// given
 	pID := "productID"
-	serv := buildCartService(pID)
+	serv := newCartServiceBuilder().WithProduct(pID, 10).build()
+	ctx := context.Background()
+	sessID := sessionID()
 
 	// when
-	err := serv.Add(context.Background(), pID, 10)
+	err := serv.AddToCart(ctx, sessID, pID, 10)
+	if err != nil {
+		t.Errorf("could not add product to the cart: %s", err)
+	}
+
+	// when
+	items, err := serv.Items(ctx, sessID)
 	if err != nil {
 		t.Errorf("could not add product to the cart: %s", err)
 	}
 
 	// then
-	tp, err := serv.TotalPrice()
-	if err != nil {
-		t.Errorf("could not get total price: %s", err)
+	if len(items) != 1 {
+		t.Errorf("expected 10 items, got %d", len(items))
 	}
 
-	expected := 100.0
-	if tp != expected {
-		t.Errorf("expected total price to be %f, got %f", expected, tp)
+	if items[0].Product().ID() != pID {
+		t.Errorf("expected product ID to be '%s', got '%s'", pID, items[0].Product().ID())
+	}
+
+	if items[0].Quantity() != 10 {
+		t.Errorf("expected quantity to be 10, got %d", items[0].Quantity())
 	}
 }
 
-func buildCartService(pid string) app.CartService {
-	c := domain.NewCart(newMockPrice())
-	return app.NewCartService(c, mockProductCatalog{
-		products: map[string]domain.Product{
-			pid: domain.NewProduct(pid, 10),
-		},
-	})
+func TestCannotAddNotExistingProductToTheCart(t *testing.T) {
+	// given
+	pID := "productID"
+	serv := newCartServiceBuilder().build()
+	ctx := context.Background()
+	sessID := "sessionID"
+
+	// when
+	err := serv.AddToCart(ctx, sessID, pID, 10)
+
+	// then
+	if err == nil {
+		t.Errorf("expected error, got nil")
+	}
 }
 
-func newMockPrice() mockPriceService {
-	return mockPriceService{}
+type cartServiceBuilder struct {
+	products map[string]domain.Product
 }
 
-type mockPriceService struct {
+func newCartServiceBuilder() cartServiceBuilder {
+	return cartServiceBuilder{
+		products: map[string]domain.Product{},
+	}
 }
 
-func (m mockPriceService) PriceFor(productID string) (float64, error) {
-	return 1, nil
+func (b cartServiceBuilder) build() app.CartService {
+	return app.NewCartService(storage, mockProductCatalog(b))
+}
+
+func (b cartServiceBuilder) WithProduct(pID string, price float64) cartServiceBuilder {
+	b.products[pID] = domain.NewProduct(pID, "test name", price, "PLN")
+	return b
 }
 
 type mockProductCatalog struct {
@@ -63,4 +91,17 @@ func (m mockProductCatalog) Find(ctx context.Context, productID string) (domain.
 	}
 
 	return p, nil
+}
+
+func sessionID() (uuid string) {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return
+	}
+
+	uuid = fmt.Sprintf("user_%X-%X-%X-%X-%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+
+	return
 }

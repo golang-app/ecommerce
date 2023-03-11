@@ -11,13 +11,13 @@ import (
 )
 
 func init() {
-	pass := getEnv("POSTGRES_PASSWORD", "")
+	pass := getEnv("POSTGRES_PASSWORD", "postgres")
 	var conn string
 
 	if pass != "" {
-		conn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", getEnv("POSTGRES_HOST", "localhost"), getEnv("POSTGRES_PORT", "5432"), getEnv("POSTGRES_USER", "bartlomiejklimczak"), pass, getEnv("POSTGRES_DB", "ecommerce"))
+		conn = fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", getEnv("POSTGRES_HOST", "localhost"), getEnv("POSTGRES_PORT", "5432"), getEnv("POSTGRES_USER", "postgres"), pass, getEnv("POSTGRES_DB", "ecommerce"))
 	} else {
-		conn = fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=disable", getEnv("POSTGRES_HOST", "localhost"), getEnv("POSTGRES_PORT", "5432"), getEnv("POSTGRES_USER", "bartlomiejklimczak"), getEnv("POSTGRES_DB", "ecommerce"))
+		conn = fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=disable", getEnv("POSTGRES_HOST", "localhost"), getEnv("POSTGRES_PORT", "5432"), getEnv("POSTGRES_USER", "postgres"), getEnv("POSTGRES_DB", "ecommerce"))
 	}
 
 	db, err := sql.Open("postgres", conn)

@@ -1,32 +1,38 @@
 package domain
 
+import (
+	"errors"
+)
+
+var ErrCartNotFound = errors.New("cart: not found")
+
 type Cart struct {
-	cartItems map[string]cartItem
-	ps        priceService
+	cartItems map[string]CartItem
+	user      User
 }
 
-type cartItem struct {
+type CartItem struct {
 	product  Product
 	quantity int
 }
 
-func (ci cartItem) Product() Product {
+func (ci CartItem) Product() Product {
 	return ci.product
 }
 
-func (ci cartItem) Quantity() int {
+func (ci CartItem) Quantity() int {
 	return ci.quantity
 }
 
-func NewCart(ps priceService) *Cart {
+func NewCart(user User) *Cart {
 	return &Cart{
-		cartItems: map[string]cartItem{},
-		ps:        ps,
+		cartItems: map[string]CartItem{},
+		user:      user,
 	}
 }
 
-type priceService interface {
-	PriceFor(productID string) (float64, error)
+func (c *Cart) User() User {
+	return c.user
 }
 
 func (c *Cart) Add(product Product, quantity int) error {
@@ -35,7 +41,7 @@ func (c *Cart) Add(product Product, quantity int) error {
 		ci.quantity += quantity
 		c.cartItems[product.ID()] = ci
 	} else {
-		c.cartItems[product.ID()] = cartItem{
+		c.cartItems[product.ID()] = CartItem{
 			product:  product,
 			quantity: quantity,
 		}
@@ -43,8 +49,13 @@ func (c *Cart) Add(product Product, quantity int) error {
 	return nil
 }
 
-func (c *Cart) Items() map[string]cartItem {
-	return c.cartItems
+func (c *Cart) Items() []CartItem {
+	items := make([]CartItem, 0, len(c.cartItems))
+	for _, ci := range c.cartItems {
+		items = append(items, ci)
+	}
+
+	return items
 }
 
 func (c *Cart) Quantity(productID string) int {
@@ -58,13 +69,4 @@ func (c *Cart) TotalQuantity() int {
 	}
 
 	return total
-}
-
-func (c *Cart) TotalPrice() (float64, error) {
-	total := 0.0
-	for _, ci := range c.cartItems {
-		total += ci.product.price * float64(ci.quantity)
-	}
-
-	return total, nil
 }

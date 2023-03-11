@@ -4,17 +4,13 @@ services:
   frontend:
     build:
       context: ./frontend
-    depends_on:
-      - backend
-    links:
-      - backend
     ports:
       - 3000:3000
   backend:
     build:
       context: ./backend
     depends_on:
-      - postgres
+      - migrate
     links:
       - postgres
     ports:
@@ -31,3 +27,13 @@ services:
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: ecommerce
+  migrate:
+    image: migrate/migrate
+    restart: on-failure
+    depends_on:
+      - postgres
+    links:
+      - postgres
+    volumes:
+      - ./migrations:/migrations
+    command: ["-path", "/migrations", "-database",  "postgres://postgres:postgres@postgres:5432/ecommerce?sslmode=disable", "up"]

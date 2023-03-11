@@ -3,12 +3,15 @@ package cart
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/adapter"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/port"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	pcApp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
+	pcDomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/gorilla/mux"
 )
 
@@ -28,11 +31,16 @@ type transformProductCatalog struct {
 
 func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (domain.Product, error) {
 	p, err := tpc.pc.Find(ctx, productID)
+
+	if errors.Is(err, pcDomain.ErrProductNotFound) {
+		return domain.Product{}, domain.ErrProductNotFound
+	}
+
 	if err != nil {
 		return domain.Product{}, err
 	}
 
-	return domain.NewProduct(string(p.ID()), p.Price().Amount()), nil
+	return domain.NewProduct(string(p.ID()), p.Name(), p.Price().Amount(), p.Price().Currency()), nil
 }
 
 type boundedContext struct {
@@ -40,6 +48,6 @@ type boundedContext struct {
 }
 
 func (m boundedContext) MuxRegister(r *mux.Router) {
-	r.HandleFunc("/cart", port.EnsureSessionID(m.httpHandler.ShowCart))
-	// r.HandleFunc("/product/{productID}", m.httpHandler.Product)
+	r.HandleFunc("/api/v1/cart", port.EnusreCartID(https.WrapPanic(m.httpHandler.AddToCart))).Methods("POST")
+	r.HandleFunc("/api/v1/cart", port.EnusreCartID(https.WrapPanic(m.httpHandler.ShowCart))).Methods("GET")
 }
