@@ -49,17 +49,3 @@ func TestCart_CalculateTotalPrice(t *testing.T) {
 	// then
 	is.Equal(4, c.TotalQuantity())
 }
-
-// func TestPriceService_CalculatingTotalPrice(t *testing.T) {
-// 	is := is.New(t)
-// 	// given
-// 	serv := domain.NewCart(domain.NewUser(""))
-
-// 	// when
-// 	_ = serv.Add(pID, 3)
-// 	total, err := serv.TotalPrice()
-
-// 	// then
-// 	is.NoErr(err)
-// 	is.Equal(6.0, total)
-// }
