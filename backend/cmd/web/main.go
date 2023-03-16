@@ -45,8 +45,19 @@ func main() {
 		AppName: appName,
 		Env:     cfg.Env,
 	})
-	defer tracerClose(context.Background())
-	observability.RuntimeMetrics(ctx, appName)
+	if err != nil {
+		logger.WithError(err).Fatal("failed to initialize tracer")
+	}
+
+	defer func() {
+		if err = tracerClose(context.Background()); err != nil {
+			logger.WithError(err).Error("failed to close tracer")
+		}
+	}()
+
+	if err = observability.RuntimeMetrics(ctx, appName); err != nil {
+		logger.WithError(err).Fatal("failed to initialize runtime metrics")
+	}
 
 	app := application.New(ctx, cfg.ServerPort)
 
