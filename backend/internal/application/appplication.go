@@ -9,6 +9,7 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // App is an instance of the whole application.
@@ -30,7 +31,7 @@ func New(ctx context.Context, port int) *App {
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: r,
+		Handler: otelhttp.NewHandler(r, ""),
 	}
 
 	return &App{

@@ -1,0 +1,5 @@
+datasources:
+- name: ElasticSearch
+  access: proxy
+  type: elasticsearch
+  url: http://elasticsearch:9200
