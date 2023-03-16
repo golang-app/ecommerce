@@ -14,3 +14,8 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 .vscode/
+
+.docker/elasticsearch/indices/
+.docker/elasticsearch/_state/
+.docker/elasticsearch/node.lock
+.docker/elasticsearch/snapshot_cache/
