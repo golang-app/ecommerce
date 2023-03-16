@@ -20,12 +20,12 @@ func NewSQL(pinger pinger) sqlDep {
 
 func (p sqlDep) Healthy(ctx context.Context) bool {
 	err := p.pinger.PingContext(ctx)
-	return err != nil
+	return err == nil
 }
 
 func (p sqlDep) Ready(ctx context.Context) bool {
 	err := p.pinger.PingContext(ctx)
-	return err != nil
+	return err == nil
 }
 
 func (p sqlDep) Close() error {

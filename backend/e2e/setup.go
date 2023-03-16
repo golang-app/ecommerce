@@ -21,6 +21,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/sirupsen/logrus"
 )
 
 type config struct {
@@ -83,7 +84,7 @@ func newAppContext(t *testing.T) appContext {
 	pcBD, cartService := productcatalog.New(db)
 
 	app.AddBoundedContext(pcBD)
-	app.AddBoundedContext(cart.New(db, cartService))
+	app.AddBoundedContext(cart.New(db, logrus.New(), cartService))
 
 	go func() {
 		_ = app.Run()

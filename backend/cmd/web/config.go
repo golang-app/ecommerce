@@ -5,6 +5,7 @@ import "fmt"
 type config struct {
 	ServerPort int `conf:"default:8080,SERVER_PORT"`
 	Postgres   postgresConfig
+	Env        string `conf:"default:dev"`
 }
 
 type postgresConfig struct {

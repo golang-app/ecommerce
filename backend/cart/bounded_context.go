@@ -10,15 +10,18 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/cart/port"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	pcApp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcDomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
 )
 
-func New(db *sql.DB, pc pcApp.ProductService) application.BoundedContext {
+func New(db *sql.DB, logger logrus.FieldLogger, pc pcApp.ProductService) application.BoundedContext {
 	storage := adapter.NewPostgres(db)
 
 	return &boundedContext{
+		logger:      logger,
 		httpHandler: port.NewHTTP(storage, transformProductCatalog{pc}),
 	}
 }
@@ -45,9 +48,10 @@ func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (
 
 type boundedContext struct {
 	httpHandler port.HTTP
+	logger      logrus.FieldLogger
 }
 
 func (m boundedContext) MuxRegister(r *mux.Router) {
-	r.HandleFunc("/api/v1/cart", port.EnusreCartID(https.WrapPanic(m.httpHandler.AddToCart))).Methods("POST")
-	r.HandleFunc("/api/v1/cart", port.EnusreCartID(https.WrapPanic(m.httpHandler.ShowCart))).Methods("GET")
+	r.HandleFunc("/api/v1/cart", port.EnusreCartID(observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.AddToCart), m.logger))).Methods("POST")
+	r.HandleFunc("/api/v1/cart", port.EnusreCartID(observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.ShowCart), m.logger))).Methods("GET")
 }
