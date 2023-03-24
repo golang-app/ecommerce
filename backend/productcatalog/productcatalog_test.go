@@ -65,6 +65,7 @@ func buildProduct(ctx context.Context, storage app.ProductStorage) (domain.Produ
 	pb := app.NewProductBuilder(storage)
 	price := domain.NewPrice(234, "USD")
 	pb = pb.WithName("Test product").
+		WithID("test-product").
 		WithDescription("description of the test product").
 		WithPrice(price).
 		WithThumbnail("http://some.url")
