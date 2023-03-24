@@ -1,32 +1,26 @@
 import React from "react";
-import { BrowserRouter as Router, Switch, Route } from "react-router-dom";
-import "./App.css";
-import "bootstrap/dist/css/bootstrap.min.css";
-import { ProductsRoute, ProductListView } from "./productcatalog/product";
-import { Nav, Navbar, Container } from "react-bootstrap";
+import { Homepage } from "./pages/Homepage";
+import { NoPage } from "./pages/NoPage";
+import { GET } from "./backendApi";
+import { Product } from "./productcatalog";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 function App() {
-  return (
-    <Router>
-      <Navbar>
-        <Container>
-          <Nav>
-            <Nav.Link href="/">Home</Nav.Link>
-            <Nav.Link href="/about">About</Nav.Link>
-            <Nav.Link href="/users">Users</Nav.Link>
-          </Nav>
-        </Container>
-      </Navbar>
+  const [products, setProducts] = React.useState<Product[]>([]);
 
-      <Switch>
-        <Route path="/product">
-          <ProductsRoute />
-        </Route>
-        <Route path="/">
-          <ProductListView />
-        </Route>
-      </Switch>
-    </Router>
+  React.useEffect(() => {
+    GET("/products").then((res) => res.json()).then((resp) => {
+      setProducts(resp.data);
+    });
+  }, []);
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Homepage products={products} />} />
+        <Route path="/cart" />
+        <Route path="*" element={<NoPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

@@ -106,13 +106,15 @@ func newLogger(lvl logrus.Level, appName string) logrus.FieldLogger {
 		ReportCaller: false,
 	}
 
-	conn, err := net.Dial("tcp", "logstash:50000")
+	conn, err := net.DialTimeout("tcp", "logstash:50000", time.Second)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
 	}
-	hook := logrustash.New(conn, logrustash.DefaultFormatter(logrus.Fields{"type": appName}))
 
-	instance.Hooks.Add(hook)
+	if conn != nil {
+		hook := logrustash.New(conn, logrustash.DefaultFormatter(log.Fields{"app": appName}))
+		instance.Hooks.Add(hook)
+	}
 
 	return instance.
 		WithField("service.name", appName)

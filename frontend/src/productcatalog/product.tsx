@@ -1,185 +1,76 @@
-import React from "react";
-import { Switch, Route, Link, useRouteMatch } from "react-router-dom";
-import Col from "react-bootstrap/Col";
-import Image from "react-bootstrap/Image";
-import Container from "react-bootstrap/Container";
-import Row from "react-bootstrap/Row";
+import { styled } from "@mui/system";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import { Price, PriceView } from "../tetris";
+import { useCart } from "../cart";
+import { Container, Grid } from "@mui/material";
+
+export interface ProductViewProps {
+  product: Product;
+}
 
 export interface Product {
   id: string;
   name: string;
-  thumbnail: string;
   price: Price;
+  shortDescription: string;
+  thumbnailUrl?: string;
 }
 
-interface Price {
-  currency: string;
-  amount: number;
-}
+const Box = styled("div")({
+  border: "1px solid #ccc",
+  padding: "1rem",
+  margin: "1rem",
+});
 
-function SmallProductView(product: Product) {
+const ReadMoreBox = styled("div")({
+  paddingTop: "1rem",
+});
+
+export function ProductView(props: ProductViewProps) {
+  let cart = useCart();
+
   return (
-    <Col className="product-view">
-      <div className="thumbnail">
-        <Image src={product.thumbnail} thumbnail />
-      </div>
-      <div className="name">
-        <h2>
-          <Link to={`/product/${product.id}`}>{product.name}</Link>
-        </h2>
-      </div>
-      <div className="price">
-        Price: {product.price.amount} {product.price.currency}
-      </div>
-    </Col>
+    <Box>
+      <Typography variant="h3">{props.product.name}</Typography>
+      <Typography variant="body1">{props.product.shortDescription}</Typography>
+      <Typography variant="body2">
+        <PriceView price={props.product.price} />
+      </Typography>
+      <ReadMoreBox>
+        <Button variant="contained" onClick={() => {
+          
+          if (cart !== null) {
+            cart.addProduct(props.product.id, 1);
+          }
+        }}>
+          Add to cart
+        </Button>
+      </ReadMoreBox>
+    </Box>
   );
 }
 
-export function ProductsRoute() {
-  let match = useRouteMatch();
-
-  return (
-    <Switch>
-      <Route exact path={`${match.path}/:productId`} component={ShowProduct} />
-      <Route path={match.path}>
-        <ProductListView />
-      </Route>
-    </Switch>
-  );
-}
-
-interface ProductListViewProps {}
-
-interface ProductListViewState {
-  error: string;
-  isLoaded: boolean;
+interface ProductListProps {
   products: Product[];
 }
 
-export class ProductListView extends React.Component<
-  ProductListViewProps,
-  ProductListViewState
-> {
-  constructor(props: any) {
-    super(props);
+const ProductListBox = styled("div")({
+  paddingTop: "1rem",
+});
 
-    this.state = {
-      error: "",
-      isLoaded: false,
-      products: [],
-    };
-  }
-
-  componentDidMount() {
-    fetch("http://localhost:8080/products")
-      .then((res) => res.json())
-      .then(
-        (result) => {
-          this.setState({
-            isLoaded: true,
-            products: result.data,
-            error: "",
-          });
-        },
-        (error) => {
-          this.setState({
-            isLoaded: true,
-            error,
-          });
-        }
-      );
-  }
-
-  render() {
-    const { error, isLoaded, products } = this.state;
-
-    if (error) {
-      return <div>Error: {error}</div>;
-    } else if (!isLoaded) {
-      return <div>Loading...</div>;
-    } else {
-      const renderProducts = () => {
-        return products.map((product) => {
-          return <SmallProductView key={product.id} {...product} />;
-        });
-      };
-      return (
-        <Container>
-          <Row>{renderProducts()}</Row>
-        </Container>
-      );
-    }
-  }
-}
-
-interface ShowProductProps {
-  productID: string;
-}
-
-interface ShowProductState {
-  error: string;
-  isLoaded: boolean;
-  product?: Product;
-}
-
-export class ShowProduct extends React.Component<
-  ShowProductProps,
-  ShowProductState
-> {
-  productID: string;
-
-  constructor(props: any) {
-    super(props);
-    this.productID = props.match.params.productId;
-
-    this.state = {
-      error: "",
-      isLoaded: false,
-      product: undefined,
-    };
-  }
-
-  componentDidMount() {
-    fetch("http://localhost:8080/product/" + this.productID)
-      .then((res) => res.json())
-      .then(
-        (result) => {
-          this.setState({
-            isLoaded: true,
-            product: result.data,
-            error: "",
-          });
-        },
-        (error) => {
-          this.setState({
-            isLoaded: true,
-            error,
-          });
-        }
-      );
-  }
-
-  render() {
-    const { error, isLoaded, product } = this.state;
-
-    if (error) {
-      return <div>Error: {error}</div>;
-    } else if (!isLoaded || product === undefined) {
-      return <div>Loading...</div>;
-    } else {
-      return (
-        <Container>
-          <Row>
-            <h3>{product.name}</h3>
-            <p>
-              {product.price.amount} {product.price.currency}
-            </p>
-            <p>
-              <img src={product.thumbnail} alt={product.name} width="300px" />
-            </p>
-          </Row>
-        </Container>
-      );
-    }
-  }
+export function ProductListView(props: ProductListProps) {
+  return (
+    <ProductListBox>
+      <Container>
+        <Grid container display="flex">
+          {props.products.map((product) => (
+            <Grid xs={4}>
+              <ProductView product={product} />
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
+    </ProductListBox>
+  );
 }

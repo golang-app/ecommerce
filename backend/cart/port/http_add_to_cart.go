@@ -8,15 +8,16 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
+	"github.com/gorilla/mux"
 )
 
 type AddToCartRequest struct {
 	ProductID string `json:"product_id"`
-	Qty       int    `json:"qty"`
+	Qty       int    `json:"quantity"`
 }
 
 func (h HTTP) AddToCart(w http.ResponseWriter, r *http.Request) {
-	sessID := cartID(r)
+	cartID := mux.Vars(r)["cartID"]
 
 	req := AddToCartRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -24,7 +25,7 @@ func (h HTTP) AddToCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.cart.AddToCart(r.Context(), sessID, req.ProductID, req.Qty)
+	err := h.cart.AddToCart(r.Context(), cartID, req.ProductID, req.Qty)
 
 	if errors.Is(err, domain.ErrProductNotFound) {
 		https.NotFound(w, err.Error())
