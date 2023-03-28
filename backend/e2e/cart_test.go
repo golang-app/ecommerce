@@ -15,8 +15,9 @@ func Test_CartAddProduct(t *testing.T) {
 	defer appCtx.shutdown()
 
 	pId := appCtx.addProduct("cookies!", "product 1 description", 10.0, "USD")
+	cartID := randomID()
 
-	resp, err := appCtx.sendApi("POST", "/api/v1/cart", []byte(`{"product_id": "`+pId+`", "qty": 1}`))
+	resp, err := appCtx.sendApi("POST", "/api/v1/cart/"+cartID, []byte(`{"product_id": "`+pId+`", "qty": 1}`))
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}
@@ -28,7 +29,7 @@ func Test_CartAddProduct(t *testing.T) {
 		t.Fatalf("expected status code 204, got %d, body: %s", resp.StatusCode, string(body))
 	}
 
-	resp2, err := appCtx.sendApi("GET", "/api/v1/cart", nil)
+	resp2, err := appCtx.sendApi("GET", "/api/v1/cart/"+cartID, nil)
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}
@@ -40,8 +41,6 @@ func Test_CartAddProduct(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not read response body: %s", err)
 	}
-
-	t.Logf("body: %s", string(body))
 
 	doc, err := jsonquery.Parse(strings.NewReader(string(body)))
 	if err != nil {
@@ -65,7 +64,9 @@ func Test_CartAddProductNonExistingProduct(t *testing.T) {
 	appCtx := newAppContext(t)
 	defer appCtx.shutdown()
 
-	resp, err := appCtx.sendApi("POST", "/api/v1/cart", []byte(`{"product_id": "not-exists", "qty": 1}`))
+	cartID := randomID()
+
+	resp, err := appCtx.sendApi("POST", "/api/v1/cart/"+cartID, []byte(`{"product_id": "not-exists", "qty": 1}`))
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}

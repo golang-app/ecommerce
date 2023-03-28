@@ -127,7 +127,7 @@ func (appCtx *appContext) addProduct(name, description string, price float64, cu
 func randomID() string {
 	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
-	b := make([]rune, 10)
+	b := make([]rune, 15)
 	for i := range b {
 		b[i] = letters[rand.Intn(len(letters))]
 	}
@@ -148,7 +148,7 @@ func (appCtx *appContext) sendApi(method, path string, body []byte) (*http.Respo
 
 var (
 	startMX   sync.Mutex
-	startPort = 3000
+	startPort = 8080
 )
 
 func freePort() int {

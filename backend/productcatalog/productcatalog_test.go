@@ -3,6 +3,7 @@ package productcatalog_test
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"testing"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
@@ -65,10 +66,20 @@ func buildProduct(ctx context.Context, storage app.ProductStorage) (domain.Produ
 	pb := app.NewProductBuilder(storage)
 	price := domain.NewPrice(234, "USD")
 	pb = pb.WithName("Test product").
-		WithID("test-product").
+		WithID(randomID()).
 		WithDescription("description of the test product").
 		WithPrice(price).
 		WithThumbnail("http://some.url")
 
 	return pb.Build(ctx)
+}
+
+func randomID() string {
+	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+	b := make([]rune, 10)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }
