@@ -46,7 +46,7 @@ export function useCart() {
       setCart(c);
     });
     return () => {};
-  }, []);
+  }, [cart]);
 
   return {
     products: cart.products,

@@ -28,7 +28,7 @@ const ReadMoreBox = styled("div")({
 });
 
 export function ProductView(props: ProductViewProps) {
-  let cart = useCart();
+  let {addProduct} = useCart();
 
   return (
     <Box>
@@ -39,10 +39,7 @@ export function ProductView(props: ProductViewProps) {
       </Typography>
       <ReadMoreBox>
         <Button variant="contained" onClick={() => {
-          
-          if (cart !== null) {
-            cart.addProduct(props.product.id, 1);
-          }
+            addProduct(props.product.id, 1);
         }}>
           Add to cart
         </Button>
@@ -65,7 +62,7 @@ export function ProductListView(props: ProductListProps) {
       <Container>
         <Grid container display="flex">
           {props.products.map((product) => (
-            <Grid xs={4}>
+            <Grid key={product.id} xs={4} item={true}>
               <ProductView product={product} />
             </Grid>
           ))}
