@@ -8,8 +8,7 @@ import (
 )
 
 type productBuilder struct {
-	reservation productIdReservation
-
+	id          string
 	name        string
 	description string
 	price       domain.Price
@@ -17,18 +16,21 @@ type productBuilder struct {
 }
 
 func NewProductBuilder(storage productIDReservationStorage) productBuilder {
-	return productBuilder{reservation: productIdReservation{
-		storage: storage,
-	}}
+	return productBuilder{}
 }
 
 func (pb productBuilder) Build(ctx context.Context) (domain.Product, error) {
-	id, err := pb.reservation.Reserve(ctx, pb.name)
+	id, err := domain.NewProductId(pb.id)
 	if err != nil {
-		return domain.Product{}, fmt.Errorf("cannot build the product: %w", err)
+		return domain.Product{}, fmt.Errorf("cannot create product: %w", err)
 	}
 
 	return domain.NewProduct(id, pb.name, pb.description, pb.price, pb.thumbnail)
+}
+
+func (pb productBuilder) WithID(id string) productBuilder {
+	pb.id = id
+	return pb
 }
 
 func (pb productBuilder) WithName(name string) productBuilder {

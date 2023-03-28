@@ -23,3 +23,5 @@
 .docker/elasticsearch/nodes
 
 .docker/setup/.done
+
+__debug_bin
