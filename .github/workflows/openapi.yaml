@@ -12,12 +12,11 @@ jobs:
 
       - name: Set up Go
         uses: actions/setup-go@v2
-
-      - name: Install Swag
-        run: go install github.com/swaggo/swag/cmd/swag@latest
       
       - name: Make Swagger
-        run: cd ./backend && make swagger
+        run: |
+          go install github.com/swaggo/swag/cmd/swag@latest
+          cd ./backend && make swagger
         
       - name: Check if docs.go was modified
         id: check_docs
