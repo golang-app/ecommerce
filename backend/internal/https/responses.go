@@ -22,7 +22,7 @@ func OK(w http.ResponseWriter, msg interface{}) {
 	}
 	body, err := json.Marshal(resp)
 	if err != nil {
-		Error(w, "cannot marshal request object", http.StatusInternalServerError)
+		InternalError(w, "serialization-error", "cannot marshal response: "+err.Error())
 		return
 	}
 
@@ -37,27 +37,39 @@ func NoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func NotFound(w http.ResponseWriter, msg string) {
-	Error(w, msg, http.StatusNotFound)
+type ErrorResponse struct {
+	Type   string `json:"type,omitempty"`
+	Detail string `json:"detail,omitempty"`
+	Title  string `json:"title,omitempty"`
 }
 
-func InternalError(w http.ResponseWriter, msg string) {
-	Error(w, msg, http.StatusInternalServerError)
+const errTypePrefix = "https://example.com/errors/"
+
+func NotFound(w http.ResponseWriter, errType string, title string) {
+	Error(w, ErrorResponse{
+		Type:  errTypePrefix + errType,
+		Title: title,
+	}, http.StatusNotFound)
 }
 
-func BadRequest(w http.ResponseWriter, msg string) {
-	Error(w, msg, http.StatusBadRequest)
+func InternalError(w http.ResponseWriter, errType string, title string) {
+	Error(w, ErrorResponse{
+		Type:  errTypePrefix + errType,
+		Title: title,
+	}, http.StatusNotFound)
 }
 
-func Error(w http.ResponseWriter, msg string, code int) {
+func BadRequest(w http.ResponseWriter, errType string, title string) {
+	Error(w, ErrorResponse{
+		Type:  errTypePrefix + errType,
+		Title: title,
+	}, http.StatusNotFound)
+}
+
+func Error(w http.ResponseWriter, resp ErrorResponse, code int) {
 	cors(w)
 	w.Header().Add("content-type", "application/json")
 	w.WriteHeader(code)
-	resp := struct {
-		Message string `json:"message"`
-	}{
-		Message: msg,
-	}
 	body, err := json.Marshal(resp)
 	if err != nil {
 		body = []byte(fmt.Sprintf("cannot marshal response: %s", err))

@@ -1,0 +1,129 @@
+basePath: /api/v1
+definitions:
+  cart_port.price:
+    properties:
+      amount:
+        type: number
+      currency:
+        type: string
+    type: object
+  https.ErrorResponse:
+    properties:
+      detail:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+    type: object
+  port.AddToCartRequest:
+    properties:
+      product_id:
+        type: string
+      quantity:
+        type: integer
+    type: object
+  port.product:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      price:
+        $ref: '#/definitions/productcatalog_port.price'
+      thumbnail:
+        type: string
+    type: object
+  port.showCartItemResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      price:
+        $ref: '#/definitions/cart_port.price'
+      quantity:
+        type: integer
+    type: object
+  port.showCartResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/port.showCartItemResponse'
+        type: array
+    type: object
+  productcatalog_port.price:
+    properties:
+      amount:
+        type: number
+      currency:
+        type: string
+    type: object
+info:
+  contact: {}
+  title: Ecommerce API
+paths:
+  /cart/{cartId}:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/port.showCartResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Cart
+        in: body
+        name: cart
+        required: true
+        schema:
+          $ref: '#/definitions/port.AddToCartRequest'
+      produces:
+      - application/json
+      responses:
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+  /products:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/port.product'
+            type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+swagger: "2.0"
