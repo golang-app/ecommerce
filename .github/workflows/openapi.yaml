@@ -17,7 +17,7 @@ jobs:
         run: go install github.com/swaggo/swag/cmd/swag@latest
       
       - name: Make Swagger
-        run: make swagger
+        run: cd ./backend && make swagger
         
       - name: Check if docs.go was modified
         id: check_docs
