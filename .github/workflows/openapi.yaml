@@ -16,6 +16,7 @@ jobs:
       - name: Make Swagger
         run: |
           go install github.com/swaggo/swag/cmd/swag@latest
+          export PATH=$PATH:~/go/bin
           cd ./backend && make swagger
         
       - name: Check if docs.go was modified
