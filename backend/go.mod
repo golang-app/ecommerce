@@ -10,6 +10,7 @@ require (
 	github.com/lib/pq v1.10.4
 	github.com/matryer/is v1.4.0
 	github.com/sirupsen/logrus v1.8.1
+	github.com/spf13/cobra v1.6.1
 	github.com/swaggo/swag v1.8.12
 	github.com/uptrace/opentelemetry-go-extra/otelsql v0.1.21
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.40.0
@@ -40,8 +41,10 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.7.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.14.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric v0.37.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
