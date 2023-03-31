@@ -14,6 +14,19 @@ definitions:
       quantity:
         type: integer
     type: object
+  port.product:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      price:
+        $ref: '#/definitions/productcatalog_port.price'
+      thumbnail:
+        type: string
+    type: object
   port.showCartItemResponse:
     properties:
       id:
@@ -31,6 +44,13 @@ definitions:
         items:
           $ref: '#/definitions/port.showCartItemResponse'
         type: array
+    type: object
+  productcatalog_port.price:
+    properties:
+      amount:
+        type: number
+      currency:
+        type: string
     type: object
 info:
   contact: {}
@@ -66,5 +86,11 @@ paths:
       - application/json
       produces:
       - application/json
-      responses: {}
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/port.product'
+            type: array
 swagger: "2.0"

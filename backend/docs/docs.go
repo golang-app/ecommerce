@@ -62,7 +62,17 @@ const docTemplate = `{
                 "produces": [
                     "application/json"
                 ],
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/port.product"
+                            }
+                        }
+                    }
+                }
             }
         }
     },
@@ -86,6 +96,26 @@ const docTemplate = `{
                 },
                 "quantity": {
                     "type": "integer"
+                }
+            }
+        },
+        "port.product": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "$ref": "#/definitions/productcatalog_port.price"
+                },
+                "thumbnail": {
+                    "type": "string"
                 }
             }
         },
@@ -114,6 +144,17 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/port.showCartItemResponse"
                     }
+                }
+            }
+        },
+        "productcatalog_port.price": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "currency": {
+                    "type": "string"
                 }
             }
         }
