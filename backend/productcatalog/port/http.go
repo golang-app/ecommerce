@@ -34,6 +34,10 @@ type price struct {
 	Amount   float64 `json:"amount"`
 }
 
+// @Router       /products [get]
+// @Success      200  {object}  []product
+// @Accept       json
+// @Produce      json
 func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {
 	products, err := h.serv.AllProducts(r.Context())
 	if err != nil {

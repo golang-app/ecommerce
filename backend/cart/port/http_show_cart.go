@@ -23,6 +23,10 @@ type price struct {
 	Currency string  `json:"currency"`
 }
 
+// @Success      200  {object}  showCartResponse
+// @Router       /cart/{cartId} [get]
+// @Accept       json
+// @Produce      json
 func (h HTTP) ShowCart(w http.ResponseWriter, r *http.Request) {
 	cartID := mux.Vars(r)["cartID"]
 

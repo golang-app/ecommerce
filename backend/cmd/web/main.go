@@ -24,6 +24,8 @@ import (
 const tearDownTimeout = 5 * time.Second
 const appName = "go-ecommerce"
 
+// @title           Ecommerce API
+// @BasePath  /api/v1
 func main() {
 	cfg := config{}
 

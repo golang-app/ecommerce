@@ -1,0 +1,111 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "title": "Ecommerce API",
+        "contact": {}
+    },
+    "basePath": "/api/v1",
+    "paths": {
+        "/cart/{cartId}": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/port.showCartResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "parameters": [
+                    {
+                        "description": "Cart",
+                        "name": "cart",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/port.AddToCartRequest"
+                        }
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/products": {
+            "get": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "responses": {}
+            }
+        }
+    },
+    "definitions": {
+        "cart_port.price": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "number"
+                },
+                "currency": {
+                    "type": "string"
+                }
+            }
+        },
+        "port.AddToCartRequest": {
+            "type": "object",
+            "properties": {
+                "product_id": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            }
+        },
+        "port.showCartItemResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "$ref": "#/definitions/cart_port.price"
+                },
+                "quantity": {
+                    "type": "integer"
+                }
+            }
+        },
+        "port.showCartResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/port.showCartItemResponse"
+                    }
+                }
+            }
+        }
+    }
+}

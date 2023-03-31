@@ -1,0 +1,70 @@
+basePath: /api/v1
+definitions:
+  cart_port.price:
+    properties:
+      amount:
+        type: number
+      currency:
+        type: string
+    type: object
+  port.AddToCartRequest:
+    properties:
+      product_id:
+        type: string
+      quantity:
+        type: integer
+    type: object
+  port.showCartItemResponse:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      price:
+        $ref: '#/definitions/cart_port.price'
+      quantity:
+        type: integer
+    type: object
+  port.showCartResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/port.showCartItemResponse'
+        type: array
+    type: object
+info:
+  contact: {}
+  title: Ecommerce API
+paths:
+  /cart/{cartId}:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/port.showCartResponse'
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Cart
+        in: body
+        name: cart
+        required: true
+        schema:
+          $ref: '#/definitions/port.AddToCartRequest'
+      produces:
+      - application/json
+      responses: {}
+  /products:
+    get:
+      consumes:
+      - application/json
+      produces:
+      - application/json
+      responses: {}
+swagger: "2.0"

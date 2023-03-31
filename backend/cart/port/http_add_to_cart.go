@@ -16,6 +16,10 @@ type AddToCartRequest struct {
 	Qty       int    `json:"quantity"`
 }
 
+// @Router       /cart/{cartId} [post]
+// @Accept       json
+// @Produce      json
+// @Param cart  body AddToCartRequest true "Cart"
 func (h HTTP) AddToCart(w http.ResponseWriter, r *http.Request) {
 	cartID := mux.Vars(r)["cartID"]
 
