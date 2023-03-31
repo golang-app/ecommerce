@@ -1,0 +1,36 @@
+name: Check Swagger
+
+on:
+  push:
+
+jobs:
+  check_swagger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+
+      - name: Install Swag
+        run: go install github.com/swaggo/swag/cmd/swag@latest
+      
+      - name: Make Swagger
+        run: make swagger
+        
+      - name: Check if docs.go was modified
+        id: check_docs
+        run: |
+          if git diff --name-only --exit-code | grep backend/docs/docs.go > /dev/null; then
+            echo "::set-output name=docs_changed::true"
+          else
+            echo "::set-output name=docs_changed::false"
+          fi
+      
+      - name: Fail if docs.go was modified
+        if: steps.check_docs.outputs.docs_changed == 'true'
+        run: |
+          echo "Error: backend/docs/docs.go was modified"
+          exit 1
+
