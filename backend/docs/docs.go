@@ -30,6 +30,18 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/port.showCartResponse"
                         }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/https.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/https.ErrorResponse"
+                        }
                     }
                 }
             },
@@ -51,7 +63,20 @@ const docTemplate = `{
                         }
                     }
                 ],
-                "responses": {}
+                "responses": {
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/https.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/https.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/products": {
@@ -71,6 +96,18 @@ const docTemplate = `{
                                 "$ref": "#/definitions/port.product"
                             }
                         }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/https.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/https.ErrorResponse"
+                        }
                     }
                 }
             }
@@ -84,6 +121,20 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "currency": {
+                    "type": "string"
+                }
+            }
+        },
+        "https.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "detail": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }

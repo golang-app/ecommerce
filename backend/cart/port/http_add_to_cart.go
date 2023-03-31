@@ -20,24 +20,26 @@ type AddToCartRequest struct {
 // @Accept       json
 // @Produce      json
 // @Param cart  body AddToCartRequest true "Cart"
+// @Failure      500  {object}  https.ErrorResponse
+// @Failure      404  {object}  https.ErrorResponse
 func (h HTTP) AddToCart(w http.ResponseWriter, r *http.Request) {
 	cartID := mux.Vars(r)["cartID"]
 
 	req := AddToCartRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		https.BadRequest(w, err.Error())
+		https.BadRequest(w, "serialization-error", err.Error())
 		return
 	}
 
 	err := h.cart.AddToCart(r.Context(), cartID, req.ProductID, req.Qty)
 
 	if errors.Is(err, domain.ErrProductNotFound) {
-		https.NotFound(w, err.Error())
+		https.NotFound(w, "cart-not-found", err.Error())
 		return
 	}
 
 	if err != nil {
-		https.InternalError(w, err.Error())
+		https.InternalError(w, "internal-error", err.Error())
 		log.Print(err)
 		return
 	}

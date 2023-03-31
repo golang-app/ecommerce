@@ -23,16 +23,18 @@ type price struct {
 	Currency string  `json:"currency"`
 }
 
-// @Success      200  {object}  showCartResponse
 // @Router       /cart/{cartId} [get]
 // @Accept       json
 // @Produce      json
+// @Success      200  {object}  showCartResponse
+// @Failure      500  {object}  https.ErrorResponse
+// @Failure      404  {object}  https.ErrorResponse
 func (h HTTP) ShowCart(w http.ResponseWriter, r *http.Request) {
 	cartID := mux.Vars(r)["cartID"]
 
 	items, err := h.cart.Items(r.Context(), cartID)
 	if err != nil {
-		https.InternalError(w, err.Error())
+		https.InternalError(w, "internal-error", err.Error())
 		return
 	}
 

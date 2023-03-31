@@ -7,6 +7,15 @@ definitions:
       currency:
         type: string
     type: object
+  https.ErrorResponse:
+    properties:
+      detail:
+        type: string
+      title:
+        type: string
+      type:
+        type: string
+    type: object
   port.AddToCartRequest:
     properties:
       product_id:
@@ -67,6 +76,14 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/port.showCartResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
     post:
       consumes:
       - application/json
@@ -79,7 +96,15 @@ paths:
           $ref: '#/definitions/port.AddToCartRequest'
       produces:
       - application/json
-      responses: {}
+      responses:
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
   /products:
     get:
       consumes:
@@ -93,4 +118,12 @@ paths:
             items:
               $ref: '#/definitions/port.product'
             type: array
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/https.ErrorResponse'
 swagger: "2.0"

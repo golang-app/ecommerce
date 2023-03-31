@@ -38,10 +38,12 @@ type price struct {
 // @Success      200  {object}  []product
 // @Accept       json
 // @Produce      json
+// @Failure      500  {object}  https.ErrorResponse
+// @Failure      404  {object}  https.ErrorResponse
 func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {
 	products, err := h.serv.AllProducts(r.Context())
 	if err != nil {
-		https.InternalError(w, "cannot get list of all products")
+		https.InternalError(w, "internal-error", "cannot get list of all products")
 		log.Printf("cannot get list of all products: %s", err)
 		return
 	}
@@ -55,9 +57,9 @@ func (h HTTP) Product(w http.ResponseWriter, r *http.Request) {
 	product, err := h.serv.Find(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, domain.ErrProductNotFound) {
-			https.NotFound(w, "product does not exists")
+			https.NotFound(w, "product-not-found", "product does not exists")
 		} else {
-			https.InternalError(w, "cannot get list of all products")
+			https.InternalError(w, "internal-error", "cannot get list of all products")
 		}
 
 		log.Printf("cannot get list of all products: %s", err)
