@@ -11,6 +11,7 @@ services:
   backend:
     build:
       context: ./backend
+      target: web
     restart: unless-stopped
     depends_on:
       - migrate
@@ -50,6 +51,22 @@ services:
     networks:
       - ecommerce
     command: ["-path", "/migrations", "-database",  "postgres://postgres:postgres@postgres:5432/ecommerce?sslmode=disable", "up"]
+  seeds:
+    build:
+      context: ./backend
+      target: cli
+    depends_on:
+      - migrate
+    links:
+      - postgres
+    networks:
+      - ecommerce
+    command: seeds
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST: postgres
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otelcol:4318/
 
   jaeger:
     image: jaegertracing/all-in-one:latest

@@ -22,6 +22,7 @@ func Execute(db *sql.DB) {
 	storage := adapter.NewPostgres(db)
 	appServ := app.NewProductService(storage)
 	rootCmd.AddCommand(newProductCatalogCmd(appServ))
+	rootCmd.AddCommand(newSeedsCmd(appServ))
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
