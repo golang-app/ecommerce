@@ -7,6 +7,15 @@ The backend is written in Go and split into several smaller parts:
 * [internal](./internal)
 * [cmd/web](./cmd/web)
 
+## Context map
+
+The [Context map](https://www.infoq.com/articles/ddd-contextmapping/) is a way we can visualize how different Bouded Contexts interracts with each other. I decided to use more technical variant of it to better visualize how those relations look like.
+
+```mermaid
+graph TD;
+    cart-- Reads info about product details -->ProductCatalog;
+```
+
 ## Requrements
 
 To be able to run the project you have to have Go installed. By default, it works with an postgres database implementation. For further configuration credentials and so on please go to the [web](./cmd/web) page.
