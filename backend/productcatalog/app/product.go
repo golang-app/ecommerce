@@ -14,7 +14,6 @@ type ProductStorage interface {
 	All(ctx context.Context) ([]domain.Product, error)
 	Add(ctx context.Context, p domain.Product) error
 	Find(ctx context.Context, id string) (domain.Product, error)
-	Reserve(ctx context.Context, name string) error
 }
 
 func NewProductService(s ProductStorage) ProductService {

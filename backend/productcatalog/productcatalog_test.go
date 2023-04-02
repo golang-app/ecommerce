@@ -63,7 +63,7 @@ func productEquals(p1, p2 domain.Product) error {
 }
 
 func buildProduct(ctx context.Context, storage app.ProductStorage) (domain.Product, error) {
-	pb := app.NewProductBuilder(storage)
+	pb := app.NewProductBuilder()
 	price := domain.NewPrice(234, "USD")
 	pb = pb.WithName("Test product").
 		WithID(randomID()).

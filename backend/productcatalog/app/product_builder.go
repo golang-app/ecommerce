@@ -15,7 +15,7 @@ type productBuilder struct {
 	thumbnail   string
 }
 
-func NewProductBuilder(storage productIDReservationStorage) productBuilder {
+func NewProductBuilder() productBuilder {
 	return productBuilder{}
 }
 

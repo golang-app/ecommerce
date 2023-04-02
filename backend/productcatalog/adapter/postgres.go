@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	_ "github.com/lib/pq"
 )
@@ -95,21 +94,4 @@ func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) 
 	}
 
 	return domain.NewProduct(pId, name, description, domain.NewPrice(float64(amount), currency), thumbnail)
-}
-
-func (db postgres) Reserve(ctx context.Context, name string) error {
-	q := `SELECT id FROM productcatalog_product WHERE id = $1`
-	row := db.db.QueryRowContext(ctx, q, name)
-
-	var id string
-	err := row.Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("cannot make the product ID reservation: %w", err)
-	}
-
-	return app.ErrIDInUse
 }
