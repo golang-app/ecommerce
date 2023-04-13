@@ -2,9 +2,9 @@ package auth_test
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
-	"math/rand"
 	"testing"
 
 	"github.com/bkielbasa/go-ecommerce/backend/auth/app"
