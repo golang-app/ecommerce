@@ -24,9 +24,14 @@ func (h HTTP) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = h.auth.FindByToken(r.Context(), tokenCookie.Value)
+	sess, err := h.auth.FindByToken(r.Context(), tokenCookie.Value)
 	if err != nil {
 		https.InternalError(w, "cookie-error", err.Error())
+		return
+	}
+
+	if sess.Expired() {
+		https.Unauthorized(w, "session-expired", "session expired")
 		return
 	}
 

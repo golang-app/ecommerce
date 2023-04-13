@@ -36,6 +36,14 @@ func (s *Session) ExpiresAt() time.Time {
 	return s.expiresAt
 }
 
+func (s *Session) Invalidate() {
+	s.expiresAt = time.Now().Add(-1 * time.Hour)
+}
+
+func (s *Session) Expired() bool {
+	return s.expiresAt.Before(time.Now())
+}
+
 func NewSessionID() string {
 	b := make([]byte, 32)
 	if _, err := io.ReadFull(rand.Reader, b); err != nil {

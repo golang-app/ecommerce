@@ -77,6 +77,21 @@ func (a auth) FindByToken(ctx context.Context, sessToken string) (*domain.Sessio
 	return sess, nil
 }
 
+func (a auth) Logout(ctx context.Context, sessToken string) error {
+	sess, err := a.sessStorage.Find(ctx, sessToken)
+	if err != nil {
+		return fmt.Errorf("could not find session (%s): %w", sessToken, err)
+	}
+
+	sess.Invalidate()
+
+	if err := a.sessStorage.Store(ctx, sess); err != nil {
+		return fmt.Errorf("could not store session: %w", err)
+	}
+
+	return nil
+}
+
 func (a auth) Login(ctx context.Context, email, password string) (*domain.Session, error) {
 	customer, err := a.authStorage.Find(ctx, email)
 	if err != nil {

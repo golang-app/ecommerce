@@ -12,4 +12,6 @@ CREATE TABLE public.auth_session (
 	expires_at timestamp NOT NULL
 );
 
+CREATE UNIQUE INDEX auth_session_id_idx ON public.auth_session (id);
+
 COMMIT;
