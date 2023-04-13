@@ -92,7 +92,7 @@ func Test_Auth_Logout(t *testing.T) {
 	}
 
 	// logout
-	resp, err = appCtx.sendApi("DELETE", "/api/v1/auth", nil)
+	resp, err = appCtx.sendApi("DELETE", "/api/v1/auth/logout", nil)
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}

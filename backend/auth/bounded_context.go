@@ -28,5 +28,5 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/api/v1/auth/login", m.httpHandler.Login).Methods("POST")
 	r.HandleFunc("/api/v1/auth/register", m.httpHandler.Register).Methods("POST")
 	r.HandleFunc("/api/v1/auth/me", m.httpHandler.Me).Methods("GET")
-	r.HandleFunc("/api/v1/auth", m.httpHandler.Logout).Methods("DELETE")
+	r.HandleFunc("/api/v1/auth/logout", m.httpHandler.Logout).Methods("DELETE")
 }

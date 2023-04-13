@@ -20,7 +20,7 @@ func NewPostgresSessionStorage(db *sql.DB) sessionStorage {
 }
 
 func (p sessionStorage) Store(ctx context.Context, session *domain.Session) error {
-	_, err := p.db.ExecContext(ctx, "INSERT INTO auth_session (id, customer_id, expires_at) VALUES ($1, $2, $3)", session.ID(), session.CustomerID(), session.ExpiresAt())
+	_, err := p.db.ExecContext(ctx, "INSERT INTO auth_session (id, customer_id, expires_at) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET expires_at = $3", session.ID(), session.CustomerID(), session.ExpiresAt())
 	return err
 }
 

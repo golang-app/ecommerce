@@ -7,7 +7,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 )
 
-// @Router       /auth [delete]
+// @Router       /auth/logout [delete]
 // @Accept       json
 // @Produce      json
 // @Failure      500  {object}  https.ErrorResponse
