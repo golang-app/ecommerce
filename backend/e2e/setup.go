@@ -1,5 +1,3 @@
-//go:build integration
-
 package e2e
 
 import (
@@ -16,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/ardanlabs/conf"
+	"github.com/bkielbasa/go-ecommerce/backend/auth"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
@@ -85,6 +84,7 @@ func newAppContext(t *testing.T) appContext {
 
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(cart.New(db, logrus.New(), cartService))
+	app.AddBoundedContext(auth.New(db))
 
 	go func() {
 		_ = app.Run()
