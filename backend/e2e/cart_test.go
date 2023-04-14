@@ -50,11 +50,6 @@ func Test_CartAddProduct(t *testing.T) {
 	items := jsonquery.FindOne(doc, "data/items")
 	val := items.Value().([]interface{})
 
-	for _, v := range val {
-		item := v.(map[string]interface{})
-		t.Logf("item: %v", item)
-	}
-
 	if len(val) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(val))
 	}

@@ -13,7 +13,7 @@ The [Context map](https://www.infoq.com/articles/ddd-contextmapping/) is a way w
 
 ```mermaid
 graph TD;
-    cart-- Reads info about product details -->ProductCatalog;
+    Cart-- Reads info about product details -->ProductCatalog;
 ```
 
 ## Requrements

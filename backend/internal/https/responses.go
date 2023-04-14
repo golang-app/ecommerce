@@ -56,7 +56,14 @@ func InternalError(w http.ResponseWriter, errType string, title string) {
 	Error(w, ErrorResponse{
 		Type:  errTypePrefix + errType,
 		Title: title,
-	}, http.StatusNotFound)
+	}, http.StatusInternalServerError)
+}
+
+func Unauthorized(w http.ResponseWriter, errType string, title string) {
+	Error(w, ErrorResponse{
+		Type:  errTypePrefix + errType,
+		Title: title,
+	}, http.StatusUnauthorized)
 }
 
 func BadRequest(w http.ResponseWriter, errType string, title string) {
