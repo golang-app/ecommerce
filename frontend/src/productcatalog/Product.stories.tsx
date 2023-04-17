@@ -1,5 +1,5 @@
 import { ComponentStory, ComponentMeta } from "@storybook/react";
-import { ProductView, ProductViewProps } from "./Product";
+import { ProductView, ProductViewProps } from "./product";
 import { Container, Grid } from "@mui/material";
 
 export default {

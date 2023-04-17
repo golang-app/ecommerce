@@ -5,7 +5,6 @@ import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import Popover from "@mui/material/Popover";
 import Typography from "@mui/material/Typography";
 import { Link } from "react-router-dom";
-import { useCart } from "./useCart";
 
 const Box = styled("div")({});
 const CartIconBox = styled("button")({
@@ -16,9 +15,23 @@ const CartIconBox = styled("button")({
   margin: "0",
 });
 
-export function CartIcon() {
-  const cart = useCart();
+interface CartItem {
+  id: number;
+  name: string;
+  price: Price;
+  quantity: number;
+}
 
+interface Price {
+  amount: number;
+  currency: string;
+}
+
+export interface CartIconProps {
+  items : CartItem[];
+}
+
+export function CartIcon(props : CartIconProps) {
   const [anchorEl, setAnchorEl] =
     React.useState<HTMLButtonElement | null>(null);
 
@@ -32,14 +45,10 @@ export function CartIcon() {
 
   const open = Boolean(anchorEl);
   const id = open ? "simple-popover" : undefined;
-  
-  if (!cart) {
-    return null;
-  }
 
   return (
     <Box>
-      <Badge badgeContent={cart.countItems()}>
+      <Badge badgeContent={props.items.length}>
         <CartIconBox onClick={handleClick}>
           <ShoppingCartIcon color="action" />
         </CartIconBox>
@@ -55,7 +64,7 @@ export function CartIcon() {
           horizontal: "left",
         }}
       >
-        {cart.countItems() > 0 ? (
+        {props.items.length > 0 ? (
           <Typography sx={{ p: 2 }}>
             <Link to="/cart">Go to cart</Link>
           </Typography>

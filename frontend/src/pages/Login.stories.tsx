@@ -1,17 +1,18 @@
 import { ComponentStory, ComponentMeta } from "@storybook/react";
-import { AppNavBar } from "./AppNavBar";
+import { LoginPage, LoginProps } from "./Login";
 
 export default {
-  title: "tetris/AppNavBar",
-  component: AppNavBar,
+  title: "Page/Login",
+  component: LoginPage,
   parameters: {
     // More on Story layout: https://storybook.js.org/docs/react/configure/story-layout
     layout: "fullscreen",
   },
-} as ComponentMeta<typeof AppNavBar>;
+} as ComponentMeta<typeof LoginPage>;
 
-const Template: ComponentStory<typeof AppNavBar> = (args: any) => (
-  <AppNavBar {...args} />
+const Template: ComponentStory<typeof LoginPage> = (args: LoginProps) => (
+  <LoginPage {...args} />
 );
 
 export const Default = Template.bind({});
+Default.args = {};

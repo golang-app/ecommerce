@@ -1,22 +1,6 @@
 import { useState, useEffect } from "react";
 import { GET, POST } from "../backendApi";
-
-interface CartItem {
-  id: number;
-  name: string;
-  price: Price;
-  quantity: number;
-}
-
-interface Price {
-  amount: number;
-  currency: string;
-}
-
-type Cart = {
-  cartID: string;
-  products: CartItem[];
-}
+import { Cart } from "./Cart";
 
 export function useCart() {
   const [cart, setCart] = useState<Cart>({ cartID: "", products: [] });

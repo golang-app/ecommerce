@@ -4,12 +4,14 @@ import { Container } from "@mui/material";
 
 export interface HomepageProps {
   products: Product[];
+
+  loggedIn: boolean;
 }
 
 export function Homepage(props: HomepageProps) {
   return (
     <div>
-      <AppNavBar />
+      <AppNavBar loggedIn={props.loggedIn} cartItems={[]} />
       <Container>
         <h1>Homepage</h1>
         <ProductListView products={props.products} />
