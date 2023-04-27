@@ -41,7 +41,8 @@ func (s *Session) Invalidate() {
 }
 
 func (s *Session) Expired() bool {
-	return s.expiresAt.Before(time.Now())
+	now := time.Now()
+	return s.expiresAt.Before(now)
 }
 
 func NewSessionID() string {

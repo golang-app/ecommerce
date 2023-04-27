@@ -84,3 +84,8 @@ func Error(w http.ResponseWriter, resp ErrorResponse, code int) {
 
 	_, _ = w.Write(body)
 }
+
+func EmptyHandler(w http.ResponseWriter, r *http.Request) {
+	cors(w)
+	w.WriteHeader(http.StatusOK)
+}

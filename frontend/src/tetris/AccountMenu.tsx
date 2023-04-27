@@ -4,7 +4,6 @@ import Avatar from '@mui/material/Avatar';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import ListItemIcon from '@mui/material/ListItemIcon';
-import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import PersonAdd from '@mui/icons-material/PersonAdd';
@@ -82,12 +81,21 @@ export default function AccountMenu(props: AccountMenuProps) {
       >
 
       {!props.loggedIn ? (
-        <MenuItem onClick={props.onLoginClick}>
-          <ListItemIcon>
-            <Settings fontSize="small" />
-          </ListItemIcon>
-          Log in
-        </MenuItem>
+        [
+          <MenuItem onClick={props.onLoginClick} key={"login"}>
+            <ListItemIcon>
+              <Settings fontSize="small" />
+            </ListItemIcon>
+            Log in
+          </MenuItem>
+          ,
+          <MenuItem onClick={props.onRegisterClick} key={"register"}>
+            <ListItemIcon>
+              <PersonAdd fontSize="small" />
+            </ListItemIcon>
+            Register
+          </MenuItem>
+        ]
       ) : (
         <MenuItem onClick={props.onLogoutClick}>
           <ListItemIcon>

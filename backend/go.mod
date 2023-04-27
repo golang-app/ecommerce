@@ -11,7 +11,7 @@ require (
 	github.com/matryer/is v1.4.0
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.6.1
-	github.com/swaggo/swag v1.8.12
+	github.com/swaggo/swag v1.16.1
 	github.com/uptrace/opentelemetry-go-extra/otelsql v0.1.21
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.40.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.40.0

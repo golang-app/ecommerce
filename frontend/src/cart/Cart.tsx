@@ -1,13 +1,6 @@
 export interface CartItem {
-    id: number;
-    name: string;
-    price: Price;
+    id: string;
     quantity: number;
-  }
-  
- export interface Price {
-    amount: number;
-    currency: string;
   }
   
  export type Cart = {

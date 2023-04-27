@@ -12,6 +12,10 @@ type Client struct {
 	Password string `json:"password"`
 }
 
+type LoginResponse struct {
+	SessionID string `json:"session_id"`
+}
+
 // @Router       /auth/login [post]
 // @Accept       json
 // @Produce      json
@@ -31,9 +35,10 @@ func (h HTTP) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: add configuration of cookie expiration time
+	// set cookie
 	cookie := http.Cookie{Name: "session_id", Value: sess.ID(), Expires: sess.ExpiresAt()}
-
 	http.SetCookie(w, &cookie)
-	https.NoContent(w)
+
+	resp := LoginResponse{SessionID: sess.ID()}
+	https.OK(w, resp)
 }

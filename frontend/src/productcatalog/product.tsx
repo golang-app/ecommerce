@@ -1,3 +1,4 @@
+import { useContext } from "react";
 import { styled } from "@mui/system";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -28,7 +29,9 @@ const ReadMoreBox = styled("div")({
 });
 
 export function ProductView(props: ProductViewProps) {
-  let {addProduct} = useCart();
+  const cart = useCart();
+
+  console.log(cart);
 
   return (
     <Box>
@@ -39,7 +42,7 @@ export function ProductView(props: ProductViewProps) {
       </Typography>
       <ReadMoreBox>
         <Button variant="contained" onClick={() => {
-            addProduct(props.product.id, 1);
+            cart?.addToCart(props.product.id, 1);
         }}>
           Add to cart
         </Button>

@@ -23,9 +23,9 @@ jobs:
         id: check_docs
         run: |
           if git diff --name-only --exit-code | grep backend/docs/docs.go > /dev/null; then
-            echo "::set-output name=docs_changed::true"
+            echo "docs_changed=true" >> $GITHUB_OUTPUT
           else
-            echo "::set-output name=docs_changed::false"
+            echo "docs_changed=false" >> $GITHUB_OUTPUT
           fi
       
       - name: Fail if docs.go was modified
