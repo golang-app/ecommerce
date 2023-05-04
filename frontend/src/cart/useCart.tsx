@@ -1,75 +1,70 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, createContext, useContext, FC, ReactNode } from "react";
 import { GET, POST } from "../backendApi";
+import { Cart, CartItem } from "./Cart";
 
-interface CartItem {
-  id: number;
-  name: string;
-  price: Price;
-  quantity: number;
-}
+export const CartContext = createContext<CartContextType | null>(null);
+const useCart = () => useContext(CartContext);
 
-interface Price {
-  amount: number;
-  currency: string;
-}
-
-type Cart = {
+export type CartContextType = {
   cartID: string;
-  products: CartItem[];
+
+  noOfItems: number;
+  products: CartItem[]
+  addToCart: (productID: string, quantity: number) => void
 }
 
-export function useCart() {
-  const [cart, setCart] = useState<Cart>({ cartID: "", products: [] });
+type CartProviderProps = {
+  children: ReactNode;
+};
+
+const CartProvider = ({ children }: CartProviderProps) => {
+  const [noOfItems, setNoOfItems] = useState<number>(0);
+  const [cartID, setCartID] = useState<string>("");
+  const [products, setProducts] = useState<CartItem[]>([]);
+
+  const addToCart = (productID: string, quantity: number) => {
+    POST("/cart/" + cartID, {
+      body: JSON.stringify({
+        product_id: productID,
+        quantity,
+      }),
+    }).then(() => {
+      let prods = products
+      prods.push({
+        id: productID,
+        quantity,
+      });
+      setProducts(prods);
+      setNoOfItems(noOfItems + quantity)
+    });
+  }
 
   useEffect(() => {
-    let c = cart;
-    if (!c?.cartID) {
-      // read cartID from local storage
-      let localCart = localStorage.getItem("cart");
-      if (localCart) {
-        c = JSON.parse(localCart);
-      } else {
-        // generate new cartID
-        let cartID = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        let localCart = {
-          cartID,
-          products: [],
-        }
+    let cID = cartID;
 
-        localStorage.setItem("cart", JSON.stringify(localCart));
-        c = localCart;
+    if (!cID) {
+      cID = localStorage.getItem("cartID") || "";
+      if (!cID) {
+        cID = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem("cartID", cID);
       }
+      setCartID(cID);
     }
 
-    GET("/cart/" + c.cartID).then((res) => res.json()).then((resp: any) => {
-      c.products = resp.data.items;
-      setCart(c);
+    GET("/cart/" + cID).then((res) => res.json()).then((resp: any) => {
+      setProducts(resp.data.items);
+      let counter = 0;
+      resp.data.items.forEach((item: any) => {
+        counter += item.quantity;
+      }
+      );
+      setNoOfItems(counter);
     });
-    return () => {};
+
   }, []);
 
-  return {
-    products: cart.products,
-    countItems(): number {
-      let count = 0;
-      for (const item of cart.products) {
-        count += item.quantity;
-      }
-      return count;
-    },
-    addProduct(productID: string, quantity: number): void {
-      POST("/cart/" + cart.cartID, {
-        body: JSON.stringify({
-          product_id: productID,
-          quantity,
-        }),
-      }).then(() => {
-        GET("/cart/" + cart.cartID).then((res) => res.json()).then((resp: any) => {
-          let c = cart;
-          c.products = resp.data.items;
-          setCart(c);
-        });
-      });
-    }
-  };
-}
+  return <CartContext.Provider value={{cartID, noOfItems, addToCart, products}}>{children}</CartContext.Provider>;
+};
+
+export default CartProvider;
+export { useCart };

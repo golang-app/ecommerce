@@ -9,7 +9,7 @@ CREATE TABLE public.auth_customer (
 CREATE TABLE public.auth_session (
 	id varchar NOT NULL,
 	customer_id varchar NOT NULL,
-	expires_at timestamp NOT NULL
+	expires_at  timestamp with time zone NOT NULL
 );
 
 CREATE UNIQUE INDEX auth_session_id_idx ON public.auth_session (id);

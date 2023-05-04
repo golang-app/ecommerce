@@ -15,7 +15,7 @@ func Test_Auth_Create_New_Account(t *testing.T) {
 
 	// create new account
 	email := randomEmail()
-	t.Log(email)
+	t.Logf("email: %s", email)
 	resp, err := appCtx.sendApi("POST", "/api/v1/auth/register", []byte(fmt.Sprintf(`{"username": "%s", "password": "password"}`, email)))
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
@@ -38,9 +38,9 @@ func Test_Auth_Create_New_Account(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 204 {
+	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected status code 204, got %d, body: %s", resp.StatusCode, string(body))
+		t.Fatalf("expected status code 200, got %d, body: %s", resp.StatusCode, string(body))
 	}
 
 	// get user info
@@ -86,7 +86,7 @@ func Test_Auth_Logout(t *testing.T) {
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 204 {
+	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected status code 204, got %d, body: %s", resp.StatusCode, string(body))
 	}
