@@ -13,6 +13,16 @@ If you find anything that you can improve or add - feel free to talk about it in
 The project is a very early stage so there's a lot of work to do so every contribution is welcome!
 
 
+## Quick start
+
+The easiest way of running everything is using the `docker-compose`.
+
+```sh
+docker-compose up
+```
+
+You'll have to wait some time to download all dependencies and build everything but after it, everything should be up and running.
+
 ## Services
 
 When you run everything using docker-compose, you can access the following services:
