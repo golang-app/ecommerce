@@ -1,22 +1,18 @@
 package domain
 
-import "errors"
-
 type PasswordPolicy func(string) error
 
-var ErrPasswordTooShort = errors.New("password is too short")
-var ErrPasswordLeaked = errors.New("password leaked")
-var ErrPasswordTooLong = errors.New("password too long")
-var ErrPasswordDoesNotContainLowercase = errors.New("password does not contain lowercase letter")
-var ErrPasswordDoesNotContainUppercase = errors.New("password does not contain uppercase letter")
-var ErrPasswordDoesNotContainNumber = errors.New("password does not contain number")
-var ErrPasswordDoesNotContainSpecialChar = errors.New("password does not contain special character")
+type PasswordPolicyError string
+
+func (e PasswordPolicyError) Error() string {
+	return string(e)
+}
 
 // seee: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#implement-proper-password-strength-controls
 func MinLength(n int) PasswordPolicy {
 	return func(password string) error {
 		if len(password) < n {
-			return ErrPasswordTooShort
+			return PasswordPolicyError("password is too short")
 		}
 		return nil
 	}
@@ -26,7 +22,7 @@ func MinLength(n int) PasswordPolicy {
 func MaxLength(n int) PasswordPolicy {
 	return func(password string) error {
 		if len(password) > n {
-			return ErrPasswordTooLong
+			return PasswordPolicyError("password is too long")
 		}
 		return nil
 	}
@@ -39,7 +35,7 @@ func MustContainLowercase(password string) error {
 		}
 	}
 
-	return ErrPasswordDoesNotContainLowercase
+	return PasswordPolicyError("password does not contain lowercase")
 }
 
 func MustContainUppercase(password string) error {
@@ -49,7 +45,7 @@ func MustContainUppercase(password string) error {
 		}
 	}
 
-	return ErrPasswordDoesNotContainUppercase
+	return PasswordPolicyError("password does not contain uppercase")
 }
 
 func MustContainNumber(password string) error {
@@ -59,7 +55,7 @@ func MustContainNumber(password string) error {
 		}
 	}
 
-	return ErrPasswordDoesNotContainNumber
+	return PasswordPolicyError("password does not contain number")
 }
 
 func MustContainSpecialChar(password string) error {
@@ -69,5 +65,5 @@ func MustContainSpecialChar(password string) error {
 		}
 	}
 
-	return ErrPasswordDoesNotContainSpecialChar
+	return PasswordPolicyError("password does not contain special character")
 }

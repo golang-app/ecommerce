@@ -101,8 +101,9 @@ func TestPassToShort(t *testing.T) {
 	err := appServ.CreateNewCustomer(ctx, email, pass)
 
 	// then
-	t.Log(err)
-	is.True(errors.Is(err, domain.ErrPasswordTooShort))
+	var e domain.PasswordPolicyError
+
+	is.True(errors.As(err, &e))
 }
 
 func randomEmail() (email string) {
