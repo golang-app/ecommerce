@@ -101,7 +101,8 @@ func TestPassToShort(t *testing.T) {
 	err := appServ.CreateNewCustomer(ctx, email, pass)
 
 	// then
-	is.True(errors.Is(err, app.ErrPasswordTooShort))
+	t.Log(err)
+	is.True(errors.Is(err, domain.ErrPasswordTooShort))
 }
 
 func randomEmail() (email string) {
@@ -125,7 +126,7 @@ func randomPassword() (pass string) {
 		return
 	}
 
-	pass = fmt.Sprintf("%X%X%X%X%X", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+	pass = fmt.Sprintf("%X%X%X%X%XaZ!1", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 
 	return
 }
