@@ -60,8 +60,13 @@ const CartProvider = ({ children }: CartProviderProps) => {
       );
       setNoOfItems(counter);
     });
+<<<<<<< Updated upstream
 
   }, []);
+=======
+    return () => {};
+  }, [cart]);
+>>>>>>> Stashed changes
 
   return <CartContext.Provider value={{cartID, noOfItems, addToCart, products}}>{children}</CartContext.Provider>;
 };
