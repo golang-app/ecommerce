@@ -4,7 +4,8 @@
 
 ## List of accepted ADRs
 
-* [ReactJS](19.04.2022-reactjs.md)
+* [ReactJS](reactjs.md)
+* [Introduce GraphQL](graphql.md)
 
 ## Template
 We'll use a simple template just to not overcomplicate it:
