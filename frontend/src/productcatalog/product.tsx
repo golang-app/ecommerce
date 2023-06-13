@@ -29,13 +29,9 @@ const ReadMoreBox = styled("div")({
 });
 
 export function ProductView(props: ProductViewProps) {
-<<<<<<< Updated upstream
   const cart = useCart();
 
   console.log(cart);
-=======
-  let {addProduct} = useCart();
->>>>>>> Stashed changes
 
   return (
     <Box>
@@ -46,11 +42,7 @@ export function ProductView(props: ProductViewProps) {
       </Typography>
       <ReadMoreBox>
         <Button variant="contained" onClick={() => {
-<<<<<<< Updated upstream
             cart?.addToCart(props.product.id, 1);
-=======
-            addProduct(props.product.id, 1);
->>>>>>> Stashed changes
         }}>
           Add to cart
         </Button>
