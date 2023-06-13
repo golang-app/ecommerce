@@ -16,7 +16,7 @@ func Test_Auth_Create_New_Account(t *testing.T) {
 	// create new account
 	email := randomEmail()
 	t.Logf("email: %s", email)
-	resp, err := appCtx.sendApi("POST", "/api/v1/auth/register", []byte(fmt.Sprintf(`{"username": "%s", "password": "password"}`, email)))
+	resp, err := appCtx.sendApi("POST", "/api/v1/auth/register", []byte(fmt.Sprintf(`{"username": "%s", "password": "pAssword!1"}`, email)))
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}
@@ -31,7 +31,7 @@ func Test_Auth_Create_New_Account(t *testing.T) {
 	// we don't have confirming the email so we skip this step for now
 
 	// login
-	resp, err = appCtx.sendApi("POST", "/api/v1/auth/login", []byte(fmt.Sprintf(`{"username": "%s", "password": "password"}`, email)))
+	resp, err = appCtx.sendApi("POST", "/api/v1/auth/login", []byte(fmt.Sprintf(`{"username": "%s", "password": "pAssword!1"}`, email)))
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}
@@ -64,7 +64,7 @@ func Test_Auth_Logout(t *testing.T) {
 	// create new account
 	email := randomEmail()
 	t.Log(email)
-	resp, err := appCtx.sendApi("POST", "/api/v1/auth/register", []byte(fmt.Sprintf(`{"username": "%s", "password": "password"}`, email)))
+	resp, err := appCtx.sendApi("POST", "/api/v1/auth/register", []byte(fmt.Sprintf(`{"username": "%s", "password": "pAssword!1"}`, email)))
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}
@@ -79,7 +79,7 @@ func Test_Auth_Logout(t *testing.T) {
 	// we don't have confirming the email so we skip this step for now
 
 	// login
-	resp, err = appCtx.sendApi("POST", "/api/v1/auth/login", []byte(fmt.Sprintf(`{"username": "%s", "password": "password"}`, email)))
+	resp, err = appCtx.sendApi("POST", "/api/v1/auth/login", []byte(fmt.Sprintf(`{"username": "%s", "password": "pAssword!1"}`, email)))
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}
