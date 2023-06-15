@@ -12,8 +12,7 @@ import (
 )
 
 var (
-	ErrInvalidEmail     = fmt.Errorf("invalid email")
-	ErrPasswordTooShort = fmt.Errorf("password must be at least 8 characters")
+	ErrInvalidEmail = fmt.Errorf("invalid email")
 )
 
 var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
@@ -29,12 +28,26 @@ type SessStorage interface {
 }
 
 type auth struct {
-	authStorage CustomerStorage
-	sessStorage SessStorage
+	authStorage  CustomerStorage
+	sessStorage  SessStorage
+	passPolicies []domain.PasswordPolicy
 }
 
 func NewAuth(authStorage CustomerStorage, sessStorage SessStorage) auth {
-	return auth{authStorage: authStorage, sessStorage: sessStorage}
+	return auth{
+		authStorage: authStorage, sessStorage: sessStorage,
+		passPolicies: []domain.PasswordPolicy{
+
+			// those values are recommended by OWASP https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#implement-proper-password-strength-controls
+			domain.MinLength(8),
+			domain.MaxLength(64),
+
+			domain.MustContainLowercase,
+			domain.MustContainUppercase,
+			domain.MustContainNumber,
+			domain.MustContainSpecialChar,
+		},
+	}
 }
 
 func (a auth) CreateNewCustomer(ctx context.Context, email, password string) error {
@@ -42,9 +55,10 @@ func (a auth) CreateNewCustomer(ctx context.Context, email, password string) err
 		return ErrInvalidEmail
 	}
 
-	// TODO: add better password policy
-	if len(password) < 8 {
-		return ErrPasswordTooShort
+	for _, policy := range a.passPolicies {
+		if err := policy(password); err != nil {
+			return fmt.Errorf("cannot create customer: %w", err)
+		}
 	}
 
 	passwordHash, err := hashPassword(password)
