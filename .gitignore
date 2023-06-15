@@ -25,3 +25,6 @@
 .docker/setup/.done
 
 __debug_bin
+
+node_modules/
+dist/
