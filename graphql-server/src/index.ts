@@ -1,6 +1,7 @@
 import { ApolloServer } from '@apollo/server';
 import { startStandaloneServer } from '@apollo/server/standalone';
 import { ProductsDS } from './datasource/Product.js';
+import { CartDS } from './datasource/Cart.js';
 
 const Query = `
   type Product {
@@ -15,27 +16,59 @@ const Query = `
       currency: String!
   }
 
-  type Query {
-    featuredProducts: [Product]
-    product(id: String!): Product
+  type Cart {
+      items: [CartItem]
   }
+
+  type CartItem {
+    id: String!
+    name: String!
+    price: Price!
+    quantity: Int!
+  }
+
+  type Query {
+    listProducts: [Product]
+    product(id: String!): Product
+    cart(id: String!): Cart
+  }
+
+  input AddToCartInput {
+      cartId: String!
+      productId: String!
+      quantity: Int!
+  }
+
+  type Mutation {
+    addToCart(input: AddToCartInput!): String
+  }
+
 `;
 
 interface ContextValue {
   dataSources: {
     productsAPI: ProductsDS;
+    cartAPI: CartDS;
   };
 }
 
 const resolvers = {
   Query: {
-    featuredProducts: async (_1: any, _2 : any, context : ContextValue) => {
+    listProducts: async (_1: any, _2 : any, context : ContextValue) => {
       return context.dataSources.productsAPI.featuredProducts();
     },
     product: async (_1: any, params: any, context : ContextValue) => {
       return context.dataSources.productsAPI.product(params.id);
     },
+    cart: async (_1: any, params: any, context : ContextValue) => {
+      return context.dataSources.cartAPI.cart(params.id);
+    },
   },
+  Mutation: {
+    addToCart: async (_1: any, params: any, context : ContextValue) => {
+        return context.dataSources.cartAPI.addToCart(params.input);
+    },
+    }
 };
 
 
@@ -52,6 +85,7 @@ const { url } = await startStandaloneServer(server, {
         return {
           dataSources: {
             productsAPI: new ProductsDS({ cache }),
+            cartAPI: new CartDS({ cache }),
           },
         };
     },
