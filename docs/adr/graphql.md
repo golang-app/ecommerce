@@ -65,5 +65,16 @@ JSON:API is a specification for building APIs using JSON, designed to minimize r
 * **Complexity**: JSON:API's conventions can be complex to understand and implement correctly, especially compared to more straightforward options like REST.
 * **Limited Flexibility**: JSON:API is more rigid in its structure compared to GraphQL. While this can have advantages, it may not suit every use case.
 
+
+## Monitoring
+
+To ensure efficient monitoring and metrics collection for our GraphQL implementation, we will utilize the ELK Stack (Elasticsearch, Logstash, Kibana) in both development and production environments.
+
+**Elasticsearch** will serve as the primary data store for our log data and metrics, including key measures like query execution times, error rates, and usage patterns.
+
+**Logstash** will act as our data processing pipeline. It will collect logs from the GraphQL server, which may include resolver times and query details, transform the data as necessary, and send it to Elasticsearch.
+
+**Kibana** will be used to visualize the data stored in Elasticsearch. It will display real-time dashboards, tracking metrics such as query latency, error rates, and usage patterns, providing valuable insights into the performance and utilization of our GraphQL layer.
+
 ## Consequences
 If successful, this decision will lead to easier data management, improved performance, and a streamlined API. It will also provide the team with valuable experience in a new technology. If not, we may need to invest more time in understanding the intricacies of GraphQL and the potential performance overheads.
