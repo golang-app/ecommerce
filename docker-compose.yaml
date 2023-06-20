@@ -8,6 +8,21 @@ services:
       - 3000:3000
     networks:
       - ecommerce
+  graphql:
+    build:
+      context: ./graphql-server
+    restart: unless-stopped
+    depends_on:
+      - backend
+    links:
+      - backend
+    ports:
+      - 4000:4000
+    networks:
+      - ecommerce
+    environment:
+      BACKEND_URL: http://backend:8080
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otelcol:4318/
   backend:
     build:
       context: ./backend

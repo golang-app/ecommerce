@@ -40,7 +40,7 @@ const Query = `
   }
 
   type Mutation {
-    addToCart(input: AddToCartInput!): String
+    addToCart(input: AddToCartInput!): Boolean
   }
 
 `;
@@ -66,7 +66,8 @@ const resolvers = {
   },
   Mutation: {
     addToCart: async (_1: any, params: any, context : ContextValue) => {
-        return context.dataSources.cartAPI.addToCart(params.input);
+        params = params.input;
+        return context.dataSources.cartAPI.addToCart(params.cartId, params.productId, params.quantity);
     },
     }
 };
