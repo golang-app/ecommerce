@@ -17,7 +17,7 @@ func Test_CartAddProduct(t *testing.T) {
 	pId := appCtx.addProduct("cookies!", "product 1 description", 10.0, "USD")
 	cartID := randomID()
 
-	resp, err := appCtx.sendApi("POST", "/api/v1/cart/"+cartID, []byte(`{"product_id": "`+pId+`", "qty": 1}`))
+	resp, err := appCtx.sendApi("POST", "/api/v1/cart/"+cartID, []byte(`{"product_id": "`+pId+`", "quantity": 1}`))
 	if err != nil {
 		t.Fatalf("could not send request: %s", err)
 	}
