@@ -37,15 +37,27 @@ func (c *Cart) User() User {
 
 func (c *Cart) Add(product Product, quantity int) error {
 	if _, ok := c.cartItems[product.ID()]; ok {
+		if quantity+c.cartItems[product.ID()].Quantity() <= 0 {
+			delete(c.cartItems, product.ID())
+			return nil
+		}
+
 		ci := c.cartItems[product.ID()]
 		ci.quantity += quantity
 		c.cartItems[product.ID()] = ci
-	} else {
-		c.cartItems[product.ID()] = CartItem{
-			product:  product,
-			quantity: quantity,
-		}
+
+		return nil
 	}
+
+	if quantity <= 0 {
+		return nil
+	}
+
+	c.cartItems[product.ID()] = CartItem{
+		product:  product,
+		quantity: quantity,
+	}
+
 	return nil
 }
 

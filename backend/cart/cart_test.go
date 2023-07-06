@@ -12,6 +12,46 @@ import (
 
 var storage app.CartStorage
 
+func TestAddMinusItemsToCart(t *testing.T) {
+	// given
+	pID := "productID"
+	serv := newCartServiceBuilder().WithProduct(pID, 10).build()
+	ctx := context.Background()
+	sessID := sessionID()
+
+	// when
+	err := serv.AddToCart(ctx, sessID, pID, -1)
+	if err != nil {
+		t.Errorf("could not add product to the cart: %s", err)
+	}
+
+	// when
+	items, err := serv.Items(ctx, sessID)
+	if err != nil {
+		t.Errorf("could not add product to the cart: %s", err)
+	}
+
+	// then
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+
+	// wee add 1 element to the cart and then remove it by adding `-1`
+	err = serv.AddToCart(ctx, sessID, pID, 1)
+	if err != nil {
+		t.Errorf("could not add product to the cart: %s", err)
+	}
+	err = serv.AddToCart(ctx, sessID, pID, -2)
+	if err != nil {
+		t.Errorf("could not add product to the cart: %s", err)
+	}
+
+	// then
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
 func TestAddItemToCartSuccessfully(t *testing.T) {
 	// given
 	pID := "productID"
