@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/adapter"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 )
 
 func init() {
@@ -25,7 +25,7 @@ func init() {
 		panic("cannot establish connection to postgres: " + err.Error())
 	}
 
-	storage = adapter.NewPostgres(db)
+	storage = productcatalog.NewPostgres(db)
 }
 
 func getEnv(name, def string) string {

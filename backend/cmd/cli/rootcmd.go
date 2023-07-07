@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/adapter"
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/spf13/cobra"
 )
 
@@ -19,8 +18,8 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute(db *sql.DB) {
-	storage := adapter.NewPostgres(db)
-	appServ := app.NewProductService(storage)
+	storage := productcatalog.NewPostgres(db)
+	appServ := productcatalog.NewProductService(storage)
 	rootCmd.AddCommand(newProductCatalogCmd(appServ))
 	rootCmd.AddCommand(newSeedsCmd(appServ))
 

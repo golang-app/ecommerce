@@ -6,18 +6,17 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/matryer/is"
 )
 
-var storage app.ProductStorage
+var storage productcatalog.ProductStorage
 
 func TestFetchingProductsInTheCatalog(t *testing.T) {
 	is := is.New(t)
 	// given
 	ctx := context.Background()
-	appServ := app.NewProductService(storage)
+	appServ := productcatalog.NewProductService(storage)
 
 	p, err := buildProduct(ctx, storage)
 	is.NoErr(err)
@@ -36,16 +35,16 @@ func TestFetchingNonExistingProduct(t *testing.T) {
 	is := is.New(t)
 	// given
 	ctx := context.Background()
-	appServ := app.NewProductService(storage)
+	appServ := productcatalog.NewProductService(storage)
 
 	// when
 	_, err := appServ.Find(ctx, "i-dont-exist")
 
 	// then
-	is.True(errors.Is(err, domain.ErrProductNotFound))
+	is.True(errors.Is(err, productcatalog.ErrProductNotFound))
 }
 
-func productEquals(p1, p2 domain.Product) error {
+func productEquals(p1, p2 productcatalog.Product) error {
 	if p1.ID() != p2.ID() {
 		return errors.New("id misatch")
 	}
@@ -62,9 +61,9 @@ func productEquals(p1, p2 domain.Product) error {
 	return nil
 }
 
-func buildProduct(ctx context.Context, storage app.ProductStorage) (domain.Product, error) {
-	pb := app.NewProductBuilder()
-	price := domain.NewPrice(234, "USD")
+func buildProduct(ctx context.Context, storage productcatalog.ProductStorage) (productcatalog.Product, error) {
+	pb := productcatalog.NewProductBuilder()
+	price := productcatalog.NewPrice(234, "USD")
 	pb = pb.WithName("Test product").
 		WithID(randomID()).
 		WithDescription("description of the test product").
