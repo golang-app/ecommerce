@@ -12,12 +12,12 @@ func New(db *sql.DB) (application.BoundedContext, ProductService) {
 	appServ := NewProductService(storage)
 
 	return &boundedContext{
-		httpHandler: NewHTTP(appServ),
+		httpHandler: newPortHTTP(appServ),
 	}, appServ
 }
 
 type boundedContext struct {
-	httpHandler HTTP
+	httpHandler httpPort
 }
 
 func (m boundedContext) MuxRegister(r *mux.Router) {

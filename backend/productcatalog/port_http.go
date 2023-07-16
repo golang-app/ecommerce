@@ -9,12 +9,12 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type HTTP struct {
+type httpPort struct {
 	serv ProductService
 }
 
-func NewHTTP(appServ ProductService) HTTP {
-	return HTTP{
+func newPortHTTP(appServ ProductService) httpPort {
+	return httpPort{
 		serv: appServ,
 	}
 }
@@ -38,7 +38,7 @@ type price struct {
 // @Produce      json
 // @Failure      500  {object}  https.ErrorResponse
 // @Failure      404  {object}  https.ErrorResponse
-func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {
+func (h httpPort) AllProducts(w http.ResponseWriter, r *http.Request) {
 	products, err := h.serv.AllProducts(r.Context())
 	if err != nil {
 		https.InternalError(w, "internal-error", "cannot get list of all products")
@@ -50,7 +50,7 @@ func (h HTTP) AllProducts(w http.ResponseWriter, r *http.Request) {
 	https.OK(w, resp)
 }
 
-func (h HTTP) Product(w http.ResponseWriter, r *http.Request) {
+func (h httpPort) Product(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["productID"]
 	product, err := h.serv.Find(r.Context(), id)
 	if err != nil {
