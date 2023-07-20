@@ -1,5 +1,4 @@
-name: Publish Docker image
-
+name: Publish Docker image (frontend)
 on:
   release:
     types: [published]
