@@ -11,13 +11,12 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
-	pcApp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
-	pcDomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 )
 
-func New(db *sql.DB, logger logrus.FieldLogger, pc pcApp.ProductService) application.BoundedContext {
+func New(db *sql.DB, logger logrus.FieldLogger, pc productcatalog.ProductService) application.BoundedContext {
 	storage := adapter.NewPostgres(db)
 
 	return &boundedContext{
@@ -29,13 +28,13 @@ func New(db *sql.DB, logger logrus.FieldLogger, pc pcApp.ProductService) applica
 // transformProductCatalog is part of Anti-Corruption Layer that prevents leaking
 // productcatalog's types into the cart
 type transformProductCatalog struct {
-	pc pcApp.ProductService
+	pc productcatalog.ProductService
 }
 
 func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (domain.Product, error) {
 	p, err := tpc.pc.Find(ctx, productID)
 
-	if errors.Is(err, pcDomain.ErrProductNotFound) {
+	if errors.Is(err, productcatalog.ErrProductNotFound) {
 		return domain.Product{}, domain.ErrProductNotFound
 	}
 

@@ -1,12 +1,5 @@
 basePath: /api/v1
 definitions:
-  cart_port.price:
-    properties:
-      amount:
-        type: number
-      currency:
-        type: string
-    type: object
   https.ErrorResponse:
     properties:
       detail:
@@ -37,17 +30,11 @@ definitions:
       username:
         type: string
     type: object
-  port.product:
+  port.price:
     properties:
-      description:
-        type: string
-      id:
-        type: string
-      name:
-        type: string
-      price:
-        $ref: '#/definitions/productcatalog_port.price'
-      thumbnail:
+      amount:
+        type: number
+      currency:
         type: string
     type: object
   port.showCartItemResponse:
@@ -57,7 +44,7 @@ definitions:
       name:
         type: string
       price:
-        $ref: '#/definitions/cart_port.price'
+        $ref: '#/definitions/port.price'
       quantity:
         type: integer
     type: object
@@ -68,7 +55,20 @@ definitions:
           $ref: '#/definitions/port.showCartItemResponse'
         type: array
     type: object
-  productcatalog_port.price:
+  productcatalog.httpProduct:
+    properties:
+      description:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      price:
+        $ref: '#/definitions/productcatalog.price'
+      thumbnail:
+        type: string
+    type: object
+  productcatalog.price:
     properties:
       amount:
         type: number
@@ -204,7 +204,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/port.product'
+              $ref: '#/definitions/productcatalog.httpProduct'
             type: array
         "404":
           description: Not Found
