@@ -70,7 +70,7 @@ func BadRequest(w http.ResponseWriter, errType string, title string) {
 	Error(w, ErrorResponse{
 		Type:  errTypePrefix + errType,
 		Title: title,
-	}, http.StatusNotFound)
+	}, http.StatusBadRequest)
 }
 
 func Error(w http.ResponseWriter, resp ErrorResponse, code int) {
