@@ -1,4 +1,4 @@
-package domain
+package productcatalog
 
 import (
 	"errors"
@@ -36,7 +36,7 @@ type Product struct {
 	thumbnail   string
 }
 
-var EmptyProduct = Product{}
+var emptyProduct = Product{}
 
 var productIDReg = regexp.MustCompile(`[\w\d\-]+`)
 
@@ -52,11 +52,11 @@ func NewProductId(id string) (ProductID, error) {
 
 func NewProduct(id ProductID, name, description string, price Price, thumbnail string) (Product, error) {
 	if name == "" {
-		return EmptyProduct, errors.New("the name cannot be empty")
+		return emptyProduct, errors.New("the name cannot be empty")
 	}
 
 	if description == "" {
-		return EmptyProduct, errors.New("the description cannot be empty")
+		return emptyProduct, errors.New("the description cannot be empty")
 	}
 
 	return Product{

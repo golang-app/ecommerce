@@ -1,4 +1,4 @@
-package adapter
+package productcatalog
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	_ "github.com/lib/pq"
 )
 
@@ -20,7 +19,7 @@ func NewPostgres(db *sql.DB) postgres {
 	}
 }
 
-func (db postgres) Add(ctx context.Context, p domain.Product) error {
+func (db postgres) Add(ctx context.Context, p Product) error {
 	q := `INSERT INTO productcatalog_product (id, name, description, thumbnail, price_amount, price_currency) 
 		VALUES ($1, $2, $3, $4, $5, $6)`
 
@@ -32,7 +31,7 @@ func (db postgres) Add(ctx context.Context, p domain.Product) error {
 	return nil
 }
 
-func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
+func (db postgres) All(ctx context.Context) ([]Product, error) {
 	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product`
 
 	rows, err := db.db.QueryContext(ctx, q)
@@ -40,7 +39,7 @@ func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
 		return nil, fmt.Errorf("cannot query products: %w", err)
 	}
 
-	products := []domain.Product{}
+	products := []Product{}
 
 	for rows.Next() {
 		var id, name, description, thumbnail string
@@ -52,12 +51,12 @@ func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
 			return nil, fmt.Errorf("cannot scan product: %w", err)
 		}
 
-		pid, err := domain.NewProductId(id)
+		pid, err := NewProductId(id)
 		if err != nil {
 			return nil, fmt.Errorf("cannot rebuild the product ID: %w", err)
 		}
 
-		prod, err := domain.NewProduct(pid, name, description, domain.NewPrice(float64(amount), currency), thumbnail)
+		prod, err := NewProduct(pid, name, description, NewPrice(float64(amount), currency), thumbnail)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create product from data in the DB: %w", err)
 		}
@@ -71,7 +70,7 @@ func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
 	return products, nil
 }
 
-func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) {
+func (db postgres) Find(ctx context.Context, id string) (Product, error) {
 	q := `SELECT name, description, thumbnail, price_amount, price_currency FROM productcatalog_product WHERE id = $1`
 
 	row := db.db.QueryRowContext(ctx, q, id)
@@ -81,17 +80,17 @@ func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) 
 
 	err := row.Scan(&name, &description, &thumbnail, &amount, &currency)
 	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Product{}, domain.ErrProductNotFound
+		return Product{}, ErrProductNotFound
 	}
 
 	if err != nil {
-		return domain.Product{}, fmt.Errorf("cannot scan product: %w", err)
+		return Product{}, fmt.Errorf("cannot scan product: %w", err)
 	}
 
-	pId, err := domain.NewProductId(id)
+	pId, err := NewProductId(id)
 	if err != nil {
-		return domain.Product{}, fmt.Errorf("cannot build product: %w", err)
+		return Product{}, fmt.Errorf("cannot build product: %w", err)
 	}
 
-	return domain.NewProduct(pId, name, description, domain.NewPrice(float64(amount), currency), thumbnail)
+	return NewProduct(pId, name, description, NewPrice(float64(amount), currency), thumbnail)
 }

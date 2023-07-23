@@ -211,7 +211,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/port.product"
+                                "$ref": "#/definitions/productcatalog.httpProduct"
                             }
                         }
                     },
@@ -232,17 +232,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "cart_port.price": {
-            "type": "object",
-            "properties": {
-                "amount": {
-                    "type": "number"
-                },
-                "currency": {
-                    "type": "string"
-                }
-            }
-        },
         "https.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -290,22 +279,13 @@ const docTemplate = `{
                 }
             }
         },
-        "port.product": {
+        "port.price": {
             "type": "object",
             "properties": {
-                "description": {
-                    "type": "string"
+                "amount": {
+                    "type": "number"
                 },
-                "id": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "price": {
-                    "$ref": "#/definitions/productcatalog_port.price"
-                },
-                "thumbnail": {
+                "currency": {
                     "type": "string"
                 }
             }
@@ -320,7 +300,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "price": {
-                    "$ref": "#/definitions/cart_port.price"
+                    "$ref": "#/definitions/port.price"
                 },
                 "quantity": {
                     "type": "integer"
@@ -338,7 +318,27 @@ const docTemplate = `{
                 }
             }
         },
-        "productcatalog_port.price": {
+        "productcatalog.httpProduct": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "$ref": "#/definitions/productcatalog.price"
+                },
+                "thumbnail": {
+                    "type": "string"
+                }
+            }
+        },
+        "productcatalog.price": {
             "type": "object",
             "properties": {
                 "amount": {
