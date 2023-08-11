@@ -10,7 +10,13 @@ import (
 	"github.com/matryer/is"
 )
 
-var storage productcatalog.ProductStorage
+type productStorage interface {
+	All(ctx context.Context) ([]productcatalog.Product, error)
+	Add(ctx context.Context, p productcatalog.Product) error
+	Find(ctx context.Context, id string) (productcatalog.Product, error)
+}
+
+var storage productStorage
 
 func TestFetchingProductsInTheCatalog(t *testing.T) {
 	is := is.New(t)

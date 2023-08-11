@@ -16,7 +16,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func New(db *sql.DB, logger logrus.FieldLogger, pc productcatalog.ProductService) application.BoundedContext {
+type productStorage interface {
+	Find(ctx context.Context, id string) (productcatalog.Product, error)
+}
+
+func New(db *sql.DB, logger logrus.FieldLogger, pc productStorage) application.BoundedContext {
 	storage := adapter.NewPostgres(db)
 
 	return &boundedContext{
@@ -28,7 +32,7 @@ func New(db *sql.DB, logger logrus.FieldLogger, pc productcatalog.ProductService
 // transformProductCatalog is part of Anti-Corruption Layer that prevents leaking
 // productcatalog's types into the cart
 type transformProductCatalog struct {
-	pc productcatalog.ProductService
+	pc productStorage
 }
 
 func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (domain.Product, error) {
