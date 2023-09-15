@@ -228,11 +228,6 @@ services:
       - elasticsearch
     restart: unless-stopped
 
-volumes:
-  setup:
-  elasticsearch:
-
-
 networks:
   ecommerce:
     driver: bridge
