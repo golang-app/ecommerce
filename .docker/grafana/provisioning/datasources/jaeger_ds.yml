@@ -1,5 +1,0 @@
-datasources:
-- name: Jaeger
-  access: proxy
-  type: jaeger
-  url: http://jaeger:16686
