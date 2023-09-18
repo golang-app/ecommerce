@@ -1,13 +1,6 @@
 version: '3.7'
 
 services:
-  frontend:
-    build:
-      context: ./frontend
-    ports:
-      - 3000:3000
-    networks:
-      - ecommerce
   backend:
     build:
       context: ./backend
@@ -15,11 +8,8 @@ services:
     restart: unless-stopped
     depends_on:
       - migrate
-      - logstash
     links:
       - postgres
-      - otelcol
-      - logstash
     ports:
       - 8080:8080
     networks:

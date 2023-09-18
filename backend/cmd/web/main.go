@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/ardanlabs/conf"
-	"github.com/bkielbasa/go-ecommerce/backend/auth"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
+	"github.com/bkielbasa/go-ecommerce/backend/homepage"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
@@ -25,8 +25,6 @@ import (
 const tearDownTimeout = 5 * time.Second
 const appName = "go-ecommerce"
 
-// @title           Ecommerce API
-// @BasePath  /api/v1
 func main() {
 	cfg := config{}
 
@@ -73,9 +71,9 @@ func main() {
 	app.AddDependency(dependency.NewSQL(db))
 	pcBD, cartService := productcatalog.New(db)
 
+	app.AddBoundedContext(homepage.New())
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(cart.New(db, logger, cartService))
-	app.AddBoundedContext(auth.New(db))
 
 	go func() {
 		_ = app.Run()

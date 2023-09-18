@@ -55,6 +55,7 @@ type boundedContext struct {
 }
 
 func (m boundedContext) MuxRegister(r *mux.Router) {
-	r.HandleFunc("/api/v1/cart/{cartID:[a-zA-Z0-9]+}", observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.AddToCart), m.logger)).Methods("POST")
-	r.HandleFunc("/api/v1/cart/{cartID:[a-zA-Z0-9]+}", observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.ShowCart), m.logger)).Methods("GET", "OPTIONS")
+	r.HandleFunc("/api/v1/cart", observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.AddToCart), m.logger)).Methods("POST")
+	r.HandleFunc("/api/v1/cart", observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.ShowCart), m.logger)).Methods("GET", "OPTIONS")
+	r.HandleFunc("/api/v1/cart/budge", observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.Budge), m.logger)).Methods("GET", "OPTIONS")
 }

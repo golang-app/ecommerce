@@ -1,7 +1,9 @@
 package productcatalog
 
 import (
+	_ "embed"
 	"errors"
+	"html/template"
 	"log"
 	"net/http"
 
@@ -32,12 +34,9 @@ type price struct {
 	Amount   float64 `json:"amount"`
 }
 
-// @Router       /products [get]
-// @Success      200  {object}  []httpProduct
-// @Accept       json
-// @Produce      json
-// @Failure      500  {object}  https.ErrorResponse
-// @Failure      404  {object}  https.ErrorResponse
+//go:embed tmpl/allproducts.gohtml
+var allproductsTmpl string
+
 func (h httpPort) AllProducts(w http.ResponseWriter, r *http.Request) {
 	products, err := h.serv.AllProducts(r.Context())
 	if err != nil {
@@ -46,9 +45,22 @@ func (h httpPort) AllProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := toAllProductsResponse(products)
-	https.OK(w, resp)
+	resp := map[string]any{
+		"Products": toAllProductsResponse(products),
+	}
+
+	tmpl, err := template.New("name").Parse(allproductsTmpl)
+	if err != nil {
+		https.InternalError(w, "internal-error", "cannot get list of all products")
+		log.Printf("cannot get list of all products: %s", err)
+		return
+	}
+
+	tmpl.Execute(w, resp)
 }
+
+//go:embed tmpl/showProduct.gohtml
+var showProductTmpl string
 
 func (h httpPort) Product(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["productID"]
@@ -64,7 +76,17 @@ func (h httpPort) Product(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	https.OK(w, productsToResponse(product))
+	resp := map[string]any{
+		"Product": productsToResponse(product),
+	}
+
+	tmpl, err := template.New("name").Parse(showProductTmpl)
+	if err != nil {
+		https.InternalError(w, "internal-error", "cannot get product")
+		return
+	}
+
+	tmpl.Execute(w, resp)
 }
 
 func toAllProductsResponse(products []Product) []httpProduct {

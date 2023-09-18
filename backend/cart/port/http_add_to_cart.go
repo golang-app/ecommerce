@@ -8,7 +8,6 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
-	"github.com/gorilla/mux"
 )
 
 type AddToCartRequest struct {
@@ -16,14 +15,8 @@ type AddToCartRequest struct {
 	Qty       int    `json:"quantity"`
 }
 
-// @Router       /cart/{cartId} [post]
-// @Accept       json
-// @Produce      json
-// @Param cart  body AddToCartRequest true "Cart"
-// @Failure      500  {object}  https.ErrorResponse
-// @Failure      404  {object}  https.ErrorResponse
 func (h HTTP) AddToCart(w http.ResponseWriter, r *http.Request) {
-	cartID := mux.Vars(r)["cartID"]
+	cartID := cartIDFromCookies(w, r)
 
 	req := AddToCartRequest{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

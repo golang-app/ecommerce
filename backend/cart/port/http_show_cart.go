@@ -1,10 +1,11 @@
 package port
 
 import (
+	_ "embed"
+	"html/template"
 	"net/http"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
-	"github.com/gorilla/mux"
 )
 
 type showCartResponse struct {
@@ -23,14 +24,43 @@ type price struct {
 	Currency string  `json:"currency"`
 }
 
-// @Router       /cart/{cartId} [get]
-// @Accept       json
-// @Produce      json
-// @Success      200  {object}  showCartResponse
-// @Failure      500  {object}  https.ErrorResponse
-// @Failure      404  {object}  https.ErrorResponse
+//go:embed tmpl/cartBudge.gohtml
+var cartCouterTmpl string
+
+func (h HTTP) Budge(w http.ResponseWriter, r *http.Request) {
+	cartID := cartIDFromCookies(w, r)
+
+	items, err := h.cart.Items(r.Context(), cartID)
+	if err != nil {
+		https.InternalError(w, "internal-error", err.Error())
+		return
+	}
+
+	counter := 0
+
+	for _, item := range items {
+		counter += item.Quantity()
+	}
+
+	if counter == 0 {
+		return
+	}
+
+	resp := map[string]any{
+		"Product": counter,
+	}
+
+	tmpl, err := template.New("name").Parse(cartCouterTmpl)
+	if err != nil {
+		https.InternalError(w, "internal-error", "cannot get product")
+		return
+	}
+
+	tmpl.Execute(w, resp)
+}
+
 func (h HTTP) ShowCart(w http.ResponseWriter, r *http.Request) {
-	cartID := mux.Vars(r)["cartID"]
+	cartID := cartIDFromCookies(w, r)
 
 	items, err := h.cart.Items(r.Context(), cartID)
 	if err != nil {
