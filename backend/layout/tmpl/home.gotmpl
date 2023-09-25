@@ -1,0 +1,7 @@
+{{define "content"}}
+   <div id="main-content">
+     <div hx-get="/api/v1/products" hx-trigger="load">
+       <img  alt="Result loading..." class="htmx-indicator" width="150" src="/img/bars.svg"/>
+     </div>
+   </div>
+{{end}}

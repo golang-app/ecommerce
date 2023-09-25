@@ -10,11 +10,11 @@ import (
 
 	"github.com/ardanlabs/conf"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
-	"github.com/bkielbasa/go-ecommerce/backend/homepage"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	logrustash "github.com/bshuster-repo/logrus-logstash-hook"
 	"github.com/sirupsen/logrus"
@@ -71,7 +71,7 @@ func main() {
 	app.AddDependency(dependency.NewSQL(db))
 	pcBD, cartService := productcatalog.New(db)
 
-	app.AddBoundedContext(homepage.New())
+	app.AddBoundedContext(layout.New())
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(cart.New(db, logger, cartService))
 

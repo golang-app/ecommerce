@@ -47,7 +47,7 @@ func (h HTTP) Budge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{
-		"Product": counter,
+		"Counter": counter,
 	}
 
 	tmpl, err := template.New("name").Parse(cartCouterTmpl)

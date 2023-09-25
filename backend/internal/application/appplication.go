@@ -30,7 +30,7 @@ func New(ctx context.Context, port int) *App {
 	r.HandleFunc("/healthyz", deps.Healthy)
 	r.HandleFunc("/readyz", deps.Ready)
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf("127.0.0.1:%d", port),
+		Addr:    fmt.Sprintf(":%d", port),
 		Handler: otelhttp.NewHandler(r, ""),
 	}
 

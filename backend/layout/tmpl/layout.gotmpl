@@ -27,7 +27,7 @@
             <ul class="navbar-nav">
                 <li class="nav-item">
                     <a class="nav-link position-relative" href="#">Cart 
-                        <span id="cartBudge" hx-get="/api/v1/cart/budge" hx-trigger="load" hx-spap="outerHTML" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">99+</span>
+                        <span id="cartBudge" hx-get="/api/v1/cart/budge" hx-trigger="load" hx-trigger="cartBudge from:body" hx-swap="outerHTML" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"></span>
                     </a>
                 </li>
             </ul>
@@ -35,12 +35,19 @@
         </div>
     </nav>
 
-      <div id="main-content">
-        <div hx-get="/api/v1/products" hx-trigger="load">
-          <img  alt="Result loading..." class="htmx-indicator" width="150" src="/img/bars.svg"/>
-        </div>
-      </div>
-    </div>
+    {{block "content" .}}{{end}}
+
+
+  <!-- Copyright -->
+<footer class="bg-dark text-center text-white">
+<div class="text-center p-3" style="background-color: rgba(0, 0, 0, 0.2);">
+    © 2023 Copyright:
+    <a class="text-white" href="https://github.com/golang-app/ecommerce">go-ecommerce</a>
+  </div>
+</footer>
+  
+</div>
+<!-- End of .container -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
   </body>
