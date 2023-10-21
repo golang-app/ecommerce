@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
@@ -30,7 +29,7 @@ func New(ctx context.Context, port int) *App {
 	r.HandleFunc("/healthyz", deps.Healthy)
 	r.HandleFunc("/readyz", deps.Ready)
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    fmt.Sprintf("localhost:%d", port),
 		Handler: otelhttp.NewHandler(r, ""),
 	}
 
