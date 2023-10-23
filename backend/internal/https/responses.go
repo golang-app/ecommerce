@@ -6,8 +6,8 @@ import (
 	"net/http"
 )
 
-func cors(w http.ResponseWriter) {
-	var allowedHeaders = "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization,X-CSRF-Token"
+func CORS(w http.ResponseWriter) {
+	var allowedHeaders = "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization,X-CSRF-Token, hx-request, hx-current-url"
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 	w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
@@ -26,14 +26,14 @@ func OK(w http.ResponseWriter, msg interface{}) {
 		return
 	}
 
-	cors(w)
+	CORS(w)
 	w.Header().Add("content-type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(body)
 }
 
 func NoContent(w http.ResponseWriter) {
-	cors(w)
+	CORS(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -74,7 +74,7 @@ func BadRequest(w http.ResponseWriter, errType string, title string) {
 }
 
 func Error(w http.ResponseWriter, resp ErrorResponse, code int) {
-	cors(w)
+	CORS(w)
 	w.Header().Add("content-type", "application/json")
 	w.WriteHeader(code)
 	body, err := json.Marshal(resp)
@@ -86,6 +86,6 @@ func Error(w http.ResponseWriter, resp ErrorResponse, code int) {
 }
 
 func EmptyHandler(w http.ResponseWriter, r *http.Request) {
-	cors(w)
+	CORS(w)
 	w.WriteHeader(http.StatusOK)
 }

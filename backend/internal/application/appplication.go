@@ -28,9 +28,8 @@ func New(ctx context.Context, port int) *App {
 	deps := dependency.New()
 	r.HandleFunc("/healthyz", deps.Healthy)
 	r.HandleFunc("/readyz", deps.Ready)
-
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    fmt.Sprintf("localhost:%d", port),
 		Handler: otelhttp.NewHandler(r, ""),
 	}
 

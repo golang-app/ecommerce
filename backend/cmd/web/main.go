@@ -15,6 +15,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	logrustash "github.com/bshuster-repo/logrus-logstash-hook"
 	"github.com/sirupsen/logrus"
@@ -25,8 +26,6 @@ import (
 const tearDownTimeout = 5 * time.Second
 const appName = "go-ecommerce"
 
-// @title           Ecommerce API
-// @BasePath  /api/v1
 func main() {
 	cfg := config{}
 
@@ -71,11 +70,14 @@ func main() {
 	}
 
 	app.AddDependency(dependency.NewSQL(db))
-	pcBD, cartService := productcatalog.New(db)
+	pcBD, catalogService := productcatalog.New(db)
+	cartBD, cartSrv := cart.New(db, logger, catalogService)
+	authBD, authService := auth.New(db)
+	app.AddBoundedContext(cartBD)
 
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService))
 	app.AddBoundedContext(pcBD)
-	app.AddBoundedContext(cart.New(db, logger, cartService))
-	app.AddBoundedContext(auth.New(db))
+	app.AddBoundedContext(authBD)
 
 	go func() {
 		_ = app.Run()

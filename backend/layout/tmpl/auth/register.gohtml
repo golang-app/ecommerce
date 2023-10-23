@@ -1,0 +1,22 @@
+{{define "main"}}
+
+<h1>Register</h1>
+
+<form action="/auth/register" method="post">
+  <div class="form-outline mb-4">
+    <input type="email" name="email" id="form2Example1" class="form-control" />
+    <label class="form-label" for="form2Example1">Email address</label>
+  </div>
+
+  <div class="form-outline mb-4">
+    <input type="password" name="password" id="form2Example2" class="form-control" />
+    <label class="form-label" for="form2Example2">Password</label>
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-block mb-4">Register now</button>
+
+  <div class="text-center">
+    <p>Have the account? <a href="/auth/login">Login</a></p>
+  </div>
+</form>
+{{end}}

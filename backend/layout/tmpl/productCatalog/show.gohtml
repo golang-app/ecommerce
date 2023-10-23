@@ -1,0 +1,9 @@
+{{define "main"}}
+   <div id="main-content">
+      <h1>{{.Product.Name }}</h1>
+
+      <p>{{.Product.Description}}</p>
+
+      <a class="btn btn-primary" hx-trigger="click" hx-post="/cart/{{.Product.ID}}" role="button">Add to cart</a>
+   </div>
+{{end}}

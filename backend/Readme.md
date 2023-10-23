@@ -16,7 +16,7 @@ graph TD;
     Cart-- Reads info about product details -->ProductCatalog;
 ```
 
-## Requrements
+## Requirements
 
 To be able to run the project you have to have Go installed. By default, it works with an postgres database implementation. For further configuration credentials and so on please go to the [web](./cmd/web) page.
 

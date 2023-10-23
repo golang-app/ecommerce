@@ -1,0 +1,12 @@
+<div class="container">
+  <div class="row">
+	{{range .Products}} 
+	    <div class="col-lg-4 col-md-12">
+			<h2>{{.Name}}</h2>
+			<p>{{.Description}}</p>
+			<p>Price: {{.Price.Amount}} {{.Price.Currency}}</p>
+			<p><a class="btn btn-primary" href="/product//{{.ID}}" role="button">View details &raquo;</a></p>
+	    </div>
+	{{end}}
+  </div>
+</div>

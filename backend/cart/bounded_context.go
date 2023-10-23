@@ -6,13 +6,10 @@ import (
 	"errors"
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/adapter"
+	"github.com/bkielbasa/go-ecommerce/backend/cart/app"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
-	"github.com/bkielbasa/go-ecommerce/backend/cart/port"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
-	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
-	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
-	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 )
 
@@ -20,13 +17,14 @@ type productStorage interface {
 	Find(ctx context.Context, id string) (productcatalog.Product, error)
 }
 
-func New(db *sql.DB, logger logrus.FieldLogger, pc productStorage) application.BoundedContext {
+func New(db *sql.DB, logger logrus.FieldLogger, pc productStorage) (application.BoundedContext, app.CartService) {
 	storage := adapter.NewPostgres(db)
 
+	srv := app.NewCartService(storage, transformProductCatalog{pc})
+
 	return &boundedContext{
-		logger:      logger,
-		httpHandler: port.NewHTTP(storage, transformProductCatalog{pc}),
-	}
+		logger: logger,
+	}, srv
 }
 
 // transformProductCatalog is part of Anti-Corruption Layer that prevents leaking
@@ -50,11 +48,5 @@ func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (
 }
 
 type boundedContext struct {
-	httpHandler port.HTTP
 	logger      logrus.FieldLogger
-}
-
-func (m boundedContext) MuxRegister(r *mux.Router) {
-	r.HandleFunc("/api/v1/cart/{cartID:[a-zA-Z0-9]+}", observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.AddToCart), m.logger)).Methods("POST")
-	r.HandleFunc("/api/v1/cart/{cartID:[a-zA-Z0-9]+}", observability.LoggerMiddleware(https.WrapPanic(m.httpHandler.ShowCart), m.logger)).Methods("GET", "OPTIONS")
 }
