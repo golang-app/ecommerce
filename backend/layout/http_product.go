@@ -38,13 +38,13 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, domain.ErrProductNotFound) {
 			session.AddFlash("Product does not exists", "error")
-			session.Save(r, w)
+			_ = session.Save(r, w)
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
 
 		session.AddFlash("cannot get list of all products", "error")
-		session.Save(r, w)
+		_ = session.Save(r, w)
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/bkielbasa/go-ecommerce/backend/auth/port"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/adapter"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/app"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
@@ -49,6 +48,5 @@ func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (
 }
 
 type boundedContext struct {
-	httpHandler port.HTTP
 	logger      logrus.FieldLogger
 }

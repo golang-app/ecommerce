@@ -73,9 +73,13 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
-	session.Save(r, w)
+  err := session.Save(r, w)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 
-	err := ts.ExecuteTemplate(w, "base", data)
+	err = ts.ExecuteTemplate(w, "base", data)
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

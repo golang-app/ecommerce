@@ -17,8 +17,13 @@ func (handler httpHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 func (handler httpHandler) AuthMenuItem(w http.ResponseWriter, r *http.Request) {
   c, err := store.Get(r, "ecommerce")
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 
-  loggedIn := err == nil
+  var loggedIn bool
 
   sessID, _ := c.Values["session_id"].(string)
   sess, err := handler.authSrv.FindByToken(r.Context(), sessID)
@@ -66,14 +71,14 @@ func (handler httpHandler) HandleLogout(w http.ResponseWriter, r *http.Request) 
 	err := handler.authSrv.Logout(r.Context(), sessID)
 	if err != nil {
 		session.AddFlash(err.Error(), "error")
-		session.Save(r, w)
+		_ = session.Save(r, w)
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 
 	session.AddFlash("You are logged out")
   delete(session.Values,"session_id")
-	session.Save(r, w)
+	_ = session.Save(r, w)
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -92,14 +97,14 @@ func (handler httpHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	sess, err := handler.authSrv.Login(r.Context(), c.Username, c.Password)
 	if err != nil {
 		session.AddFlash(err.Error(), "error")
-		session.Save(r, w)
+		_ = session.Save(r, w)
 		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 		return
 	}
 
 	session.AddFlash("You are logged in")
   session.Values["session_id"] = sess.ID()
-	session.Save(r, w)
+	_ = session.Save(r, w)
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -125,26 +130,26 @@ func (handler httpHandler) HandleRegister(w http.ResponseWriter, r *http.Request
 		var e domain.PasswordPolicyError
 		if errors.As(err, &e) {
 			session.AddFlash(err.Error(), "error")
-			session.Save(r, w)
+			_ = session.Save(r, w)
 			http.Redirect(w, r, "/auth/register", http.StatusSeeOther)
 			return
 		}
 
 		if errors.Is(err, domain.ErrCustomerExists) {
 			session.AddFlash(err.Error(), "error")
-			session.Save(r, w)
+			_ = session.Save(r, w)
 			http.Redirect(w, r, "/auth/register", http.StatusSeeOther)
 			return
 		}
 
 		session.AddFlash(err.Error(), "error")
-		session.Save(r, w)
+		_ = session.Save(r, w)
 		http.Redirect(w, r, "/auth/register", http.StatusSeeOther)
 		return
 	}
 
 	http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 	session.AddFlash("You are registered. You can log in now")
-	session.Save(r, w)
+	_ = session.Save(r, w)
 	http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
 }
