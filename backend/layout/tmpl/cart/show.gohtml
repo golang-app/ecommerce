@@ -1,1 +1,36 @@
-KOSZYK strony internetowej. Wszystkie ceny podane na stronie internetowej są cenami brutto (zawierają podatek VAT). Ceny podane przy produktach nie zawierają kosztów dostawy. Koszty dostawy są podane w zakładce DOSTAWA.
+{{define "main"}}
+   <div id="main-content">
+      <h1>Cart</h1>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <td scope="col">#</td>
+            <td scope="col">Name</td>
+            <td scope="col">Price</td>
+            <td scope="col">Qty</td>
+            <td scope="col"></td>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $i, $item := .Cart.Items}}
+          <tr>
+            <td>{{$i}}</td>
+            <td>{{$item.Product.Name}}</td>
+            <td>{{$item.Product.Price}}</td>
+            <td>{{$item.Quantity}}</td>
+          </tr>
+
+          {{ end }}
+        </tbody>
+
+        <tfoot>
+          <tr>
+            <td colspan="3">Total:</td>
+            <td>{{ .Cart.TotalQuantity }}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+   </div>
+{{end}}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/gorilla/mux"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
 // App is an instance of the whole application.
@@ -26,11 +26,14 @@ type App struct {
 func New(ctx context.Context, port int) *App {
 	r := mux.NewRouter()
 	deps := dependency.New()
+
+	r.Use(otelmux.Middleware("go-ecommerce"))
 	r.HandleFunc("/healthyz", deps.Healthy)
 	r.HandleFunc("/readyz", deps.Ready)
+
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf("localhost:%d", port),
-		Handler: otelhttp.NewHandler(r, ""),
+		Handler: r,
 	}
 
 	return &App{

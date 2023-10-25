@@ -2,6 +2,7 @@ package https
 
 import (
 	"net/http"
+	"runtime/debug"
 
 	"log"
 )
@@ -11,7 +12,7 @@ func WrapPanic(fn http.HandlerFunc) http.HandlerFunc {
 		defer func() {
 			if r := recover(); r != nil {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-				log.Printf("Panic: %v", r)
+				log.Printf("Panic: %v\nStack trace: %+v", r, string(debug.Stack()))
 			}
 		}()
 

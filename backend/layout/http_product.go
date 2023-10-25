@@ -2,6 +2,8 @@ package layout
 
 import (
 	"errors"
+	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 
@@ -22,7 +24,19 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 		"Products": products,
 	}
 
-	err = tmpl.ExecuteTemplate(w, "allProducts.gohtml", resp)
+	files := []string{
+		"./layout/tmpl/productCatalog/allProducts.gohtml",
+	}
+
+	var ts = template.Must(template.New("").Funcs(template.FuncMap{
+		"html": func(value interface{}) template.HTML {
+			return template.HTML(fmt.Sprint(value))
+		},
+		"add": func(a, b string) float64 {
+			return 666
+		},
+	}).ParseFiles(files...))
+	err = ts.ExecuteTemplate(w, "allProducts.gohtml", resp)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

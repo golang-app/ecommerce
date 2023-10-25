@@ -18,6 +18,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	logrustash "github.com/bshuster-repo/logrus-logstash-hook"
+	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
@@ -27,9 +28,14 @@ const tearDownTimeout = 5 * time.Second
 const appName = "go-ecommerce"
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+
 	cfg := config{}
 
-	err := conf.Parse([]string{}, "", &cfg)
+	err = conf.Parse([]string{}, "", &cfg)
 	if err != nil {
 		if errors.Is(err, conf.ErrHelpWanted) {
 			fmt.Println(conf.Usage("", &cfg))

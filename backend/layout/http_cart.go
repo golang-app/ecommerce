@@ -2,6 +2,8 @@ package layout
 
 import (
 	"errors"
+	"fmt"
+	"html/template"
 	"log"
 	"math/rand"
 	"net/http"
@@ -34,6 +36,30 @@ func (handler httpHandler) AddToCart(w http.ResponseWriter, r *http.Request) {
 	https.NoContent(w)
 }
 
+func (handler httpHandler) Cart(w http.ResponseWriter, r *http.Request) {
+	cartID := cartIDFromCookies(w, r)
+
+	items, err := handler.cartSrv.Items(r.Context(), cartID)
+	if err != nil {
+		https.InternalError(w, "internal-error", err.Error())
+		return
+	}
+
+	totalQty := 0
+
+	for _, item := range items {
+		totalQty += item.Quantity()
+	}
+
+	resp := map[string]any{
+		"Cart": map[string]any{
+			"Items":         items,
+			"TotalQuantity": totalQty,
+		},
+	}
+	handler.renderTemplate(w, r, "cart/show", resp)
+}
+
 func (handler httpHandler) Budge(w http.ResponseWriter, r *http.Request) {
 	cartID := cartIDFromCookies(w, r)
 
@@ -57,7 +83,19 @@ func (handler httpHandler) Budge(w http.ResponseWriter, r *http.Request) {
 		"Counter": counter,
 	}
 
-	err = tmpl.ExecuteTemplate(w, "budge.gohtml", resp)
+	files := []string{
+		"./layout/tmpl/cart/budge.gohtml",
+	}
+
+	var ts = template.Must(template.New("").Funcs(template.FuncMap{
+		"html": func(value interface{}) template.HTML {
+			return template.HTML(fmt.Sprint(value))
+		},
+		"add": func(a, b string) float64 {
+			return 666
+		},
+	}).ParseFiles(files...))
+	err = ts.ExecuteTemplate(w, "budge.gohtml", resp)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
