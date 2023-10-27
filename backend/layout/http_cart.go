@@ -39,23 +39,14 @@ func (handler httpHandler) AddToCart(w http.ResponseWriter, r *http.Request) {
 func (handler httpHandler) Cart(w http.ResponseWriter, r *http.Request) {
 	cartID := cartIDFromCookies(w, r)
 
-	items, err := handler.cartSrv.Items(r.Context(), cartID)
+	cart, err := handler.cartSrv.Get(r.Context(), cartID)
 	if err != nil {
 		https.InternalError(w, "internal-error", err.Error())
 		return
 	}
 
-	totalQty := 0
-
-	for _, item := range items {
-		totalQty += item.Quantity()
-	}
-
 	resp := map[string]any{
-		"Cart": map[string]any{
-			"Items":         items,
-			"TotalQuantity": totalQty,
-		},
+		"Cart": cart,
 	}
 	handler.renderTemplate(w, r, "cart/show", resp)
 }
@@ -63,17 +54,13 @@ func (handler httpHandler) Cart(w http.ResponseWriter, r *http.Request) {
 func (handler httpHandler) Budge(w http.ResponseWriter, r *http.Request) {
 	cartID := cartIDFromCookies(w, r)
 
-	items, err := handler.cartSrv.Items(r.Context(), cartID)
+	cart, err := handler.cartSrv.Get(r.Context(), cartID)
 	if err != nil {
 		https.InternalError(w, "internal-error", err.Error())
 		return
 	}
 
-	counter := 0
-
-	for _, item := range items {
-		counter += item.Quantity()
-	}
+	counter := cart.TotalQuantity()
 
 	if counter == 0 {
 		return

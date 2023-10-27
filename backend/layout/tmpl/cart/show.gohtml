@@ -2,7 +2,7 @@
    <div id="main-content">
       <h1>Cart</h1>
 
-      <table class="table">
+      <table class="table table-hover">
         <thead>
           <tr>
             <td scope="col">#</td>
@@ -12,7 +12,7 @@
             <td scope="col"></td>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="table-hover">
           {{range $i, $item := .Cart.Items}}
           <tr>
             <td>{{$i}}</td>
@@ -26,11 +26,13 @@
 
         <tfoot>
           <tr>
-            <td colspan="3">Total:</td>
+            <td colspan="2">Total:</td>
+            <td>{{ .Cart.TotalPrice }}</td>
             <td>{{ .Cart.TotalQuantity }}</td>
           </tr>
         </tfoot>
       </table>
 
+        <a href="/checkout" class="btn btn-primary btn-lg" role="button">Go to checkout</a>
    </div>
 {{end}}

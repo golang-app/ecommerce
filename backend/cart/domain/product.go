@@ -41,6 +41,16 @@ func (p price) Amount() float64 {
 	return p.amount
 }
 
+func (p price) Multiple(d int) price {
+	p.amount *= float64(d)
+	return p
+}
+
+func (p price) Add(p2 price) price {
+	p.amount += p2.amount
+	return p
+}
+
 func (p price) Currency() string {
 	return p.currency
 }

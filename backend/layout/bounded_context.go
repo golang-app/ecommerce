@@ -18,14 +18,14 @@ type catalogService interface {
 
 type cartService interface {
 	AddToCart(ctx context.Context, sessID string, productID string, qty int) error
-	Items(ctx context.Context, sessID string) ([]domain.CartItem, error)
+	Get(ctx context.Context, sessID string) (*domain.Cart, error)
 }
 
 type authService interface {
 	Login(ctx context.Context, username string, password string) (*authDomain.Session, error)
 	Logout(ctx context.Context, seesionID string) error
-  CreateNewCustomer(ctx context.Context, email, password string) error
-  FindByToken(ctx context.Context, sessToken string) (*authDomain.Session, error)
+	CreateNewCustomer(ctx context.Context, email, password string) error
+	FindByToken(ctx context.Context, sessToken string) (*authDomain.Session, error)
 }
 
 func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService) application.BoundedContext {

@@ -26,14 +26,14 @@ func TestAddMinusItemsToCart(t *testing.T) {
 	}
 
 	// when
-	items, err := serv.Items(ctx, sessID)
+	cart, err := serv.Get(ctx, sessID)
 	if err != nil {
 		t.Errorf("could not add product to the cart: %s", err)
 	}
 
 	// then
-	if len(items) != 0 {
-		t.Errorf("expected 0 items, got %d", len(items))
+	if len(cart.Items()) != 0 {
+		t.Errorf("expected 0 items, got %d", len(cart.Items()))
 	}
 
 	// wee add 1 element to the cart and then remove it by adding `-1`
@@ -47,8 +47,8 @@ func TestAddMinusItemsToCart(t *testing.T) {
 	}
 
 	// then
-	if len(items) != 0 {
-		t.Errorf("expected 0 items, got %d", len(items))
+	if len(cart.Items()) != 0 {
+		t.Errorf("expected 0 items, got %d", len(cart.Items()))
 	}
 }
 
@@ -66,15 +66,17 @@ func TestAddItemToCartSuccessfully(t *testing.T) {
 	}
 
 	// when
-	items, err := serv.Items(ctx, sessID)
+	cart, err := serv.Get(ctx, sessID)
 	if err != nil {
 		t.Errorf("could not add product to the cart: %s", err)
 	}
 
 	// then
-	if len(items) != 1 {
-		t.Errorf("expected 10 items, got %d", len(items))
+	if len(cart.Items()) != 1 {
+		t.Errorf("expected 10 items, got %d", len(cart.Items()))
 	}
+
+	items := cart.Items()
 
 	if items[0].Product().ID() != pID {
 		t.Errorf("expected product ID to be '%s', got '%s'", pID, items[0].Product().ID())

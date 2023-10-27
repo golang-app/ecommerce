@@ -56,7 +56,7 @@ func (c CartService) AddToCart(ctx context.Context, sessID string, productID str
 	return nil
 }
 
-func (c CartService) Items(ctx context.Context, sessID string) ([]domain.CartItem, error) {
+func (c CartService) Get(ctx context.Context, sessID string) (*domain.Cart, error) {
 	user := domain.NewUser(sessID)
 
 	cart, err := c.storage.Get(ctx, user)
@@ -64,5 +64,5 @@ func (c CartService) Items(ctx context.Context, sessID string) ([]domain.CartIte
 		return nil, fmt.Errorf("could not get cart: %w", err)
 	}
 
-	return cart.Items(), nil
+	return cart, nil
 }
