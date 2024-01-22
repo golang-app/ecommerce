@@ -17,6 +17,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/bkielbasa/go-ecommerce/backend/shipment"
 	logrustash "github.com/bshuster-repo/logrus-logstash-hook"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -81,7 +82,10 @@ func main() {
 	authBD, authService := auth.New(db)
 	app.AddBoundedContext(cartBD)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService))
+	shipmentBD, shipmentService := shipment.New(db)
+	app.AddBoundedContext(shipmentBD)
+
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, shipmentService, authService))
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 

@@ -1,0 +1,36 @@
+{{define "main"}}
+<div id="main-content">
+   <div class="container mt-4">
+        <h2>List of Shipment Addresses</h2>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Street</th>
+                    <th>City</th>
+                    <th>State</th>
+                    <th>Postal Code</th>
+                    <th>Country</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $address := .Addresses}}
+                <tr>
+                    <td>123 Main St</td>
+                    <td>SampleCity</td>
+                    <td>SampleState</td>
+                    <td>12345</td>
+                    <td>SampleCountry</td>
+                    <td>
+                        <a href="#" class="btn btn-primary btn-sm">View</a>
+                        <a href="#" class="btn btn-secondary btn-sm">Edit</a>
+                    </td>
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+
+        <a href="/shipment/address/new" class="btn btn-primary">Add new</a>
+    </div>
+</div>
+{{end}}
