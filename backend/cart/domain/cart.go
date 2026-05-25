@@ -2,7 +2,6 @@ package domain
 
 import (
 	"errors"
-	"fmt"
 )
 
 var ErrCartNotFound = errors.New("cart: not found")
@@ -54,25 +53,12 @@ func (c *Cart) Add(product Product, quantity int) error {
 		return nil
 	}
 
-	if cur := c.currency(); cur != "" && cur != product.Price().Currency() {
-		return fmt.Errorf("%w: cart is in %s, product is in %s", ErrCurrencyMismatch, cur, product.Price().Currency())
-	}
-
 	c.cartItems[product.ID()] = CartItem{
 		product:  product,
 		quantity: quantity,
 	}
 
 	return nil
-}
-
-// currency returns the cart's working currency, derived from its items.
-// Returns the empty Currency when the cart is empty.
-func (c *Cart) currency() Currency {
-	for _, ci := range c.cartItems {
-		return ci.product.Price().Currency()
-	}
-	return ""
 }
 
 func (c *Cart) Items() []CartItem {
@@ -97,18 +83,12 @@ func (c *Cart) TotalQuantity() int {
 	return total
 }
 
-// TotalPrice sums every line price in the cart. The cart's single-currency
-// invariant (enforced in Add) guarantees this never errors at runtime.
 func (c *Cart) TotalPrice() price {
-	cur := c.currency()
-	if cur == "" {
-		return price{}
-	}
+	// TODO: add support for multiple currencies
 
-	total := MustNewPrice(0, cur)
+	total := MustNewPrice(0, MustNewCurrency("USD"))
 	for _, item := range c.cartItems {
-		sum, _ := total.Add(item.product.Price().Multiple(item.Quantity()))
-		total = sum
+		total = total.Add(item.product.Price().Multiple(item.Quantity()))
 	}
 
 	return total

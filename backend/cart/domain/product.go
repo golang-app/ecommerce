@@ -6,10 +6,7 @@ import (
 	"regexp"
 )
 
-var (
-	ErrProductNotFound   = errors.New("product not found")
-	ErrCurrencyMismatch  = errors.New("currency mismatch")
-)
+var ErrProductNotFound = errors.New("product not found")
 
 // Currency is an ISO 4217 three-letter currency code.
 type Currency string
@@ -101,10 +98,7 @@ func (p price) Multiple(d int) price {
 	return p
 }
 
-func (p price) Add(p2 price) (price, error) {
-	if p.currency != p2.currency {
-		return price{}, fmt.Errorf("%w: %s + %s", ErrCurrencyMismatch, p.currency, p2.currency)
-	}
+func (p price) Add(p2 price) price {
 	p.amount += p2.amount
-	return p, nil
+	return p
 }
