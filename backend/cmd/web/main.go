@@ -20,7 +20,6 @@ import (
 	logrustash "github.com/bshuster-repo/logrus-logstash-hook"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 )
 
@@ -30,7 +29,7 @@ const appName = "go-ecommerce"
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		logrus.Fatal("Error loading .env file")
 	}
 
 	cfg := config{}
@@ -41,7 +40,7 @@ func main() {
 			fmt.Println(conf.Usage("", &cfg))
 			return
 		}
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 
 	logger := newLogger(logrus.DebugLevel, appName)
@@ -72,7 +71,7 @@ func main() {
 	connString := cfg.Postgres.connectionString()
 	db, err := otelsql.Open("postgres", connString)
 	if err != nil {
-		log.Fatalf("cannot open connection to the DB: %s", err)
+		logrus.Fatalf("cannot open connection to the DB: %s", err)
 	}
 
 	app.AddDependency(dependency.NewSQL(db))
@@ -89,12 +88,12 @@ func main() {
 		_ = app.Run()
 	}()
 
-	log.Printf("server started on port %d", cfg.ServerPort)
+	logrus.Printf("server started on port %d", cfg.ServerPort)
 
 	// we are waiting for the cancellation signal
 	<-ctx.Done()
 
-	log.Info("stopping application")
+	logrus.Info("stopping application")
 
 	// we give some time to close all opened connection and tidy up everything
 	shutDownCtx, shutDownCancel := context.WithTimeout(context.Background(), tearDownTimeout)
@@ -102,10 +101,10 @@ func main() {
 
 	err = app.Close(shutDownCtx)
 	if err != nil {
-		log.Errorf("cannot clearly close the application: %s", err)
+		logrus.Errorf("cannot clearly close the application: %s", err)
 	}
 
-	log.Infof("application stopped")
+	logrus.Infof("application stopped")
 }
 
 func newLogger(lvl logrus.Level, appName string) logrus.FieldLogger {
@@ -120,11 +119,11 @@ func newLogger(lvl logrus.Level, appName string) logrus.FieldLogger {
 
 	conn, err := net.DialTimeout("tcp", "logstash:50000", time.Second)
 	if err != nil {
-		log.Error(err)
+		logrus.Error(err)
 	}
 
 	if conn != nil {
-		hook := logrustash.New(conn, logrustash.DefaultFormatter(log.Fields{"app": appName}))
+		hook := logrustash.New(conn, logrustash.DefaultFormatter(logrus.Fields{"app": appName}))
 		instance.Hooks.Add(hook)
 	}
 

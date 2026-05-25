@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("cannot open connection to the DB: %s", err)
 	}
 
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	Execute(db) 
 }

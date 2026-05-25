@@ -67,7 +67,7 @@ func (p postgres) readItems(ctx context.Context, cartID string) ([]cartItem, err
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var items []cartItem
 
