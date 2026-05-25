@@ -27,14 +27,13 @@ const tearDownTimeout = 5 * time.Second
 const appName = "go-ecommerce"
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		logrus.Fatal("Error loading .env file")
+	if err := godotenv.Load(); err != nil && !errors.Is(err, os.ErrNotExist) {
+		logrus.WithError(err).Fatal("failed to load .env file")
 	}
 
 	cfg := config{}
 
-	err = conf.Parse([]string{}, "", &cfg)
+	err := conf.Parse([]string{}, "", &cfg)
 	if err != nil {
 		if errors.Is(err, conf.ErrHelpWanted) {
 			fmt.Println(conf.Usage("", &cfg))

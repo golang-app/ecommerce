@@ -32,7 +32,7 @@ func New(ctx context.Context, port int) *App {
 	r.HandleFunc("/readyz", deps.Ready)
 
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf("localhost:%d", port),
+		Addr:    fmt.Sprintf(":%d", port),
 		Handler: r,
 	}
 
