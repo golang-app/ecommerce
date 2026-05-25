@@ -1,0 +1,4 @@
+# Default owner for every file in the repo. Combined with branch protection's
+# "Require review from Code Owners" rule, this ensures every change to master
+# goes through review.
+* @bkielbasa
