@@ -3,7 +3,6 @@ package productcatalog
 import (
 	"context"
 	"fmt"
-	"math"
 )
 
 type ProductService struct {
@@ -28,7 +27,7 @@ func (ps ProductService) Find(ctx context.Context, id string) (Product, error) {
 	return ps.storage.Find(ctx, id)
 }
 
-func (ps ProductService) Add(ctx context.Context, id, name, desc string, price float64, currency string) error {
+func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency string) error {
 	pId, err := NewProductId(id)
 	if err != nil {
 		return err
@@ -39,7 +38,7 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, price f
 		return fmt.Errorf("invalid currency: %w", err)
 	}
 
-	priceVO, err := NewPrice(int64(math.Round(price*100)), cur)
+	priceVO, err := NewPrice(priceMinorUnits, cur)
 	if err != nil {
 		return fmt.Errorf("invalid price: %w", err)
 	}

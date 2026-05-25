@@ -17,7 +17,8 @@ func newSeedsCmd(pc productCatalog) *cobra.Command {
 				name := fmt.Sprintf("Product %d", i)
 				desc := fmt.Sprintf("Product %d", i)
 
-				if err := pc.Add(ctx, pID, name, desc, 100, "USD"); err != nil {
+				// 10000 minor units = $100.00
+				if err := pc.Add(ctx, pID, name, desc, 10000, "USD"); err != nil {
 					return err
 				}
 
