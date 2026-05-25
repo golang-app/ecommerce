@@ -43,7 +43,7 @@ func (db postgres) All(ctx context.Context) ([]Product, error) {
 
 	for rows.Next() {
 		var id, name, description, thumbnail string
-		var amount int
+		var amount int64
 		var currency string
 
 		err = rows.Scan(&id, &name, &description, &thumbnail, &amount, &currency)
@@ -56,7 +56,17 @@ func (db postgres) All(ctx context.Context) ([]Product, error) {
 			return nil, fmt.Errorf("cannot rebuild the product ID: %w", err)
 		}
 
-		prod, err := NewProduct(pid, name, description, NewPrice(float64(amount), currency), thumbnail)
+		cur, err := NewCurrency(currency)
+		if err != nil {
+			return nil, fmt.Errorf("cannot rebuild the product currency: %w", err)
+		}
+
+		priceVO, err := NewPrice(amount, cur)
+		if err != nil {
+			return nil, fmt.Errorf("cannot rebuild the product price: %w", err)
+		}
+
+		prod, err := NewProduct(pid, name, description, priceVO, thumbnail)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create product from data in the DB: %w", err)
 		}
@@ -75,7 +85,7 @@ func (db postgres) Find(ctx context.Context, id string) (Product, error) {
 
 	row := db.db.QueryRowContext(ctx, q, id)
 	var name, description, thumbnail string
-	var amount int
+	var amount int64
 	var currency string
 
 	err := row.Scan(&name, &description, &thumbnail, &amount, &currency)
@@ -92,5 +102,15 @@ func (db postgres) Find(ctx context.Context, id string) (Product, error) {
 		return Product{}, fmt.Errorf("cannot build product: %w", err)
 	}
 
-	return NewProduct(pId, name, description, NewPrice(float64(amount), currency), thumbnail)
+	cur, err := NewCurrency(currency)
+	if err != nil {
+		return Product{}, fmt.Errorf("cannot rebuild product currency: %w", err)
+	}
+
+	priceVO, err := NewPrice(amount, cur)
+	if err != nil {
+		return Product{}, fmt.Errorf("cannot rebuild product price: %w", err)
+	}
+
+	return NewProduct(pId, name, description, priceVO, thumbnail)
 }

@@ -48,10 +48,11 @@ func (p postgres) Get(ctx context.Context, user domain.User) (*domain.Cart, erro
 
 	c := domain.NewCart(domain.NewUser(userID))
 	for _, i := range items {
-		// TODO: I know this is not the best way to do it, but I don't want to
-		//       take care of the currency conversion right now.
-		price := float64(i.price) / 100.0
-		p := domain.NewProduct(i.productID, i.name, price, i.currency)
+		cur, err := domain.NewCurrency(i.currency)
+		if err != nil {
+			return nil, fmt.Errorf("invalid currency on cart item: %w", err)
+		}
+		p := domain.NewProduct(i.productID, i.name, int64(i.price), cur)
 		err = c.Add(p, i.qty)
 		if err != nil {
 			return nil, fmt.Errorf("could not add item to the cart: %w", err)
@@ -114,10 +115,9 @@ func (p postgres) Persist(ctx context.Context, cart *domain.Cart) error {
 
 	for _, i := range cart.Items() {
 		cartItemID := fmt.Sprintf("%s-%s", cart.User().ID(), i.Product().ID())
-		price := int(i.Product().Price().Amount() * 100)
 
 		q = `INSERT INTO cart_cart_item (id,        cart_id, 	      product_id,       product_name,       qty,          price, currency) VALUES ($1, $2, $3, $4, $5, $6, $7)`
-		_, err = tx.ExecContext(ctx, q, cartItemID, cart.User().ID(), i.Product().ID(), i.Product().Name(), i.Quantity(), price, i.Product().Price().Currency())
+		_, err = tx.ExecContext(ctx, q, cartItemID, cart.User().ID(), i.Product().ID(), i.Product().Name(), i.Quantity(), i.Product().Price().Amount(), string(i.Product().Price().Currency()))
 		if err != nil {
 			return fmt.Errorf("could not insert cart item: %w", err)
 		}

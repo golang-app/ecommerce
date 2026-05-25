@@ -86,7 +86,7 @@ func (c *Cart) TotalQuantity() int {
 func (c *Cart) TotalPrice() price {
 	// TODO: add support for multiple currencies
 
-	total := NewPrice(0, "USD")
+	total := MustNewPrice(0, MustNewCurrency("USD"))
 	for _, item := range c.cartItems {
 		total = total.Add(item.product.Price().Multiple(item.Quantity()))
 	}

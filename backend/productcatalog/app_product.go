@@ -2,6 +2,8 @@ package productcatalog
 
 import (
 	"context"
+	"fmt"
+	"math"
 )
 
 type ProductService struct {
@@ -32,7 +34,17 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, price f
 		return err
 	}
 
-	p, err := NewProduct(pId, name, desc, NewPrice(price, currency), "")
+	cur, err := NewCurrency(currency)
+	if err != nil {
+		return fmt.Errorf("invalid currency: %w", err)
+	}
+
+	priceVO, err := NewPrice(int64(math.Round(price*100)), cur)
+	if err != nil {
+		return fmt.Errorf("invalid price: %w", err)
+	}
+
+	p, err := NewProduct(pId, name, desc, priceVO, "")
 	if err != nil {
 		return err
 	}
