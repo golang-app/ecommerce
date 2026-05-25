@@ -117,8 +117,8 @@ func (b cartServiceBuilder) build() app.CartService {
 	return app.NewCartService(storage, mockProductCatalog(b))
 }
 
-func (b cartServiceBuilder) WithProduct(pID string, price float64) cartServiceBuilder {
-	b.products[pID] = domain.NewProduct(pID, "test name", price, "PLN")
+func (b cartServiceBuilder) WithProduct(pID string, priceMinorUnits int64) cartServiceBuilder {
+	b.products[pID] = domain.NewProduct(pID, "test name", priceMinorUnits, domain.MustNewCurrency("PLN"))
 	return b
 }
 

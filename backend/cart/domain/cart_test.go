@@ -7,8 +7,8 @@ import (
 	"github.com/matryer/is"
 )
 
-var pID = domain.NewProduct("productID", "test product", 2.0, "PLN")
-var pID2 = domain.NewProduct("productID2", "test product", 10.0, "PLN")
+var pID = domain.NewProduct("productID", "test product", 200, domain.MustNewCurrency("PLN"))
+var pID2 = domain.NewProduct("productID2", "test product", 1000, domain.MustNewCurrency("PLN"))
 
 func TestCart_Adding_Products_To_Cart_Should_Change_Quantity(t *testing.T) {
 	is := is.New(t)

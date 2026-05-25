@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/adapter"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/app"
@@ -44,7 +45,12 @@ func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (
 		return domain.Product{}, err
 	}
 
-	return domain.NewProduct(string(p.ID()), p.Name(), p.Price().Amount(), p.Price().Currency()), nil
+	cur, err := domain.NewCurrency(string(p.Price().Currency()))
+	if err != nil {
+		return domain.Product{}, fmt.Errorf("cart: invalid currency from product catalog: %w", err)
+	}
+
+	return domain.NewProduct(string(p.ID()), p.Name(), p.Price().Amount(), cur), nil
 }
 
 type boundedContext struct {

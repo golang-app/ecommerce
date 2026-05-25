@@ -60,7 +60,7 @@ func productEquals(p1, p2 productcatalog.Product) error {
 	if p1.Thumbnail() != p2.Thumbnail() {
 		return errors.New("thumbnail misatch")
 	}
-	if p1.Price() != p2.Price() {
+	if !p1.Price().Equals(p2.Price()) {
 		return errors.New("price misatch")
 	}
 
@@ -69,7 +69,7 @@ func productEquals(p1, p2 productcatalog.Product) error {
 
 func buildProduct(ctx context.Context, storage productcatalog.ProductStorage) (productcatalog.Product, error) {
 	pb := productcatalog.NewProductBuilder()
-	price := productcatalog.NewPrice(234, "USD")
+	price := productcatalog.MustNewPrice(234, productcatalog.MustNewCurrency("USD"))
 	pb = pb.WithName("Test product").
 		WithID(randomID()).
 		WithDescription("description of the test product").

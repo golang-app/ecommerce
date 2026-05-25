@@ -2,29 +2,74 @@ package productcatalog
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 )
 
 var ErrProductNotFound = errors.New("product not found")
 
-type Price struct {
-	amount   float64
-	currency string
-}
+// Currency is an ISO 4217 three-letter currency code.
+type Currency string
 
-func NewPrice(amount float64, currency string) Price {
-	return Price{
-		amount:   amount,
-		currency: currency,
+var currencyReg = regexp.MustCompile(`^[A-Z]{3}$`)
+
+func NewCurrency(code string) (Currency, error) {
+	if !currencyReg.MatchString(code) {
+		return "", fmt.Errorf("invalid currency code %q: must be three uppercase letters (ISO 4217)", code)
 	}
+	return Currency(code), nil
 }
 
-func (p Price) Amount() float64 {
+func MustNewCurrency(code string) Currency {
+	c, err := NewCurrency(code)
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func (c Currency) String() string { return string(c) }
+
+// Price holds an amount in minor currency units (e.g. cents for USD) and a currency.
+type Price struct {
+	amount   int64
+	currency Currency
+}
+
+func NewPrice(amount int64, currency Currency) (Price, error) {
+	if amount < 0 {
+		return Price{}, fmt.Errorf("price amount cannot be negative: %d", amount)
+	}
+	if currency == "" {
+		return Price{}, errors.New("price currency cannot be empty")
+	}
+	return Price{amount: amount, currency: currency}, nil
+}
+
+func MustNewPrice(amount int64, currency Currency) Price {
+	p, err := NewPrice(amount, currency)
+	if err != nil {
+		panic(err)
+	}
+	return p
+}
+
+// Amount returns the price amount in minor units (e.g. cents).
+func (p Price) Amount() int64 {
 	return p.amount
 }
 
-func (p Price) Currency() string {
+func (p Price) Currency() Currency {
 	return p.currency
+}
+
+func (p Price) Equals(other Price) bool {
+	return p.amount == other.amount && p.currency == other.currency
+}
+
+// Display formats the amount as a decimal string in major units (e.g. "2.34").
+func (p Price) Display() string {
+	return fmt.Sprintf("%d.%02d", p.amount/100, p.amount%100)
 }
 
 // Product is an entity that represents a single product visable in the product catalog

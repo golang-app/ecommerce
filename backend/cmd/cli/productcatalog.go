@@ -8,7 +8,7 @@ import (
 )
 
 type productCatalog interface {
-	Add(ctx context.Context, id, name, desc string, price float64, currency string) error
+	Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency string) error
 }
 
 func newProductCatalogCmd(pc productCatalog) *cobra.Command {
@@ -26,7 +26,7 @@ func newProductCatalogCmd(pc productCatalog) *cobra.Command {
 }
 
 func newProductCatalogAddCmd(pc productCatalog) *cobra.Command {
-	price := 0.0
+	var price int64
 	var id, name, shortDesc, currency string
 
 	cmd := &cobra.Command{
@@ -48,7 +48,7 @@ func newProductCatalogAddCmd(pc productCatalog) *cobra.Command {
 		log.Print(err)
 	}
 
-	cmd.Flags().Float64VarP(&price, "price", "", 0, "product price")
+	cmd.Flags().Int64VarP(&price, "price", "", 0, "product price in minor units (e.g. cents)")
 	if err := cmd.MarkFlagRequired("price"); err != nil {
 		log.Print(err)
 	}
