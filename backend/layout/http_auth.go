@@ -39,7 +39,7 @@ func (handler httpHandler) AuthMenuItem(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-  defer f.Close()
+  defer func() { _ = f.Close() }()
 
   body, err := io.ReadAll(f)
 	if err != nil {
