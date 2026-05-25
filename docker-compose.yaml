@@ -1,5 +1,3 @@
-version: '3.7'
-
 services:
   backend:
     build:
@@ -8,8 +6,6 @@ services:
     restart: unless-stopped
     depends_on:
       - migrate
-    links:
-      - postgres
     ports:
       - 8080:8080
     networks:
@@ -33,8 +29,6 @@ services:
     restart: on-failure
     depends_on:
       - postgres
-    links:
-      - postgres
     volumes:
       - ./migrations:/migrations
     networks:
@@ -46,8 +40,6 @@ services:
       target: cli
     depends_on:
       - migrate
-    links:
-      - postgres
     networks:
       - ecommerce
     command: seeds
