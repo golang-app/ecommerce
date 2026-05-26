@@ -18,7 +18,15 @@ func NewPostgres(db *sql.DB) Postgres {
 	return Postgres{db: db}
 }
 
-func (p Postgres) Save(ctx context.Context, order domain.Order) error {
+// Save appends the aggregate's pending events to the event store and projects
+// each one into the read model — all in a single transaction, so the event
+// log and the read tables can never diverge.
+func (p Postgres) Save(ctx context.Context, order *domain.Order) error {
+	pending := order.PendingEvents()
+	if len(pending) == 0 {
+		return nil
+	}
+
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -29,89 +37,20 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 		}
 	}()
 
-	var customerID sql.NullString
-	if order.CustomerID() != "" {
-		customerID = sql.NullString{String: order.CustomerID(), Valid: true}
+	if err = appendEventsTx(ctx, tx, order.ID(), order.ExpectedVersion(), pending); err != nil {
+		return err
 	}
-
-	ship := order.ShipTo()
-	method := order.ShippingMethod()
-	pay := order.PaymentMethod()
-	_, err = tx.ExecContext(ctx, `
-		INSERT INTO checkout_order
-			(id, user_id, customer_id, total_amount, total_currency, status, placed_at,
-			 ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country,
-			 ship_method_code, ship_method_label, ship_cost,
-			 payment_method_code, payment_method_label)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
-		ON CONFLICT (id) DO UPDATE SET
-			user_id = EXCLUDED.user_id,
-			customer_id = EXCLUDED.customer_id,
-			total_amount = EXCLUDED.total_amount,
-			total_currency = EXCLUDED.total_currency,
-			status = EXCLUDED.status,
-			ship_name = EXCLUDED.ship_name,
-			ship_street1 = EXCLUDED.ship_street1,
-			ship_street2 = EXCLUDED.ship_street2,
-			ship_city = EXCLUDED.ship_city,
-			ship_zip = EXCLUDED.ship_zip,
-			ship_country = EXCLUDED.ship_country,
-			ship_method_code = EXCLUDED.ship_method_code,
-			ship_method_label = EXCLUDED.ship_method_label,
-			ship_cost = EXCLUDED.ship_cost,
-			payment_method_code = EXCLUDED.payment_method_code,
-			payment_method_label = EXCLUDED.payment_method_label
-	`,
-		order.ID(),
-		order.UserID(),
-		customerID,
-		order.TotalAmount(),
-		order.TotalCurrency(),
-		string(order.Status()),
-		order.PlacedAt(),
-		ship.Name(),
-		ship.Street1(),
-		ship.Street2(),
-		ship.City(),
-		ship.Zip(),
-		ship.Country(),
-		method.Code(),
-		method.Label(),
-		method.Cost(),
-		pay.Code(),
-		pay.Label(),
-	)
-	if err != nil {
-		return fmt.Errorf("upsert order: %w", err)
-	}
-
-	if _, err = tx.ExecContext(ctx, `DELETE FROM checkout_order_item WHERE order_id = $1`, order.ID()); err != nil {
-		return fmt.Errorf("delete items: %w", err)
-	}
-
-	for i, ln := range order.Items() {
-		itemID := fmt.Sprintf("%s-%d", order.ID(), i)
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO checkout_order_item
-				(id, order_id, product_id, product_name, qty, price_amount, price_currency)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-		`,
-			itemID,
-			order.ID(),
-			ln.ProductID(),
-			ln.ProductName(),
-			ln.Quantity(),
-			ln.PriceAmount(),
-			ln.PriceCurrency(),
-		)
-		if err != nil {
-			return fmt.Errorf("insert item: %w", err)
+	for _, e := range pending {
+		if err = projectEventTx(ctx, tx, e); err != nil {
+			return err
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
+
+	order.ClearPending()
 	return nil
 }
 

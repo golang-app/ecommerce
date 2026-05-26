@@ -40,6 +40,9 @@ type Order struct {
 	totalCcy    string
 	status      Status
 	placedAt    time.Time
+
+	version       int
+	pendingEvents []Event
 }
 
 // Line is a snapshot of a single cart line at order time.
@@ -118,11 +121,92 @@ func (o Order) TotalAmount() int64    { return o.totalAmt }
 func (o Order) TotalCurrency() string { return o.totalCcy }
 func (o Order) TotalDisplay() string  { return money(o.totalAmt) }
 
-// WithStatus returns a copy of the order with a different status. Used by
-// the checkout service to flip pending -> paid / failed after a payment
-// attempt.
-func (o Order) WithStatus(s Status) Order {
-	o.status = s
+// --- event-sourced write side ---
+
+// PlaceOrder is the command that creates a new order from a cart snapshot
+// and the customer's checkout choices. It emits an OrderPlaced event.
+func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, lines []Line, at time.Time) (*Order, error) {
+	if len(lines) == 0 {
+		return nil, ErrCartEmpty
+	}
+	o := &Order{}
+	o.raise(OrderPlaced{
+		OrderID:    id,
+		UserID:     userID,
+		CustomerID: customerID,
+		ShipTo:     shipTo,
+		ShipMethod: shipMethod,
+		PayMethod:  payMethod,
+		Lines:      lines,
+		At:         at,
+	})
+	return o, nil
+}
+
+// MarkPaid records a successful payment capture.
+func (o *Order) MarkPaid(at time.Time) { o.raise(PaymentSucceeded{OrderID: o.id, At: at}) }
+
+// MarkFailed records a declined payment.
+func (o *Order) MarkFailed(reason string, at time.Time) {
+	o.raise(PaymentFailed{OrderID: o.id, Reason: reason, At: at})
+}
+
+func (o *Order) raise(e Event) {
+	o.apply(e)
+	o.pendingEvents = append(o.pendingEvents, e)
+}
+
+// apply folds a single event into the aggregate's state. It is the only
+// place order state changes, and it must stay free of side effects so it can
+// replay history deterministically.
+func (o *Order) apply(e Event) {
+	switch ev := e.(type) {
+	case OrderPlaced:
+		o.id = ev.OrderID
+		o.userID = ev.UserID
+		o.customerID = ev.CustomerID
+		o.shipTo = ev.ShipTo
+		o.shipMethod = ev.ShipMethod
+		o.payMethod = ev.PayMethod
+		o.items = ev.Lines
+		var subtotal int64
+		var ccy string
+		for _, ln := range ev.Lines {
+			subtotal += ln.LineTotal()
+			if ccy == "" {
+				ccy = ln.priceCurrency
+			}
+		}
+		o.subtotalAmt = subtotal
+		o.totalAmt = subtotal + ev.ShipMethod.Cost()
+		o.totalCcy = ccy
+		o.status = StatusPending
+		o.placedAt = ev.At
+	case PaymentSucceeded:
+		o.status = StatusPaid
+	case PaymentFailed:
+		o.status = StatusFailed
+	}
+	o.version++
+}
+
+// PendingEvents returns events raised but not yet persisted.
+func (o *Order) PendingEvents() []Event { return o.pendingEvents }
+
+// ClearPending drops the uncommitted events after they are persisted.
+func (o *Order) ClearPending() { o.pendingEvents = nil }
+
+// ExpectedVersion is the aggregate version before the pending events — i.e.
+// the sequence the first pending event must follow in the store.
+func (o *Order) ExpectedVersion() int { return o.version - len(o.pendingEvents) }
+
+// RehydrateOrder rebuilds an order by folding its full event history.
+func RehydrateOrder(events []Event) *Order {
+	o := &Order{}
+	for _, e := range events {
+		o.apply(e)
+	}
+	o.pendingEvents = nil
 	return o
 }
 

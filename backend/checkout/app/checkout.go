@@ -23,7 +23,9 @@ type CartClearer interface {
 }
 
 type OrderStorage interface {
-	Save(ctx context.Context, order domain.Order) error
+	// Save persists the aggregate's pending events and projects them to the
+	// read model.
+	Save(ctx context.Context, order *domain.Order) error
 	Find(ctx context.Context, id string) (domain.Order, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error)
 }
@@ -65,13 +67,14 @@ func NewCheckoutService(
 	}
 }
 
-// Place creates an order from the session's current cart, charges the
-// supplied fake card, persists the order, and clears the cart. The
-// cardNumber argument is accepted for shape only — the fake processor
-// ignores it.
+// Place runs the checkout command: it snapshots the cart into a new order
+// aggregate (OrderPlaced), attempts the charge, records the outcome
+// (PaymentSucceeded / PaymentFailed), persists the resulting events, and
+// clears the cart. The cardNumber is accepted for shape only — the fake
+// processor ignores it.
 //
-// customerID may be empty for anonymous checkout; in that case the order
-// is recorded but will not appear in any customer's order history.
+// customerID may be empty for anonymous checkout; in that case the order is
+// recorded but will not appear in any customer's order history.
 func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo domain.Address, shipMethod domain.ShippingMethod, payMethod domain.PaymentMethod) (domain.Order, error) {
 	cart, err := s.cart.Get(ctx, sessID)
 	if err != nil {
@@ -95,16 +98,21 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		))
 	}
 
-	order := domain.NewOrder(s.newID(), sessID, customerID, shipTo, shipMethod, payMethod, lines, domain.StatusPending, s.now())
-
-	if err := s.payment.Charge(ctx, order.TotalAmount(), order.TotalCurrency(), cardNumber); err != nil {
-		failed := order.WithStatus(domain.StatusFailed)
-		_ = s.storage.Save(ctx, failed)
-		return failed, fmt.Errorf("payment declined: %w", err)
+	order, err := domain.PlaceOrder(s.newID(), sessID, customerID, shipTo, shipMethod, payMethod, lines, s.now())
+	if err != nil {
+		return domain.Order{}, err
 	}
 
-	paid := order.WithStatus(domain.StatusPaid)
-	if err := s.storage.Save(ctx, paid); err != nil {
+	if chargeErr := s.payment.Charge(ctx, order.TotalAmount(), order.TotalCurrency(), cardNumber); chargeErr != nil {
+		order.MarkFailed(chargeErr.Error(), s.now())
+		if err := s.storage.Save(ctx, order); err != nil {
+			return domain.Order{}, fmt.Errorf("save order: %w", err)
+		}
+		return *order, fmt.Errorf("payment declined: %w", chargeErr)
+	}
+
+	order.MarkPaid(s.now())
+	if err := s.storage.Save(ctx, order); err != nil {
 		return domain.Order{}, fmt.Errorf("save order: %w", err)
 	}
 
@@ -112,7 +120,7 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	// customer should see the confirmation page.
 	_ = s.cartClr.Clear(ctx, sessID)
 
-	return paid, nil
+	return *order, nil
 }
 
 func (s CheckoutService) Find(ctx context.Context, id string) (domain.Order, error) {
