@@ -32,13 +32,28 @@
       </tbody>
       <tfoot>
         <tr>
+          <td colspan="3">subtotal</td>
+          <td class="col-total">{{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}</td>
+        </tr>
+        {{if not .Order.ShippingMethod.IsZero}}
+          <tr>
+            <td colspan="3">shipping &middot; {{.Order.ShippingMethod.Label}}</td>
+            <td class="col-total">{{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}</td>
+          </tr>
+        {{end}}
+        <tr>
           <td colspan="3">total charged</td>
           <td class="col-total">{{.Order.TotalDisplay}} {{.Order.TotalCurrency}}</td>
         </tr>
       </tfoot>
     </table>
 
-    {{if not .Order.ShipTo.IsZero}}
+    {{if eq .Order.ShippingMethod.Code "pickup"}}
+      <section class="order__ship">
+        <h2 class="order__ship-heading">collection</h2>
+        <p>Personal pickup — collect in store.</p>
+      </section>
+    {{else if not .Order.ShipTo.IsZero}}
       <section class="order__ship">
         <h2 class="order__ship-heading">shipping to</h2>
         <address class="order__address">

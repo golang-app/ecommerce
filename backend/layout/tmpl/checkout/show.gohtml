@@ -36,15 +36,27 @@
 
       <form class="form" method="post" action="/checkout">
         <fieldset class="fieldset">
+          <legend class="fieldset__legend">shipping method</legend>
+          {{range .ShippingMethods}}
+            <label class="radio">
+              <input type="radio" name="ship_method" value="{{.Code}}" {{if eq .Code "flat"}}checked{{end}}>
+              <span class="radio__label">{{.Label}}</span>
+              <span class="radio__cost muted">{{.CostDisplay}} {{$.Cart.TotalPrice.Currency}}</span>
+            </label>
+          {{end}}
+        </fieldset>
+
+        <fieldset class="fieldset">
           <legend class="fieldset__legend">ship to</legend>
+          <p class="muted checkout__note">not needed for personal pickup.</p>
 
           <div class="field">
             <label for="ship-name">full name</label>
-            <input id="ship-name" type="text" name="ship_name" autocomplete="name" placeholder="Jane Doe" required>
+            <input id="ship-name" type="text" name="ship_name" autocomplete="name" placeholder="Jane Doe">
           </div>
           <div class="field">
             <label for="ship-street1">street</label>
-            <input id="ship-street1" type="text" name="ship_street1" autocomplete="address-line1" placeholder="123 Main St" required>
+            <input id="ship-street1" type="text" name="ship_street1" autocomplete="address-line1" placeholder="123 Main St">
           </div>
           <div class="field">
             <label for="ship-street2">street (line 2)</label>
@@ -52,15 +64,15 @@
           </div>
           <div class="field">
             <label for="ship-city">city</label>
-            <input id="ship-city" type="text" name="ship_city" autocomplete="address-level2" placeholder="Portland" required>
+            <input id="ship-city" type="text" name="ship_city" autocomplete="address-level2" placeholder="Portland">
           </div>
           <div class="field">
             <label for="ship-zip">zip code</label>
-            <input id="ship-zip" type="text" name="ship_zip" autocomplete="postal-code" placeholder="97201" required>
+            <input id="ship-zip" type="text" name="ship_zip" autocomplete="postal-code" placeholder="97201">
           </div>
           <div class="field">
             <label for="ship-country">country</label>
-            <input id="ship-country" type="text" name="ship_country" autocomplete="country-name" placeholder="United States" required>
+            <input id="ship-country" type="text" name="ship_country" autocomplete="country-name" placeholder="United States">
           </div>
         </fieldset>
 

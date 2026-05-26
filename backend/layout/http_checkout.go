@@ -45,7 +45,8 @@ func (handler httpHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.renderTemplate(w, r, "checkout/show", map[string]any{
-		"Cart": cart,
+		"Cart":            cart,
+		"ShippingMethods": checkoutDomain.ShippingMethods(),
 	})
 }
 
@@ -58,23 +59,36 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	cardNumber := r.FormValue("card_number")
 	customerID := handler.currentCustomerID(r) // empty for anonymous
 
-	shipTo, err := checkoutDomain.NewAddress(
-		r.FormValue("ship_name"),
-		r.FormValue("ship_street1"),
-		r.FormValue("ship_street2"),
-		r.FormValue("ship_city"),
-		r.FormValue("ship_zip"),
-		r.FormValue("ship_country"),
-	)
+	method, err := checkoutDomain.ShippingMethodByCode(r.FormValue("ship_method"))
 	if err != nil {
 		session, _ := store.Get(r, "ecommerce")
-		session.AddFlash(err.Error(), "error")
+		session.AddFlash("please choose a shipping method", "error")
 		_ = session.Save(r, w)
 		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
 		return
 	}
 
-	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber, shipTo)
+	// Pickup needs no address; for delivery methods the address is required.
+	var shipTo checkoutDomain.Address
+	if method.RequiresAddress() {
+		shipTo, err = checkoutDomain.NewAddress(
+			r.FormValue("ship_name"),
+			r.FormValue("ship_street1"),
+			r.FormValue("ship_street2"),
+			r.FormValue("ship_city"),
+			r.FormValue("ship_zip"),
+			r.FormValue("ship_country"),
+		)
+		if err != nil {
+			session, _ := store.Get(r, "ecommerce")
+			session.AddFlash(err.Error(), "error")
+			_ = session.Save(r, w)
+			http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+			return
+		}
+	}
+
+	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber, shipTo, method)
 	if errors.Is(err, checkoutDomain.ErrCartEmpty) {
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return

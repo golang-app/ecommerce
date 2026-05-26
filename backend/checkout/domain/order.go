@@ -28,15 +28,17 @@ var (
 // orders placed without logging in. Only orders with a non-empty
 // customerID show up in the per-user order history.
 type Order struct {
-	id         string
-	userID     string
-	customerID string
-	shipTo     Address
-	items      []Line
-	totalAmt   int64
-	totalCcy   string
-	status     Status
-	placedAt   time.Time
+	id          string
+	userID      string
+	customerID  string
+	shipTo      Address
+	shipMethod  ShippingMethod
+	items       []Line
+	subtotalAmt int64
+	totalAmt    int64
+	totalCcy    string
+	status      Status
+	placedAt    time.Time
 }
 
 // Line is a snapshot of a single cart line at order time.
@@ -73,32 +75,39 @@ func (l Line) LineTotalDisplay() string {
 // using the first line's currency. Callers are expected to ensure all lines
 // share a currency (the cart bounded context enforces this on its side once
 // the cross-currency safety fix lands).
-func NewOrder(id, userID, customerID string, shipTo Address, items []Line, status Status, placedAt time.Time) Order {
-	var amt int64
+func NewOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, items []Line, status Status, placedAt time.Time) Order {
+	var subtotal int64
 	var ccy string
 	for _, ln := range items {
-		amt += ln.LineTotal()
+		subtotal += ln.LineTotal()
 		if ccy == "" {
 			ccy = ln.priceCurrency
 		}
 	}
 	return Order{
-		id:         id,
-		userID:     userID,
-		customerID: customerID,
-		shipTo:     shipTo,
-		items:      items,
-		totalAmt:   amt,
-		totalCcy:   ccy,
-		status:     status,
-		placedAt:   placedAt,
+		id:          id,
+		userID:      userID,
+		customerID:  customerID,
+		shipTo:      shipTo,
+		shipMethod:  shipMethod,
+		items:       items,
+		subtotalAmt: subtotal,
+		totalAmt:    subtotal + shipMethod.Cost(),
+		totalCcy:    ccy,
+		status:      status,
+		placedAt:    placedAt,
 	}
 }
 
-func (o Order) ID() string            { return o.id }
-func (o Order) UserID() string        { return o.userID }
-func (o Order) CustomerID() string    { return o.customerID }
-func (o Order) ShipTo() Address       { return o.shipTo }
+func (o Order) ID() string                     { return o.id }
+func (o Order) UserID() string                 { return o.userID }
+func (o Order) CustomerID() string             { return o.customerID }
+func (o Order) ShipTo() Address                { return o.shipTo }
+func (o Order) ShippingMethod() ShippingMethod { return o.shipMethod }
+func (o Order) Subtotal() int64                { return o.subtotalAmt }
+func (o Order) SubtotalDisplay() string        { return money(o.subtotalAmt) }
+func (o Order) ShippingCost() int64            { return o.shipMethod.Cost() }
+func (o Order) ShippingCostDisplay() string    { return money(o.shipMethod.Cost()) }
 func (o Order) Items() []Line         { return o.items }
 func (o Order) Status() Status        { return o.status }
 func (o Order) PlacedAt() time.Time   { return o.placedAt }
