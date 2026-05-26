@@ -1,11 +1,17 @@
 {{if .Products}}
   <div class="product-grid">
     {{range .Products}}
-      <article class="product-card">
+      <a class="product-card" href="/product/{{.ID}}">
+        {{if .Thumbnail}}
+          <img class="product-card__image"
+               src="{{.Thumbnail}}"
+               alt="{{.Name}}"
+               loading="lazy"
+               width="800" height="800">
+        {{end}}
         <h2 class="product-card__name">{{.Name}}</h2>
         <p class="product-card__price">{{.Price.Display}} {{.Price.Currency}}</p>
-        <a class="product-card__view" href="/product/{{.ID}}">view</a>
-      </article>
+      </a>
     {{end}}
   </div>
 {{else}}

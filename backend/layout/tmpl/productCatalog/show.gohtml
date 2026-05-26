@@ -2,17 +2,26 @@
   <p class="crumbs"><a href="/">products</a> / {{.Product.Name}}</p>
 
   <article class="product">
-    <h1 class="product__name">{{.Product.Name}}</h1>
-    <p class="product__description">{{.Product.Description}}</p>
-    <p class="product__price">{{.Product.Price.Display}} {{.Product.Price.Currency}}</p>
+    {{if .Product.Thumbnail}}
+      <img class="product__image"
+           src="{{.Product.Thumbnail}}"
+           alt="{{.Product.Name}}"
+           width="800" height="800">
+    {{end}}
 
-    <button class="btn"
-            hx-post="/cart/{{.Product.ID}}"
-            hx-swap="none">
-      add to cart
-      <span class="loading htmx-indicator" aria-hidden="true"></span>
-    </button>
+    <div class="product__body">
+      <h1 class="product__name">{{.Product.Name}}</h1>
+      <p class="product__description">{{.Product.Description}}</p>
+      <p class="product__price">{{.Product.Price.Display}} {{.Product.Price.Currency}}</p>
 
-    <p class="product__hint muted">added to your cart without a page reload.</p>
+      <button class="btn"
+              hx-post="/cart/{{.Product.ID}}"
+              hx-swap="none">
+        add to cart
+        <span class="loading htmx-indicator" aria-hidden="true"></span>
+      </button>
+
+      <p class="product__hint muted">added to your cart without a page reload.</p>
+    </div>
   </article>
 {{end}}

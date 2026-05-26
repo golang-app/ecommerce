@@ -8,7 +8,7 @@ import (
 )
 
 type productCatalog interface {
-	Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency string) error
+	Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
 }
 
 func newProductCatalogCmd(pc productCatalog) *cobra.Command {
@@ -27,13 +27,13 @@ func newProductCatalogCmd(pc productCatalog) *cobra.Command {
 
 func newProductCatalogAddCmd(pc productCatalog) *cobra.Command {
 	var price int64
-	var id, name, shortDesc, currency string
+	var id, name, shortDesc, currency, thumbnail string
 
 	cmd := &cobra.Command{
 		Use: "product-add",
 		RunE: func(cmd *cobra.Command, args []string) error {
 
-			err := pc.Add(cmd.Context(), id, name, shortDesc, price, currency)
+			err := pc.Add(cmd.Context(), id, name, shortDesc, price, currency, thumbnail)
 			return err
 		},
 	}
@@ -59,6 +59,7 @@ func newProductCatalogAddCmd(pc productCatalog) *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&shortDesc, "short-desc", "s", "", "product short description")
+	cmd.Flags().StringVarP(&thumbnail, "thumbnail", "t", "", "product thumbnail URL")
 
 	return cmd
 }
