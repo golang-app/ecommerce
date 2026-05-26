@@ -17,10 +17,10 @@ type seedProduct struct {
 }
 
 // seedProducts is a hand-picked catalogue of artisan home goods. Prices are
-// stored in minor units (cents). Thumbnail URLs use placehold.co with
-// per-product palette colours so each card has a distinct visual identity
-// while matching the editorial-monochrome theme. Swap these for real
-// product photography when you have it.
+// stored in minor units (cents). Thumbnail URLs use loremflickr with a fixed
+// `lock` per product so each row consistently returns the same real Flickr
+// photo matching the keywords. If a specific photo doesn't look right, bump
+// the lock number for that product.
 var seedProducts = []seedProduct{
 	{
 		id:              "ceramic-mug-cream",
@@ -28,7 +28,7 @@ var seedProducts = []seedProduct{
 		description:     "A small-batch mug thrown by a single potter in Tokyo. Cream glaze over speckled stoneware. Holds 350ml. Sold individually.",
 		priceMinorUnits: 2400,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/F5F0E6/2B2B2B?text=Ceramic+Mug&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/ceramic,mug?lock=11",
 	},
 	{
 		id:              "linen-apron-navy",
@@ -36,7 +36,7 @@ var seedProducts = []seedProduct{
 		description:     "Heavyweight Belgian linen apron in deep navy. Long cotton ties, double-stitched seams. Washes softer with every use.",
 		priceMinorUnits: 5800,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/2C3E50/FAFAF7?text=Linen+Apron&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/apron,linen?lock=22",
 	},
 	{
 		id:              "brass-paperclips",
@@ -44,7 +44,7 @@ var seedProducts = []seedProduct{
 		description:     "A set of twelve solid brass clips in a small kraft box. Patina deepens over time.",
 		priceMinorUnits: 900,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/D4A574/2B2B2B?text=Brass+Paperclips&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/paperclip,brass?lock=33",
 	},
 	{
 		id:              "walnut-serving-spoon",
@@ -52,7 +52,7 @@ var seedProducts = []seedProduct{
 		description:     "Hand-carved from a single piece of black walnut. Finished with food-safe oil. 25cm long.",
 		priceMinorUnits: 1800,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/5C4033/FAFAF7?text=Walnut+Spoon&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/wooden,spoon?lock=44",
 	},
 	{
 		id:              "wool-throw-charcoal",
@@ -60,7 +60,7 @@ var seedProducts = []seedProduct{
 		description:     "100% New Zealand wool blanket in charcoal. Edges left raw with a short fringe. 130 x 180cm.",
 		priceMinorUnits: 14500,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/3A3A3A/FAFAF7?text=Wool+Throw&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/wool,blanket?lock=55",
 	},
 	{
 		id:              "glass-carafe-1l",
@@ -68,7 +68,7 @@ var seedProducts = []seedProduct{
 		description:     "Mouth-blown borosilicate carafe with a flat cork stopper. Holds one litre. Dishwasher-safe.",
 		priceMinorUnits: 4200,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/E0EAF0/2B2B2B?text=Glass+Carafe&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/carafe,water?lock=66",
 	},
 	{
 		id:              "leather-notebook-a5",
@@ -76,7 +76,7 @@ var seedProducts = []seedProduct{
 		description:     "Vegetable-tanned cover wrapping 192 pages of unlined cream paper. Bound flat so it stays open on a desk.",
 		priceMinorUnits: 3600,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/8B6F47/FAFAF7?text=Leather+Notebook&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/leather,notebook?lock=77",
 	},
 	{
 		id:              "cast-iron-skillet-10in",
@@ -84,7 +84,7 @@ var seedProducts = []seedProduct{
 		description:     "A 10-inch pre-seasoned cast iron pan with a helper handle. American foundry. One of those buy-it-once tools.",
 		priceMinorUnits: 8900,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/1F1F1F/FAFAF7?text=Cast+Iron+Skillet&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/castiron,skillet?lock=88",
 	},
 	{
 		id:              "stoneware-vase-grey",
@@ -92,7 +92,7 @@ var seedProducts = []seedProduct{
 		description:     "Matte-glaze stoneware vase in dove grey. Built for a single stem or a short bunch. 18cm tall.",
 		priceMinorUnits: 3200,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/9B9B98/FAFAF7?text=Stoneware+Vase&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/vase,pottery?lock=99",
 	},
 	{
 		id:              "cotton-tea-towels-set",
@@ -100,7 +100,7 @@ var seedProducts = []seedProduct{
 		description:     "A set of three loose-weave cotton towels in natural, sand, and stone. Absorbent from the first wash.",
 		priceMinorUnits: 2200,
 		currency:        "USD",
-		thumbnail:       "https://placehold.co/800x800/EDE6D6/2B2B2B?text=Cotton+Tea+Towels&font=playfair-display",
+		thumbnail:       "https://loremflickr.com/800/800/teatowel,kitchen?lock=110",
 	},
 }
 
