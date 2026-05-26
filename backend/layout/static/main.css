@@ -450,6 +450,30 @@ main {
   color: var(--fg-muted);
 }
 
+/* ---------- password strength meter ---------- */
+.pw-meter {
+  margin-top: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.pw-meter__bars {
+  display: flex;
+  gap: 4px;
+}
+.pw-meter__bars span {
+  height: 3px;
+  flex: 1;
+  background: var(--rule);
+  transition: background .15s ease;
+}
+/* filled segments tint by score: muted red -> amber -> green */
+.pw-meter[data-score="1"] .pw-meter__bars span[data-on="1"] { background: #8B2C2C; }
+.pw-meter[data-score="2"] .pw-meter__bars span[data-on="1"] { background: #B8860B; }
+.pw-meter[data-score="3"] .pw-meter__bars span[data-on="1"] { background: #4A7C59; }
+.pw-meter[data-score="4"] .pw-meter__bars span[data-on="1"] { background: #2E5E3A; }
+.pw-meter__label { font-size: 0.8rem; }
+
 /* ---------- htmx loading indicator ---------- */
 .htmx-indicator {
   opacity: 0;
