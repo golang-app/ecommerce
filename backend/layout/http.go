@@ -28,6 +28,7 @@ func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m boundedContext) MuxRegister(r *mux.Router) {
+	r.PathPrefix("/static/").Handler(StaticHandler())
 	r.HandleFunc("/", m.handler.HomePage)
 
 	r.HandleFunc("/cart", observability.HTTPWrap(m.handler.Cart, m.logger)).Methods("GET")

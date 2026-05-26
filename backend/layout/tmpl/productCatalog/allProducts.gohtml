@@ -1,12 +1,13 @@
-<div class="container">
-  <div class="row">
-	{{range .Products}} 
-	    <div class="col-lg-4 col-md-12">
-			<h2>{{.Name}}</h2>
-			<p>{{.Description}}</p>
-			<p>Price: {{.Price.Display}} {{.Price.Currency}}</p>
-			<p><a class="btn btn-primary" href="/product//{{.ID}}" role="button">View details &raquo;</a></p>
-	    </div>
-	{{end}}
+{{if .Products}}
+  <div class="product-grid">
+    {{range .Products}}
+      <article class="product-card">
+        <h2 class="product-card__name">{{.Name}}</h2>
+        <p class="product-card__price">{{.Price.Display}} {{.Price.Currency}}</p>
+        <a class="product-card__view" href="/product/{{.ID}}">view</a>
+      </article>
+    {{end}}
   </div>
-</div>
+{{else}}
+  <p class="muted">no products yet.</p>
+{{end}}

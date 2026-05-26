@@ -1,22 +1,19 @@
 {{define "main"}}
+  <h1 class="page-title">register</h1>
 
-<h1>Register</h1>
+  <form class="form" method="post" action="/auth/register">
+    <div class="field">
+      <label for="register-email">email</label>
+      <input id="register-email" type="email" name="email" autocomplete="email" required>
+    </div>
 
-<form action="/auth/register" method="post">
-  <div class="form-outline mb-4">
-    <input type="email" name="email" id="form2Example1" class="form-control" />
-    <label class="form-label" for="form2Example1">Email address</label>
-  </div>
+    <div class="field">
+      <label for="register-password">password</label>
+      <input id="register-password" type="password" name="password" autocomplete="new-password" required>
+    </div>
 
-  <div class="form-outline mb-4">
-    <input type="password" name="password" id="form2Example2" class="form-control" />
-    <label class="form-label" for="form2Example2">Password</label>
-  </div>
+    <button type="submit" class="btn btn--block">create account</button>
 
-  <button type="submit" class="btn btn-primary btn-block mb-4">Register now</button>
-
-  <div class="text-center">
-    <p>Have the account? <a href="/auth/login">Login</a></p>
-  </div>
-</form>
+    <p class="form__aside">already have an account? <a href="/auth/login">sign in</a></p>
+  </form>
 {{end}}
