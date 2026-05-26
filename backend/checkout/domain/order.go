@@ -33,6 +33,7 @@ type Order struct {
 	customerID  string
 	shipTo      Address
 	shipMethod  ShippingMethod
+	payMethod   PaymentMethod
 	items       []Line
 	subtotalAmt int64
 	totalAmt    int64
@@ -75,7 +76,7 @@ func (l Line) LineTotalDisplay() string {
 // using the first line's currency. Callers are expected to ensure all lines
 // share a currency (the cart bounded context enforces this on its side once
 // the cross-currency safety fix lands).
-func NewOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, items []Line, status Status, placedAt time.Time) Order {
+func NewOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, items []Line, status Status, placedAt time.Time) Order {
 	var subtotal int64
 	var ccy string
 	for _, ln := range items {
@@ -90,6 +91,7 @@ func NewOrder(id, userID, customerID string, shipTo Address, shipMethod Shipping
 		customerID:  customerID,
 		shipTo:      shipTo,
 		shipMethod:  shipMethod,
+		payMethod:   payMethod,
 		items:       items,
 		subtotalAmt: subtotal,
 		totalAmt:    subtotal + shipMethod.Cost(),
@@ -104,6 +106,7 @@ func (o Order) UserID() string                 { return o.userID }
 func (o Order) CustomerID() string             { return o.customerID }
 func (o Order) ShipTo() Address                { return o.shipTo }
 func (o Order) ShippingMethod() ShippingMethod { return o.shipMethod }
+func (o Order) PaymentMethod() PaymentMethod   { return o.payMethod }
 func (o Order) Subtotal() int64                { return o.subtotalAmt }
 func (o Order) SubtotalDisplay() string        { return money(o.subtotalAmt) }
 func (o Order) ShippingCost() int64            { return o.shipMethod.Cost() }

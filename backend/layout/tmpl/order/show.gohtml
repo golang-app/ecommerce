@@ -66,6 +66,13 @@
       </section>
     {{end}}
 
+    {{if not .Order.PaymentMethod.IsZero}}
+      <section class="order__ship">
+        <h2 class="order__ship-heading">payment</h2>
+        <p>{{.Order.PaymentMethod.Label}}</p>
+      </section>
+    {{end}}
+
     <p class="order__hint muted">a confirmation email would normally be on its way. this is a demo, so nothing was actually charged or sent.</p>
 
     <a href="/" class="btn btn--ghost">continue shopping</a>

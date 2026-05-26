@@ -77,15 +77,26 @@
         </fieldset>
 
         <fieldset class="fieldset">
-          <legend class="fieldset__legend">payment</legend>
+          <legend class="fieldset__legend">payment method</legend>
+          {{range .PaymentMethods}}
+            <label class="radio">
+              <input type="radio" name="payment_method" value="{{.Code}}" {{if eq .Code "card"}}checked{{end}}>
+              <span class="radio__label">{{.Label}}</span>
+            </label>
+          {{end}}
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset__legend">card details</legend>
+          <p class="muted checkout__note">only needed for card payments.</p>
 
           <div class="field">
             <label for="card-number">card number</label>
-            <input id="card-number" type="text" name="card_number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" required>
+            <input id="card-number" type="text" name="card_number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242">
           </div>
           <div class="field">
             <label for="card-name">name on card</label>
-            <input id="card-name" type="text" name="card_name" autocomplete="cc-name" placeholder="Jane Doe" required>
+            <input id="card-name" type="text" name="card_name" autocomplete="cc-name" placeholder="Jane Doe">
           </div>
         </fieldset>
 
