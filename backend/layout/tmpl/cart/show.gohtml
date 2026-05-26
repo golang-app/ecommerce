@@ -1,38 +1,36 @@
 {{define "main"}}
-   <div id="main-content">
-      <h1>Cart</h1>
+  <h1 class="page-title">cart</h1>
 
-      <table class="table table-hover">
-        <thead>
+  {{if .Cart.Items}}
+    <table class="cart-table">
+      <thead>
+        <tr>
+          <th>item</th>
+          <th class="col-qty">qty</th>
+          <th class="col-price">price</th>
+          <th class="col-total">total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $item := .Cart.Items}}
           <tr>
-            <td scope="col">#</td>
-            <td scope="col">Name</td>
-            <td scope="col">Price</td>
-            <td scope="col">Qty</td>
-            <td scope="col"></td>
+            <td><a href="/product/{{$item.Product.ID}}">{{$item.Product.Name}}</a></td>
+            <td class="col-qty">{{$item.Quantity}}</td>
+            <td class="col-price">{{$item.Product.Price.Display}} {{$item.Product.Price.Currency}}</td>
+            <td class="col-total">{{$item.Product.Price.Display}} {{$item.Product.Price.Currency}}</td>
           </tr>
-        </thead>
-        <tbody class="table-hover">
-          {{range $i, $item := .Cart.Items}}
-          <tr>
-            <td>{{$i}}</td>
-            <td>{{$item.Product.Name}}</td>
-            <td>{{$item.Product.Price}}</td>
-            <td>{{$item.Quantity}}</td>
-          </tr>
+        {{end}}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3">total</td>
+          <td class="col-total">{{.Cart.TotalPrice.Display}} {{.Cart.TotalPrice.Currency}}</td>
+        </tr>
+      </tfoot>
+    </table>
 
-          {{ end }}
-        </tbody>
-
-        <tfoot>
-          <tr>
-            <td colspan="2">Total:</td>
-            <td>{{ .Cart.TotalPrice }}</td>
-            <td>{{ .Cart.TotalQuantity }}</td>
-          </tr>
-        </tfoot>
-      </table>
-
-        <a href="/checkout" class="btn btn-primary btn-lg" role="button">Go to checkout</a>
-   </div>
+    <a href="/checkout" class="btn">go to checkout</a>
+  {{else}}
+    <p class="cart-empty">your cart is empty. <a href="/">browse products</a></p>
+  {{end}}
 {{end}}

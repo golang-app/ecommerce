@@ -1,9 +1,7 @@
-<li class="nav-item" hx-get="/cart/menuItem" hx-trigger="authMenuItem from:body" hx-swap="outerHTML">
-    <a class="nav-link position-relative" href="#">
-      {{if .LoggedIn}}
-      <span><a class="nav-link position-relative" href="/auth/logout">Log out</a></span>
-      {{ else }}
-      <span><a class="nav-link position-relative" href="/auth/login">Log in</a></span>
-      {{end}}
-    </a>
+<li hx-get="/auth/menuIcon" hx-trigger="authMenuItem from:body" hx-swap="outerHTML">
+  {{if .LoggedIn}}
+    <a href="/auth/logout">log out</a>
+  {{else}}
+    <a href="/auth/login">sign in</a>
+  {{end}}
 </li>

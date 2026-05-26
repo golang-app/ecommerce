@@ -1,5 +1,7 @@
 {{define "main"}}
-   <div hx-get="/api/v1/products" hx-trigger="load">
-     <img  alt="Result loading..." class="htmx-indicator" width="150" src="/img/bars.svg"/>
-   </div>
+  <h1 class="page-title">products</h1>
+
+  <div hx-get="/api/v1/products" hx-trigger="load" hx-swap="innerHTML">
+    <p class="muted"><span class="loading"></span> loading&hellip;</p>
+  </div>
 {{end}}
