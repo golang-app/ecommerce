@@ -35,11 +35,15 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 	}
 
 	ship := order.ShipTo()
+	method := order.ShippingMethod()
+	pay := order.PaymentMethod()
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO checkout_order
 			(id, user_id, customer_id, total_amount, total_currency, status, placed_at,
-			 ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+			 ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country,
+			 ship_method_code, ship_method_label, ship_cost,
+			 payment_method_code, payment_method_label)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		ON CONFLICT (id) DO UPDATE SET
 			user_id = EXCLUDED.user_id,
 			customer_id = EXCLUDED.customer_id,
@@ -51,7 +55,12 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 			ship_street2 = EXCLUDED.ship_street2,
 			ship_city = EXCLUDED.ship_city,
 			ship_zip = EXCLUDED.ship_zip,
-			ship_country = EXCLUDED.ship_country
+			ship_country = EXCLUDED.ship_country,
+			ship_method_code = EXCLUDED.ship_method_code,
+			ship_method_label = EXCLUDED.ship_method_label,
+			ship_cost = EXCLUDED.ship_cost,
+			payment_method_code = EXCLUDED.payment_method_code,
+			payment_method_label = EXCLUDED.payment_method_label
 	`,
 		order.ID(),
 		order.UserID(),
@@ -66,6 +75,11 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 		ship.City(),
 		ship.Zip(),
 		ship.Country(),
+		method.Code(),
+		method.Label(),
+		method.Cost(),
+		pay.Code(),
+		pay.Label(),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert order: %w", err)
@@ -105,15 +119,22 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 	var userID, status, currency string
 	var customerID sql.NullString
 	var shipName, shipStreet1, shipStreet2, shipCity, shipZip, shipCountry sql.NullString
+	var shipMethodCode, shipMethodLabel sql.NullString
+	var payMethodCode, payMethodLabel sql.NullString
+	var shipCost int64
 	var totalAmt int64
 	var placedAt time.Time
 
 	err := p.db.QueryRowContext(ctx, `
 		SELECT user_id, customer_id, total_amount, total_currency, status, placed_at,
-		       ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country
+		       ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country,
+		       ship_method_code, ship_method_label, ship_cost,
+		       payment_method_code, payment_method_label
 		FROM checkout_order WHERE id = $1
 	`, id).Scan(&userID, &customerID, &totalAmt, &currency, &status, &placedAt,
-		&shipName, &shipStreet1, &shipStreet2, &shipCity, &shipZip, &shipCountry)
+		&shipName, &shipStreet1, &shipStreet2, &shipCity, &shipZip, &shipCountry,
+		&shipMethodCode, &shipMethodLabel, &shipCost,
+		&payMethodCode, &payMethodLabel)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Order{}, domain.ErrOrderNotFound
 	}
@@ -149,8 +170,10 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 		shipName.String, shipStreet1.String, shipStreet2.String,
 		shipCity.String, shipZip.String, shipCountry.String,
 	)
+	shipMethod := domain.RebuildShippingMethod(shipMethodCode.String, shipMethodLabel.String, shipCost)
+	payMethod := domain.RebuildPaymentMethod(payMethodCode.String, payMethodLabel.String)
 
-	return domain.NewOrder(id, userID, customerID.String, shipTo, lines, domain.Status(status), placedAt), nil
+	return domain.NewOrder(id, userID, customerID.String, shipTo, shipMethod, payMethod, lines, domain.Status(status), placedAt), nil
 }
 
 // ListByCustomer returns the customer's orders newest-first. Anonymous

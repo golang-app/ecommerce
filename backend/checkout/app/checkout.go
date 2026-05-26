@@ -72,7 +72,7 @@ func NewCheckoutService(
 //
 // customerID may be empty for anonymous checkout; in that case the order
 // is recorded but will not appear in any customer's order history.
-func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo domain.Address) (domain.Order, error) {
+func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo domain.Address, shipMethod domain.ShippingMethod, payMethod domain.PaymentMethod) (domain.Order, error) {
 	cart, err := s.cart.Get(ctx, sessID)
 	if err != nil {
 		if errors.Is(err, cartDomain.ErrCartNotFound) {
@@ -95,7 +95,7 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		))
 	}
 
-	order := domain.NewOrder(s.newID(), sessID, customerID, shipTo, lines, domain.StatusPending, s.now())
+	order := domain.NewOrder(s.newID(), sessID, customerID, shipTo, shipMethod, payMethod, lines, domain.StatusPending, s.now())
 
 	if err := s.payment.Charge(ctx, order.TotalAmount(), order.TotalCurrency(), cardNumber); err != nil {
 		failed := order.WithStatus(domain.StatusFailed)

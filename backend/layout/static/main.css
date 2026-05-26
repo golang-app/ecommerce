@@ -389,6 +389,20 @@ main {
   color: var(--fg-muted);
 }
 
+/* ---------- radio options ---------- */
+.radio {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+.radio:first-of-type { border-top: 1px solid var(--rule); }
+.radio input { accent-color: var(--fg); }
+.radio__label { flex: 1; }
+.radio__cost { font-size: 0.9rem; }
+
 /* ---------- order shipping block ---------- */
 .order__ship-heading {
   font-family: var(--serif);
