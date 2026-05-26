@@ -370,6 +370,38 @@ main {
 }
 .order .btn { align-self: flex-start; margin-top: var(--space-2); }
 
+/* ---------- fieldsets ---------- */
+.fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.fieldset__legend {
+  font-family: var(--serif);
+  font-size: var(--step-1);
+  text-transform: lowercase;
+  letter-spacing: -.01em;
+  padding: 0;
+  margin-bottom: var(--space-1);
+  color: var(--fg-muted);
+}
+
+/* ---------- order shipping block ---------- */
+.order__ship-heading {
+  font-family: var(--serif);
+  font-size: var(--step-1);
+  text-transform: lowercase;
+  color: var(--fg-muted);
+  margin-bottom: var(--space-1);
+}
+.order__address {
+  font-style: normal;
+  line-height: 1.7;
+}
+
 /* ---------- forms ---------- */
 .form {
   max-width: 28rem;

@@ -31,6 +31,7 @@ type Order struct {
 	id         string
 	userID     string
 	customerID string
+	shipTo     Address
 	items      []Line
 	totalAmt   int64
 	totalCcy   string
@@ -72,7 +73,7 @@ func (l Line) LineTotalDisplay() string {
 // using the first line's currency. Callers are expected to ensure all lines
 // share a currency (the cart bounded context enforces this on its side once
 // the cross-currency safety fix lands).
-func NewOrder(id, userID, customerID string, items []Line, status Status, placedAt time.Time) Order {
+func NewOrder(id, userID, customerID string, shipTo Address, items []Line, status Status, placedAt time.Time) Order {
 	var amt int64
 	var ccy string
 	for _, ln := range items {
@@ -85,6 +86,7 @@ func NewOrder(id, userID, customerID string, items []Line, status Status, placed
 		id:         id,
 		userID:     userID,
 		customerID: customerID,
+		shipTo:     shipTo,
 		items:      items,
 		totalAmt:   amt,
 		totalCcy:   ccy,
@@ -96,6 +98,7 @@ func NewOrder(id, userID, customerID string, items []Line, status Status, placed
 func (o Order) ID() string            { return o.id }
 func (o Order) UserID() string        { return o.userID }
 func (o Order) CustomerID() string    { return o.customerID }
+func (o Order) ShipTo() Address       { return o.shipTo }
 func (o Order) Items() []Line         { return o.items }
 func (o Order) Status() Status        { return o.status }
 func (o Order) PlacedAt() time.Time   { return o.placedAt }

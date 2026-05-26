@@ -31,19 +31,51 @@
     </section>
 
     <section class="checkout__payment">
-      <h2 class="checkout__heading">payment</h2>
-      <p class="muted checkout__note">demo only — no real card is charged. enter anything in the field below.</p>
+      <h2 class="checkout__heading">details</h2>
+      <p class="muted checkout__note">demo only — no real card is charged. enter anything in the payment fields.</p>
 
       <form class="form" method="post" action="/checkout">
-        <div class="field">
-          <label for="card-number">card number</label>
-          <input id="card-number" type="text" name="card_number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" required>
-        </div>
+        <fieldset class="fieldset">
+          <legend class="fieldset__legend">ship to</legend>
 
-        <div class="field">
-          <label for="card-name">name on card</label>
-          <input id="card-name" type="text" name="card_name" autocomplete="cc-name" placeholder="Jane Doe" required>
-        </div>
+          <div class="field">
+            <label for="ship-name">full name</label>
+            <input id="ship-name" type="text" name="ship_name" autocomplete="name" placeholder="Jane Doe" required>
+          </div>
+          <div class="field">
+            <label for="ship-street1">street</label>
+            <input id="ship-street1" type="text" name="ship_street1" autocomplete="address-line1" placeholder="123 Main St" required>
+          </div>
+          <div class="field">
+            <label for="ship-street2">street (line 2)</label>
+            <input id="ship-street2" type="text" name="ship_street2" autocomplete="address-line2" placeholder="Apt 4B (optional)">
+          </div>
+          <div class="field">
+            <label for="ship-city">city</label>
+            <input id="ship-city" type="text" name="ship_city" autocomplete="address-level2" placeholder="Portland" required>
+          </div>
+          <div class="field">
+            <label for="ship-zip">zip code</label>
+            <input id="ship-zip" type="text" name="ship_zip" autocomplete="postal-code" placeholder="97201" required>
+          </div>
+          <div class="field">
+            <label for="ship-country">country</label>
+            <input id="ship-country" type="text" name="ship_country" autocomplete="country-name" placeholder="United States" required>
+          </div>
+        </fieldset>
+
+        <fieldset class="fieldset">
+          <legend class="fieldset__legend">payment</legend>
+
+          <div class="field">
+            <label for="card-number">card number</label>
+            <input id="card-number" type="text" name="card_number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" required>
+          </div>
+          <div class="field">
+            <label for="card-name">name on card</label>
+            <input id="card-name" type="text" name="card_name" autocomplete="cc-name" placeholder="Jane Doe" required>
+          </div>
+        </fieldset>
 
         <button type="submit" class="btn btn--block">place order</button>
         <p class="form__aside"><a href="/cart">&larr; back to cart</a></p>
