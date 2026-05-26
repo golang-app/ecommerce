@@ -11,6 +11,7 @@ import (
 	"github.com/ardanlabs/conf"
 	"github.com/bkielbasa/go-ecommerce/backend/auth"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
+	"github.com/bkielbasa/go-ecommerce/backend/checkout"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
@@ -77,11 +78,13 @@ func main() {
 	pcBD, catalogService := productcatalog.New(db)
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
 	authBD, authService := auth.New(db)
+	checkoutBD, checkoutSrv := checkout.New(db, cartSrv, cartSrv)
 	app.AddBoundedContext(cartBD)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv))
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
+	app.AddBoundedContext(checkoutBD)
 
 	go func() {
 		_ = app.Run()

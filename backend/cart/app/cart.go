@@ -16,6 +16,7 @@ type CartService struct {
 type CartStorage interface {
 	Get(ctx context.Context, user domain.User) (*domain.Cart, error)
 	Persist(ctx context.Context, cart *domain.Cart) error
+	Clear(ctx context.Context, user domain.User) error
 }
 
 type ProductCatalog interface {
@@ -65,4 +66,14 @@ func (c CartService) Get(ctx context.Context, sessID string) (*domain.Cart, erro
 	}
 
 	return cart, nil
+}
+
+// Clear removes every item from the cart for this session. The cart row
+// itself is left in place; the next Get returns an empty cart.
+func (c CartService) Clear(ctx context.Context, sessID string) error {
+	user := domain.NewUser(sessID)
+	if err := c.storage.Clear(ctx, user); err != nil {
+		return fmt.Errorf("could not clear cart: %w", err)
+	}
+	return nil
 }

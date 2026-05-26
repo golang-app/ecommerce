@@ -14,13 +14,31 @@ import (
 
 var (
 	key   = []byte("go-ecommerce")
-	store = sessions.NewCookieStore(key)
+	store = newCookieStore(key)
 )
 
+// newCookieStore returns a CookieStore whose Options work over plain HTTP
+// (localhost / docker compose) so the demo runs without TLS. gorilla
+// sessions defaults to Secure + SameSite=None which makes the cookie
+// invisible to non-HTTPS clients. Flip Secure to true when serving over
+// HTTPS for real.
+func newCookieStore(key []byte) *sessions.CookieStore {
+	s := sessions.NewCookieStore(key)
+	s.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 30,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	}
+	return s
+}
+
 type httpHandler struct {
-	cartSrv    cartService
-	catalogSrv catalogService
-	authSrv    authService
+	cartSrv     cartService
+	catalogSrv  catalogService
+	authSrv     authService
+	checkoutSrv checkoutService
 }
 
 func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +62,11 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.Register, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.HandleRegister, m.logger)).Methods("POST")
 	r.HandleFunc("/auth/menuIcon", observability.HTTPWrap(m.handler.AuthMenuItem, m.logger)).Methods("GET", "OPTIONS")
+
+	r.HandleFunc("/checkout", observability.HTTPWrap(m.handler.Checkout, m.logger)).Methods("GET")
+	r.HandleFunc("/checkout", observability.HTTPWrap(m.handler.PlaceOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/orders", observability.HTTPWrap(m.handler.Orders, m.logger)).Methods("GET")
+	r.HandleFunc("/order/{orderID}", observability.HTTPWrap(m.handler.Order, m.logger)).Methods("GET")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
@@ -66,6 +89,7 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
+	data["LoggedIn"] = handler.currentCustomerID(r) != ""
 	err := session.Save(r, w)
 	if err != nil {
 		log.Print(err.Error())

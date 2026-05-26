@@ -38,3 +38,11 @@ func (i *inMemory) Persist(ctx context.Context, cart *domain.Cart) error {
 
 	return nil
 }
+
+func (i *inMemory) Clear(ctx context.Context, user domain.User) error {
+	i.mx.Lock()
+	defer i.mx.Unlock()
+
+	delete(i.carts, user.ID())
+	return nil
+}
