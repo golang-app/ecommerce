@@ -27,7 +27,7 @@ func (ps ProductService) Find(ctx context.Context, id string) (Product, error) {
 	return ps.storage.Find(ctx, id)
 }
 
-func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency string) error {
+func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error {
 	pId, err := NewProductId(id)
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMi
 		return fmt.Errorf("invalid price: %w", err)
 	}
 
-	p, err := NewProduct(pId, name, desc, priceVO, "")
+	p, err := NewProduct(pId, name, desc, priceVO, thumbnail)
 	if err != nil {
 		return err
 	}
