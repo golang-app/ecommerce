@@ -1,0 +1,53 @@
+{{define "main"}}
+  <h1 class="page-title">checkout</h1>
+
+  <div class="checkout">
+    <section class="checkout__summary">
+      <h2 class="checkout__heading">order summary</h2>
+      <table class="cart-table">
+        <thead>
+          <tr>
+            <th>item</th>
+            <th class="col-qty">qty</th>
+            <th class="col-total">subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $item := .Cart.Items}}
+            <tr>
+              <td>{{$item.Product.Name}}</td>
+              <td class="col-qty">{{$item.Quantity}}</td>
+              <td class="col-total">{{$item.Product.Price.Display}} {{$item.Product.Price.Currency}}</td>
+            </tr>
+          {{end}}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2">total</td>
+            <td class="col-total">{{.Cart.TotalPrice.Display}} {{.Cart.TotalPrice.Currency}}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </section>
+
+    <section class="checkout__payment">
+      <h2 class="checkout__heading">payment</h2>
+      <p class="muted checkout__note">demo only — no real card is charged. enter anything in the field below.</p>
+
+      <form class="form" method="post" action="/checkout">
+        <div class="field">
+          <label for="card-number">card number</label>
+          <input id="card-number" type="text" name="card_number" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242" required>
+        </div>
+
+        <div class="field">
+          <label for="card-name">name on card</label>
+          <input id="card-name" type="text" name="card_name" autocomplete="cc-name" placeholder="Jane Doe" required>
+        </div>
+
+        <button type="submit" class="btn btn--block">place order</button>
+        <p class="form__aside"><a href="/cart">&larr; back to cart</a></p>
+      </form>
+    </section>
+  </div>
+{{end}}

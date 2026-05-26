@@ -89,6 +89,16 @@ func (p postgres) readItems(ctx context.Context, cartID string) ([]cartItem, err
 	return items, nil
 }
 
+// Clear deletes every line item for this user's cart but leaves the cart
+// row itself. Called by the checkout flow after a successful order.
+func (p postgres) Clear(ctx context.Context, user domain.User) error {
+	_, err := p.db.ExecContext(ctx, `DELETE FROM cart_cart_item WHERE cart_id = $1`, user.ID())
+	if err != nil {
+		return fmt.Errorf("could not clear cart items: %w", err)
+	}
+	return nil
+}
+
 func (p postgres) Persist(ctx context.Context, cart *domain.Cart) error {
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {

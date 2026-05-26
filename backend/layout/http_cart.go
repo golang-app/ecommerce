@@ -98,8 +98,11 @@ func cartIDFromCookies(w http.ResponseWriter, r *http.Request) string {
 	cartID := "cart-" + randomString(16)
 
 	http.SetCookie(w, &http.Cookie{
-		Name:  "cart_id",
-		Value: cartID,
+		Name:     "cart_id",
+		Value:    cartID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	return cartID

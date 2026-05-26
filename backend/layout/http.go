@@ -18,9 +18,10 @@ var (
 )
 
 type httpHandler struct {
-	cartSrv    cartService
-	catalogSrv catalogService
-	authSrv    authService
+	cartSrv     cartService
+	catalogSrv  catalogService
+	authSrv     authService
+	checkoutSrv checkoutService
 }
 
 func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +45,10 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.Register, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.HandleRegister, m.logger)).Methods("POST")
 	r.HandleFunc("/auth/menuIcon", observability.HTTPWrap(m.handler.AuthMenuItem, m.logger)).Methods("GET", "OPTIONS")
+
+	r.HandleFunc("/checkout", observability.HTTPWrap(m.handler.Checkout, m.logger)).Methods("GET")
+	r.HandleFunc("/checkout", observability.HTTPWrap(m.handler.PlaceOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/order/{orderID}", observability.HTTPWrap(m.handler.Order, m.logger)).Methods("GET")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {

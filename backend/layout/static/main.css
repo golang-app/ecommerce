@@ -277,6 +277,55 @@ main {
   text-align: center;
 }
 
+/* ---------- checkout ---------- */
+.checkout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 48rem) {
+  .checkout { grid-template-columns: 1fr; gap: var(--space-4); }
+}
+.checkout__heading {
+  font-family: var(--serif);
+  font-size: var(--step-2);
+  text-transform: lowercase;
+  letter-spacing: -.01em;
+  margin-bottom: var(--space-2);
+}
+.checkout__note {
+  font-size: 0.85rem;
+  margin-bottom: var(--space-3);
+}
+
+/* ---------- order confirmation ---------- */
+.order {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 48rem;
+}
+.order__header { margin-bottom: var(--space-2); }
+.order__title {
+  font-family: var(--serif);
+  font-size: var(--step-3);
+  text-transform: lowercase;
+  letter-spacing: -.01em;
+}
+.order__subtitle {
+  margin-top: var(--space-1);
+  font-size: 0.9rem;
+}
+.order__id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--fg);
+}
+.order__hint {
+  font-size: 0.85rem;
+}
+.order .btn { align-self: flex-start; margin-top: var(--space-2); }
+
 /* ---------- forms ---------- */
 .form {
   max-width: 28rem;

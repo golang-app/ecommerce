@@ -6,6 +6,7 @@ import (
 
 	authDomain "github.com/bkielbasa/go-ecommerce/backend/auth/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
+	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/sirupsen/logrus"
@@ -28,12 +29,18 @@ type authService interface {
 	FindByToken(ctx context.Context, sessToken string) (*authDomain.Session, error)
 }
 
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService) application.BoundedContext {
+type checkoutService interface {
+	Place(ctx context.Context, sessID, cardNumber string) (checkoutDomain.Order, error)
+	Find(ctx context.Context, id string) (checkoutDomain.Order, error)
+}
+
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutService) application.BoundedContext {
 	return &boundedContext{
 		handler: httpHandler{
-			cartSrv:    cartSrv,
-			catalogSrv: catalogSrv,
-			authSrv:    authSrv,
+			cartSrv:     cartSrv,
+			catalogSrv:  catalogSrv,
+			authSrv:     authSrv,
+			checkoutSrv: checkoutSrv,
 		},
 		logger: logger,
 	}
