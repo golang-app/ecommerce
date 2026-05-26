@@ -10,6 +10,24 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// currentCustomerID returns the authenticated customer's id from the
+// session cookie, or "" if no valid session is present.
+func (handler httpHandler) currentCustomerID(r *http.Request) string {
+	c, err := store.Get(r, "ecommerce")
+	if err != nil {
+		return ""
+	}
+	sessID, _ := c.Values["session_id"].(string)
+	if sessID == "" {
+		return ""
+	}
+	sess, err := handler.authSrv.FindByToken(r.Context(), sessID)
+	if err != nil || sess == nil || sess.Expired() {
+		return ""
+	}
+	return sess.CustomerID()
+}
+
 func (handler httpHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	sessID := cartIDFromCookies(w, r)
 	cart, err := handler.cartSrv.Get(r.Context(), sessID)
@@ -38,8 +56,9 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cardNumber := r.FormValue("card_number")
+	customerID := handler.currentCustomerID(r) // empty for anonymous
 
-	order, err := handler.checkoutSrv.Place(r.Context(), sessID, cardNumber)
+	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber)
 	if errors.Is(err, checkoutDomain.ErrCartEmpty) {
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return
@@ -55,9 +74,15 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler httpHandler) Orders(w http.ResponseWriter, r *http.Request) {
-	sessID := cartIDFromCookies(w, r)
+	customerID := handler.currentCustomerID(r)
+	if customerID == "" {
+		// Stash the intent so we could return them here post-login later.
+		// For now just bounce to the login page.
+		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+		return
+	}
 
-	orders, err := handler.checkoutSrv.ListByUser(r.Context(), sessID)
+	orders, err := handler.checkoutSrv.ListByCustomer(r.Context(), customerID)
 	if err != nil {
 		https.InternalError(w, "internal-error", err.Error())
 		return

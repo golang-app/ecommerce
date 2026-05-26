@@ -29,18 +29,25 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 		}
 	}()
 
+	var customerID sql.NullString
+	if order.CustomerID() != "" {
+		customerID = sql.NullString{String: order.CustomerID(), Valid: true}
+	}
+
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO checkout_order
-			(id, user_id, total_amount, total_currency, status, placed_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+			(id, user_id, customer_id, total_amount, total_currency, status, placed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (id) DO UPDATE SET
 			user_id = EXCLUDED.user_id,
+			customer_id = EXCLUDED.customer_id,
 			total_amount = EXCLUDED.total_amount,
 			total_currency = EXCLUDED.total_currency,
 			status = EXCLUDED.status
 	`,
 		order.ID(),
 		order.UserID(),
+		customerID,
 		order.TotalAmount(),
 		order.TotalCurrency(),
 		string(order.Status()),
@@ -82,13 +89,14 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 
 func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 	var userID, status, currency string
+	var customerID sql.NullString
 	var totalAmt int64
 	var placedAt time.Time
 
 	err := p.db.QueryRowContext(ctx, `
-		SELECT user_id, total_amount, total_currency, status, placed_at
+		SELECT user_id, customer_id, total_amount, total_currency, status, placed_at
 		FROM checkout_order WHERE id = $1
-	`, id).Scan(&userID, &totalAmt, &currency, &status, &placedAt)
+	`, id).Scan(&userID, &customerID, &totalAmt, &currency, &status, &placedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Order{}, domain.ErrOrderNotFound
 	}
@@ -120,17 +128,18 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 		return domain.Order{}, fmt.Errorf("rows: %w", err)
 	}
 
-	return domain.NewOrder(id, userID, lines, domain.Status(status), placedAt), nil
+	return domain.NewOrder(id, userID, customerID.String, lines, domain.Status(status), placedAt), nil
 }
 
-// ListByUser returns the user's orders newest-first. Items are hydrated by
+// ListByCustomer returns the customer's orders newest-first. Anonymous
+// orders (NULL customer_id) are never returned. Items are hydrated by
 // calling Find for each row (N+1) — fine for the expected order volume of
-// this demo. Optimise if a real user ever has hundreds of orders.
-func (p Postgres) ListByUser(ctx context.Context, userID string) ([]domain.Order, error) {
+// this demo.
+func (p Postgres) ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT id FROM checkout_order WHERE user_id = $1
+		SELECT id FROM checkout_order WHERE customer_id = $1
 		ORDER BY placed_at DESC
-	`, userID)
+	`, customerID)
 	if err != nil {
 		return nil, fmt.Errorf("query orders: %w", err)
 	}

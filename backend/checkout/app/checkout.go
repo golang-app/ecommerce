@@ -25,7 +25,7 @@ type CartClearer interface {
 type OrderStorage interface {
 	Save(ctx context.Context, order domain.Order) error
 	Find(ctx context.Context, id string) (domain.Order, error)
-	ListByUser(ctx context.Context, userID string) ([]domain.Order, error)
+	ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error)
 }
 
 // PaymentProcessor charges a card. The fake implementation always succeeds;
@@ -69,7 +69,10 @@ func NewCheckoutService(
 // supplied fake card, persists the order, and clears the cart. The
 // cardNumber argument is accepted for shape only — the fake processor
 // ignores it.
-func (s CheckoutService) Place(ctx context.Context, sessID, cardNumber string) (domain.Order, error) {
+//
+// customerID may be empty for anonymous checkout; in that case the order
+// is recorded but will not appear in any customer's order history.
+func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumber string) (domain.Order, error) {
 	cart, err := s.cart.Get(ctx, sessID)
 	if err != nil {
 		if errors.Is(err, cartDomain.ErrCartNotFound) {
@@ -92,7 +95,7 @@ func (s CheckoutService) Place(ctx context.Context, sessID, cardNumber string) (
 		))
 	}
 
-	order := domain.NewOrder(s.newID(), sessID, lines, domain.StatusPending, s.now())
+	order := domain.NewOrder(s.newID(), sessID, customerID, lines, domain.StatusPending, s.now())
 
 	if err := s.payment.Charge(ctx, order.TotalAmount(), order.TotalCurrency(), cardNumber); err != nil {
 		failed := order.WithStatus(domain.StatusFailed)
@@ -116,9 +119,13 @@ func (s CheckoutService) Find(ctx context.Context, id string) (domain.Order, err
 	return s.storage.Find(ctx, id)
 }
 
-// ListByUser returns the user's orders newest-first. Currently 'user' is the
-// cart_id cookie value, so order history is per-session/browser; once we
-// have proper accounts this should switch to the customer ID.
-func (s CheckoutService) ListByUser(ctx context.Context, userID string) ([]domain.Order, error) {
-	return s.storage.ListByUser(ctx, userID)
+// ListByCustomer returns the authenticated customer's orders newest-first.
+// Anonymous orders (placed with an empty customerID) are never returned
+// here regardless of the value passed; this is enforced by Postgres treating
+// NULL = '' as false.
+func (s CheckoutService) ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error) {
+	if customerID == "" {
+		return nil, nil
+	}
+	return s.storage.ListByCustomer(ctx, customerID)
 }

@@ -30,7 +30,9 @@
                       class="cart-link__count"></span>
               </a>
             </li>
-            <li><a href="/orders">orders</a></li>
+            {{if .LoggedIn}}
+              <li><a href="/orders">orders</a></li>
+            {{end}}
             {{ html .AuthMenuItem }}
           </ul>
         </nav>

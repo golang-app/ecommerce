@@ -22,14 +22,20 @@ var (
 // Order is a placed (or attempted) checkout. Once created, line items are a
 // snapshot of the cart at order time — later changes to products or prices
 // do not retroactively change the order.
+//
+// userID is the cart_id cookie value at order time (anonymous identifier).
+// customerID is the authenticated customer (e.g. email) and is empty for
+// orders placed without logging in. Only orders with a non-empty
+// customerID show up in the per-user order history.
 type Order struct {
-	id       string
-	userID   string
-	items    []Line
-	totalAmt int64
-	totalCcy string
-	status   Status
-	placedAt time.Time
+	id         string
+	userID     string
+	customerID string
+	items      []Line
+	totalAmt   int64
+	totalCcy   string
+	status     Status
+	placedAt   time.Time
 }
 
 // Line is a snapshot of a single cart line at order time.
@@ -66,7 +72,7 @@ func (l Line) LineTotalDisplay() string {
 // using the first line's currency. Callers are expected to ensure all lines
 // share a currency (the cart bounded context enforces this on its side once
 // the cross-currency safety fix lands).
-func NewOrder(id, userID string, items []Line, status Status, placedAt time.Time) Order {
+func NewOrder(id, userID, customerID string, items []Line, status Status, placedAt time.Time) Order {
 	var amt int64
 	var ccy string
 	for _, ln := range items {
@@ -76,18 +82,20 @@ func NewOrder(id, userID string, items []Line, status Status, placedAt time.Time
 		}
 	}
 	return Order{
-		id:       id,
-		userID:   userID,
-		items:    items,
-		totalAmt: amt,
-		totalCcy: ccy,
-		status:   status,
-		placedAt: placedAt,
+		id:         id,
+		userID:     userID,
+		customerID: customerID,
+		items:      items,
+		totalAmt:   amt,
+		totalCcy:   ccy,
+		status:     status,
+		placedAt:   placedAt,
 	}
 }
 
 func (o Order) ID() string            { return o.id }
 func (o Order) UserID() string        { return o.userID }
+func (o Order) CustomerID() string    { return o.customerID }
 func (o Order) Items() []Line         { return o.items }
 func (o Order) Status() Status        { return o.status }
 func (o Order) PlacedAt() time.Time   { return o.placedAt }

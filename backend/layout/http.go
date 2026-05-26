@@ -14,8 +14,25 @@ import (
 
 var (
 	key   = []byte("go-ecommerce")
-	store = sessions.NewCookieStore(key)
+	store = newCookieStore(key)
 )
+
+// newCookieStore returns a CookieStore whose Options work over plain HTTP
+// (localhost / docker compose) so the demo runs without TLS. gorilla
+// sessions defaults to Secure + SameSite=None which makes the cookie
+// invisible to non-HTTPS clients. Flip Secure to true when serving over
+// HTTPS for real.
+func newCookieStore(key []byte) *sessions.CookieStore {
+	s := sessions.NewCookieStore(key)
+	s.Options = &sessions.Options{
+		Path:     "/",
+		MaxAge:   86400 * 30,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteLaxMode,
+	}
+	return s
+}
 
 type httpHandler struct {
 	cartSrv     cartService
@@ -72,6 +89,7 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
+	data["LoggedIn"] = handler.currentCustomerID(r) != ""
 	err := session.Save(r, w)
 	if err != nil {
 		log.Print(err.Error())
