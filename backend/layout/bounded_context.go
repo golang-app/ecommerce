@@ -32,6 +32,7 @@ type authService interface {
 type checkoutService interface {
 	Place(ctx context.Context, sessID, cardNumber string) (checkoutDomain.Order, error)
 	Find(ctx context.Context, id string) (checkoutDomain.Order, error)
+	ListByUser(ctx context.Context, userID string) ([]checkoutDomain.Order, error)
 }
 
 func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutService) application.BoundedContext {

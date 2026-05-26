@@ -25,6 +25,7 @@ type CartClearer interface {
 type OrderStorage interface {
 	Save(ctx context.Context, order domain.Order) error
 	Find(ctx context.Context, id string) (domain.Order, error)
+	ListByUser(ctx context.Context, userID string) ([]domain.Order, error)
 }
 
 // PaymentProcessor charges a card. The fake implementation always succeeds;
@@ -113,4 +114,11 @@ func (s CheckoutService) Place(ctx context.Context, sessID, cardNumber string) (
 
 func (s CheckoutService) Find(ctx context.Context, id string) (domain.Order, error) {
 	return s.storage.Find(ctx, id)
+}
+
+// ListByUser returns the user's orders newest-first. Currently 'user' is the
+// cart_id cookie value, so order history is per-session/browser; once we
+// have proper accounts this should switch to the customer ID.
+func (s CheckoutService) ListByUser(ctx context.Context, userID string) ([]domain.Order, error) {
+	return s.storage.ListByUser(ctx, userID)
 }

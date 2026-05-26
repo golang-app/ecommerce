@@ -299,6 +299,29 @@ main {
   margin-bottom: var(--space-3);
 }
 
+/* ---------- order list ---------- */
+.orders-list .order-row__id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.95rem;
+  border: 0;
+  color: var(--fg);
+}
+.orders-list .order-row__id:hover { border-bottom: 1px solid var(--fg); }
+.orders-list .order-row__count { font-size: 0.85rem; }
+
+.order-status {
+  display: inline-block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  padding: 0.15em 0.5em;
+  border: 1px solid currentColor;
+  color: var(--fg-muted);
+}
+.order-status--paid    { color: var(--fg); }
+.order-status--failed  { color: var(--danger); }
+.order-status--pending { color: var(--info); }
+
 /* ---------- order confirmation ---------- */
 .order {
   display: flex;

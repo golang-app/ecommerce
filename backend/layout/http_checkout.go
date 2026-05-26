@@ -54,6 +54,20 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/order/"+order.ID(), http.StatusSeeOther)
 }
 
+func (handler httpHandler) Orders(w http.ResponseWriter, r *http.Request) {
+	sessID := cartIDFromCookies(w, r)
+
+	orders, err := handler.checkoutSrv.ListByUser(r.Context(), sessID)
+	if err != nil {
+		https.InternalError(w, "internal-error", err.Error())
+		return
+	}
+
+	handler.renderTemplate(w, r, "order/index", map[string]any{
+		"Orders": orders,
+	})
+}
+
 func (handler httpHandler) Order(w http.ResponseWriter, r *http.Request) {
 	orderID := mux.Vars(r)["orderID"]
 

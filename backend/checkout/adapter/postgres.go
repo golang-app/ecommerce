@@ -122,3 +122,39 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 
 	return domain.NewOrder(id, userID, lines, domain.Status(status), placedAt), nil
 }
+
+// ListByUser returns the user's orders newest-first. Items are hydrated by
+// calling Find for each row (N+1) — fine for the expected order volume of
+// this demo. Optimise if a real user ever has hundreds of orders.
+func (p Postgres) ListByUser(ctx context.Context, userID string) ([]domain.Order, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT id FROM checkout_order WHERE user_id = $1
+		ORDER BY placed_at DESC
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("query orders: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan order id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+
+	orders := make([]domain.Order, 0, len(ids))
+	for _, id := range ids {
+		order, err := p.Find(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("hydrate order %s: %w", id, err)
+		}
+		orders = append(orders, order)
+	}
+	return orders, nil
+}

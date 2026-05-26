@@ -90,13 +90,29 @@ func (handler httpHandler) Budge(w http.ResponseWriter, r *http.Request) {
 }
 
 func cartIDFromCookies(w http.ResponseWriter, r *http.Request) string {
-	cookie, err := r.Cookie("cart_id")
-	if err == nil {
+	if cookie, err := r.Cookie("cart_id"); err == nil {
+		// The cookie may have been issued by an earlier buggy version with
+		// Path=/cart/. Re-issue at Path=/ and explicitly expire the stale
+		// /cart/-scoped one so the browser stops sending two cookies with
+		// the same name. The /-scoped Set-Cookie also overwrites the
+		// current /-scoped cookie in-place, which is harmless.
+		http.SetCookie(w, &http.Cookie{
+			Name:   "cart_id",
+			Value:  "",
+			Path:   "/cart/",
+			MaxAge: -1,
+		})
+		http.SetCookie(w, &http.Cookie{
+			Name:     "cart_id",
+			Value:    cookie.Value,
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
 		return cookie.Value
 	}
 
 	cartID := "cart-" + randomString(16)
-
 	http.SetCookie(w, &http.Cookie{
 		Name:     "cart_id",
 		Value:    cartID,
@@ -104,7 +120,6 @@ func cartIDFromCookies(w http.ResponseWriter, r *http.Request) string {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
-
 	return cartID
 }
 
