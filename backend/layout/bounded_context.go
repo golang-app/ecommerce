@@ -30,7 +30,7 @@ type authService interface {
 }
 
 type checkoutService interface {
-	Place(ctx context.Context, sessID, customerID, cardNumber string) (checkoutDomain.Order, error)
+	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address) (checkoutDomain.Order, error)
 	Find(ctx context.Context, id string) (checkoutDomain.Order, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]checkoutDomain.Order, error)
 }

@@ -58,7 +58,23 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	cardNumber := r.FormValue("card_number")
 	customerID := handler.currentCustomerID(r) // empty for anonymous
 
-	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber)
+	shipTo, err := checkoutDomain.NewAddress(
+		r.FormValue("ship_name"),
+		r.FormValue("ship_street1"),
+		r.FormValue("ship_street2"),
+		r.FormValue("ship_city"),
+		r.FormValue("ship_zip"),
+		r.FormValue("ship_country"),
+	)
+	if err != nil {
+		session, _ := store.Get(r, "ecommerce")
+		session.AddFlash(err.Error(), "error")
+		_ = session.Save(r, w)
+		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+		return
+	}
+
+	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber, shipTo)
 	if errors.Is(err, checkoutDomain.ErrCartEmpty) {
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return

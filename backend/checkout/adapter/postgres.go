@@ -34,16 +34,24 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 		customerID = sql.NullString{String: order.CustomerID(), Valid: true}
 	}
 
+	ship := order.ShipTo()
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO checkout_order
-			(id, user_id, customer_id, total_amount, total_currency, status, placed_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+			(id, user_id, customer_id, total_amount, total_currency, status, placed_at,
+			 ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (id) DO UPDATE SET
 			user_id = EXCLUDED.user_id,
 			customer_id = EXCLUDED.customer_id,
 			total_amount = EXCLUDED.total_amount,
 			total_currency = EXCLUDED.total_currency,
-			status = EXCLUDED.status
+			status = EXCLUDED.status,
+			ship_name = EXCLUDED.ship_name,
+			ship_street1 = EXCLUDED.ship_street1,
+			ship_street2 = EXCLUDED.ship_street2,
+			ship_city = EXCLUDED.ship_city,
+			ship_zip = EXCLUDED.ship_zip,
+			ship_country = EXCLUDED.ship_country
 	`,
 		order.ID(),
 		order.UserID(),
@@ -52,6 +60,12 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 		order.TotalCurrency(),
 		string(order.Status()),
 		order.PlacedAt(),
+		ship.Name(),
+		ship.Street1(),
+		ship.Street2(),
+		ship.City(),
+		ship.Zip(),
+		ship.Country(),
 	)
 	if err != nil {
 		return fmt.Errorf("upsert order: %w", err)
@@ -90,13 +104,16 @@ func (p Postgres) Save(ctx context.Context, order domain.Order) error {
 func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 	var userID, status, currency string
 	var customerID sql.NullString
+	var shipName, shipStreet1, shipStreet2, shipCity, shipZip, shipCountry sql.NullString
 	var totalAmt int64
 	var placedAt time.Time
 
 	err := p.db.QueryRowContext(ctx, `
-		SELECT user_id, customer_id, total_amount, total_currency, status, placed_at
+		SELECT user_id, customer_id, total_amount, total_currency, status, placed_at,
+		       ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country
 		FROM checkout_order WHERE id = $1
-	`, id).Scan(&userID, &customerID, &totalAmt, &currency, &status, &placedAt)
+	`, id).Scan(&userID, &customerID, &totalAmt, &currency, &status, &placedAt,
+		&shipName, &shipStreet1, &shipStreet2, &shipCity, &shipZip, &shipCountry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Order{}, domain.ErrOrderNotFound
 	}
@@ -128,7 +145,12 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 		return domain.Order{}, fmt.Errorf("rows: %w", err)
 	}
 
-	return domain.NewOrder(id, userID, customerID.String, lines, domain.Status(status), placedAt), nil
+	shipTo := domain.RebuildAddress(
+		shipName.String, shipStreet1.String, shipStreet2.String,
+		shipCity.String, shipZip.String, shipCountry.String,
+	)
+
+	return domain.NewOrder(id, userID, customerID.String, shipTo, lines, domain.Status(status), placedAt), nil
 }
 
 // ListByCustomer returns the customer's orders newest-first. Anonymous

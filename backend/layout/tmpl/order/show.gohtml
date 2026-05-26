@@ -38,6 +38,19 @@
       </tfoot>
     </table>
 
+    {{if not .Order.ShipTo.IsZero}}
+      <section class="order__ship">
+        <h2 class="order__ship-heading">shipping to</h2>
+        <address class="order__address">
+          {{.Order.ShipTo.Name}}<br>
+          {{.Order.ShipTo.Street1}}<br>
+          {{with .Order.ShipTo.Street2}}{{.}}<br>{{end}}
+          {{.Order.ShipTo.City}}, {{.Order.ShipTo.Zip}}<br>
+          {{.Order.ShipTo.Country}}
+        </address>
+      </section>
+    {{end}}
+
     <p class="order__hint muted">a confirmation email would normally be on its way. this is a demo, so nothing was actually charged or sent.</p>
 
     <a href="/" class="btn btn--ghost">continue shopping</a>
