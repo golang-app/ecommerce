@@ -23,6 +23,11 @@ func (p authStoragePostgres) Create(ctx context.Context, email, passwordHash str
 	return err
 }
 
+func (p authStoragePostgres) UpdatePassword(ctx context.Context, email, passwordHash string) error {
+	_, err := p.db.ExecContext(ctx, "UPDATE auth_customer SET password_hash = $2 WHERE username = $1", email, passwordHash)
+	return err
+}
+
 func (p authStoragePostgres) Find(ctx context.Context, email string) (Customer, error) {
 	c := Customer{}
 

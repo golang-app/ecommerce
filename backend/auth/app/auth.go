@@ -12,7 +12,8 @@ import (
 )
 
 var (
-	ErrInvalidEmail = fmt.Errorf("invalid email")
+	ErrInvalidEmail  = fmt.Errorf("invalid email")
+	ErrWrongPassword = fmt.Errorf("current password is incorrect")
 )
 
 var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
@@ -20,6 +21,7 @@ var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0
 type CustomerStorage interface {
 	Create(ctx context.Context, email, passwordHash string) error
 	Find(ctx context.Context, email string) (adapter.Customer, error)
+	UpdatePassword(ctx context.Context, email, passwordHash string) error
 }
 
 type SessStorage interface {
@@ -129,6 +131,32 @@ func (a auth) Login(ctx context.Context, email, password string) (*domain.Sessio
 	}
 
 	return sess, nil
+}
+
+// ChangePassword verifies the customer's current password, enforces the
+// password policy on the new one, and stores the new hash.
+func (a auth) ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error {
+	customer, err := a.authStorage.Find(ctx, email)
+	if err != nil {
+		return fmt.Errorf("could not find customer: %w", err)
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(customer.PasswordHash), []byte(oldPassword)); err != nil {
+		return ErrWrongPassword
+	}
+
+	for _, policy := range a.passPolicies {
+		if err := policy(newPassword); err != nil {
+			return fmt.Errorf("cannot change password: %w", err)
+		}
+	}
+
+	newHash, err := hashPassword(newPassword)
+	if err != nil {
+		return fmt.Errorf("could not hash password: %w", err)
+	}
+
+	return a.authStorage.UpdatePassword(ctx, email, newHash)
 }
 
 func hashPassword(password string) (string, error) {

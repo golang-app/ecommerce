@@ -1,0 +1,48 @@
+{{define "main"}}
+  <h1 class="page-title">account</h1>
+  <div class="account">
+    <aside class="account__side">{{template "account-nav" .}}</aside>
+    <div class="account__content">
+      <h2 class="account-card__title">addresses</h2>
+
+      {{if .Addresses}}
+        <div class="addr-grid">
+          {{range $a := .Addresses}}
+            <article class="addr-card {{if $a.IsDefault}}addr-card--default{{end}}">
+              {{if $a.IsDefault}}<span class="addr-card__badge">default</span>{{end}}
+              <address class="order__address">
+                {{$a.Name}}<br>
+                {{$a.Street1}}<br>
+                {{with $a.Street2}}{{.}}<br>{{end}}
+                {{$a.City}}, {{$a.Zip}}<br>
+                {{$a.Country}}
+              </address>
+              <div class="addr-card__actions">
+                <a href="/account/addresses/{{$a.ID}}/edit">edit</a>
+                {{if not $a.IsDefault}}
+                  <form method="post" action="/account/addresses/{{$a.ID}}/default"><button type="submit" class="linkbtn">make default</button></form>
+                {{end}}
+                <form method="post" action="/account/addresses/{{$a.ID}}/delete"><button type="submit" class="linkbtn linkbtn--danger">delete</button></form>
+              </div>
+            </article>
+          {{end}}
+        </div>
+      {{else}}
+        <p class="muted">no saved addresses yet.</p>
+      {{end}}
+
+      <section class="addr-add">
+        <h3 class="account-card__title">add an address</h3>
+        <form class="form" method="post" action="/account/addresses">
+          <div class="field"><label for="a-name">full name</label><input id="a-name" name="name" required></div>
+          <div class="field"><label for="a-street1">street</label><input id="a-street1" name="street1" required></div>
+          <div class="field"><label for="a-street2">street (line 2)</label><input id="a-street2" name="street2"></div>
+          <div class="field"><label for="a-city">city</label><input id="a-city" name="city" required></div>
+          <div class="field"><label for="a-zip">zip code</label><input id="a-zip" name="zip" required></div>
+          <div class="field"><label for="a-country">country</label><input id="a-country" name="country" required></div>
+          <button type="submit" class="btn">save address</button>
+        </form>
+      </section>
+    </div>
+  </div>
+{{end}}

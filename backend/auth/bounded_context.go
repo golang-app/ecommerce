@@ -17,7 +17,8 @@ type appService interface {
 	CreateNewCustomer(ctx context.Context, email, password string) error
 	Login(ctx context.Context, username string, password string) (*domain.Session, error)
 	Logout(ctx context.Context, sesionID string) error
-  FindByToken(ctx context.Context, sessToken string) (*domain.Session, error)
+	FindByToken(ctx context.Context, sessToken string) (*domain.Session, error)
+	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 }
 
 func New(db *sql.DB) (application.BoundedContext, appService) {

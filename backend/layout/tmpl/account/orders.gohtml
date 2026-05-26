@@ -1,0 +1,36 @@
+{{define "main"}}
+  <h1 class="page-title">account</h1>
+  <div class="account">
+    <aside class="account__side">{{template "account-nav" .}}</aside>
+    <div class="account__content">
+      <h2 class="account-card__title">orders</h2>
+      {{if .Orders}}
+        <table class="cart-table orders-list">
+          <thead>
+            <tr>
+              <th>order</th>
+              <th>placed</th>
+              <th>status</th>
+              <th class="col-total">total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range $order := .Orders}}
+              <tr>
+                <td>
+                  <a href="/order/{{$order.ID}}" class="order-row__id">{{$order.ID}}</a>
+                  <span class="muted order-row__count"> &middot; {{len $order.Items}} item{{if ne (len $order.Items) 1}}s{{end}}</span>
+                </td>
+                <td class="muted">{{$order.PlacedAt.Format "Jan 2, 2006"}}</td>
+                <td><span class="order-status order-status--{{$order.Status}}">{{$order.Status}}</span></td>
+                <td class="col-total">{{$order.TotalDisplay}} {{$order.TotalCurrency}}</td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      {{else}}
+        <p class="cart-empty">no orders yet. <a href="/">browse products</a></p>
+      {{end}}
+    </div>
+  </div>
+{{end}}

@@ -9,6 +9,7 @@ import (
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
 	"github.com/sirupsen/logrus"
 )
 
@@ -27,6 +28,17 @@ type authService interface {
 	Logout(ctx context.Context, seesionID string) error
 	CreateNewCustomer(ctx context.Context, email, password string) error
 	FindByToken(ctx context.Context, sessToken string) (*authDomain.Session, error)
+	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
+}
+
+type shippingService interface {
+	List(ctx context.Context, customerID string) ([]shipDomain.Address, error)
+	Get(ctx context.Context, customerID, id string) (shipDomain.Address, error)
+	Add(ctx context.Context, customerID, name, street1, street2, city, zip, country string) error
+	Edit(ctx context.Context, customerID, id, name, street1, street2, city, zip, country string) error
+	Remove(ctx context.Context, customerID, id string) error
+	SetDefault(ctx context.Context, customerID, id string) error
+	Default(ctx context.Context, customerID string) (shipDomain.Address, bool, error)
 }
 
 type checkoutService interface {
@@ -35,13 +47,14 @@ type checkoutService interface {
 	ListByCustomer(ctx context.Context, customerID string) ([]checkoutDomain.Order, error)
 }
 
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutService) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutService, shipSrv shippingService) application.BoundedContext {
 	return &boundedContext{
 		handler: httpHandler{
 			cartSrv:     cartSrv,
 			catalogSrv:  catalogSrv,
 			authSrv:     authSrv,
 			checkoutSrv: checkoutSrv,
+			shipSrv:     shipSrv,
 		},
 		logger: logger,
 	}
