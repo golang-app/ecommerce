@@ -1,6 +1,6 @@
 # go-ecommerce
 
-GoCommerce is an e-commerce application written in Go and ReactJS. The goal of this project is to show good practices and examples of some domain or technical decisions.
+GoCommerce is an e-commerce application written in Go and HTMX. The goal of this project is to show good practices and examples of some domain or technical decisions.
 
 The whole application is split into a few major parts:
 
