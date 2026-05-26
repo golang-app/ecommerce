@@ -10,10 +10,54 @@
     <div class="field">
       <label for="register-password">password</label>
       <input id="register-password" type="password" name="password" autocomplete="new-password" required>
+      <div class="pw-meter" data-score="" aria-hidden="true">
+        <div class="pw-meter__bars">
+          <span></span><span></span><span></span><span></span>
+        </div>
+        <p class="pw-meter__label muted"></p>
+      </div>
     </div>
 
     <button type="submit" class="btn btn--block">create account</button>
 
     <p class="form__aside">already have an account? <a href="/auth/login">sign in</a></p>
   </form>
+
+  <!--
+    Password strength is estimated client-side with zxcvbn-ts. It must run in
+    the browser: sending the password to the server on every keystroke (e.g.
+    via HTMX) would leak it into logs and add latency. This is the one place
+    in the app where JS, not HTMX, is the right tool.
+  -->
+  <script type="module">
+    import { zxcvbnOptions, zxcvbn } from 'https://esm.sh/@zxcvbn-ts/core@3';
+    import * as common from 'https://esm.sh/@zxcvbn-ts/language-common@3';
+    import * as en from 'https://esm.sh/@zxcvbn-ts/language-en@3';
+
+    zxcvbnOptions.setOptions({
+      dictionary: { ...common.dictionary, ...en.dictionary },
+      graphs: common.adjacencyGraphs,
+      translations: en.translations,
+    });
+
+    const input = document.getElementById('register-password');
+    const meter = document.querySelector('.pw-meter');
+    const bars = meter.querySelectorAll('.pw-meter__bars span');
+    const label = meter.querySelector('.pw-meter__label');
+    const words = ['too weak', 'weak', 'fair', 'good', 'strong'];
+
+    input.addEventListener('input', () => {
+      const value = input.value;
+      if (!value) {
+        meter.dataset.score = '';
+        bars.forEach((b) => { b.dataset.on = ''; });
+        label.textContent = '';
+        return;
+      }
+      const { score, feedback } = zxcvbn(value);
+      meter.dataset.score = String(score);
+      bars.forEach((b, i) => { b.dataset.on = i < score ? '1' : ''; });
+      label.textContent = words[score] + (feedback.warning ? ' — ' + feedback.warning : '');
+    });
+  </script>
 {{end}}
