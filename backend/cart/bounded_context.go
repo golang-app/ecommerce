@@ -15,7 +15,7 @@ import (
 )
 
 type productStorage interface {
-	Find(ctx context.Context, id string) (productcatalog.Product, error)
+	FindVariant(ctx context.Context, variantID string) (productcatalog.Product, productcatalog.Variant, error)
 }
 
 func New(db *sql.DB, logger logrus.FieldLogger, pc productStorage) (application.BoundedContext, app.CartService) {
@@ -34,8 +34,12 @@ type transformProductCatalog struct {
 	pc productStorage
 }
 
-func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (domain.Product, error) {
-	p, err := tpc.pc.Find(ctx, productID)
+// Find resolves a variant id into the cart's notion of a product. A variant
+// is the purchasable unit: the cart line's id is the variant id, its name is
+// the product name plus the variant label (e.g. "Ceramic Mug — Red / L"), and
+// its price is the variant's price.
+func (tpc transformProductCatalog) Find(ctx context.Context, variantID string) (domain.Product, error) {
+	p, v, err := tpc.pc.FindVariant(ctx, variantID)
 
 	if errors.Is(err, productcatalog.ErrProductNotFound) {
 		return domain.Product{}, domain.ErrProductNotFound
@@ -45,12 +49,17 @@ func (tpc transformProductCatalog) Find(ctx context.Context, productID string) (
 		return domain.Product{}, err
 	}
 
-	cur, err := domain.NewCurrency(string(p.Price().Currency()))
+	cur, err := domain.NewCurrency(string(v.Price().Currency()))
 	if err != nil {
 		return domain.Product{}, fmt.Errorf("cart: invalid currency from product catalog: %w", err)
 	}
 
-	return domain.NewProduct(string(p.ID()), p.Name(), p.Price().Amount(), cur), nil
+	name := p.Name()
+	if label := v.Label(p.OptionTypes()); label != "" {
+		name = name + " — " + label
+	}
+
+	return domain.NewProduct(v.ID(), name, v.Price().Amount(), cur), nil
 }
 
 type boundedContext struct {

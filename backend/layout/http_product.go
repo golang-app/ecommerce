@@ -63,8 +63,46 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := map[string]any{
-		"Product": product,
+	// Resolve the initially-selected variant: the combination formed by the
+	// first value of each option type (which is what the selects default to).
+	selected := map[string]string{}
+	for _, ot := range product.OptionTypes() {
+		if len(ot.Values()) > 0 {
+			selected[ot.Name()] = ot.Values()[0]
+		}
 	}
-	handler.renderTemplate(w, r, "productCatalog/show", resp)
+	variant := product.DefaultVariant()
+	if product.HasOptions() {
+		if v, ok := product.ResolveVariant(selected); ok {
+			variant = v
+		}
+	}
+
+	handler.renderTemplate(w, r, "productCatalog/show", map[string]any{
+		"Product": product,
+		"Variant": variant,
+	})
+}
+
+// ProductVariant resolves the option selection (query params) to a variant
+// and returns the variant box partial (price + add-to-cart). Driven by the
+// option selects via HTMX.
+func (handler httpHandler) ProductVariant(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["productID"]
+	product, err := handler.catalogSrv.Find(r.Context(), id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	selected := map[string]string{}
+	for _, ot := range product.OptionTypes() {
+		selected[ot.Name()] = r.URL.Query().Get(ot.Name())
+	}
+	variant, _ := product.ResolveVariant(selected)
+
+	ts := template.Must(template.New("").ParseFiles("./layout/tmpl/partials/variant-box.gohtml"))
+	if err := ts.ExecuteTemplate(w, "variant-box", map[string]any{"Variant": variant}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
 }

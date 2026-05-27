@@ -240,6 +240,25 @@ main {
   color: var(--fg-muted);
 }
 
+/* ---------- variant selector ---------- */
+.variant-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: 18rem;
+}
+.variant-form select {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  padding: var(--space-1) 0;
+  font-size: var(--step-1);
+  color: var(--fg);
+  outline: none;
+}
+.variant-form select:focus { border-bottom-color: var(--fg); }
+.variant-box { display: flex; flex-direction: column; gap: var(--space-2); }
+
 /* ---------- buttons ---------- */
 .btn {
   display: inline-flex;

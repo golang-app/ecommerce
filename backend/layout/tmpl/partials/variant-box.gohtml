@@ -1,0 +1,15 @@
+{{define "variant-box"}}
+<div id="variant-box" class="variant-box">
+  {{if .Variant.IsZero}}
+    <p class="product__price muted">that combination isn't available</p>
+  {{else}}
+    <p class="product__price">{{.Variant.Price.Display}} {{.Variant.Price.Currency}}</p>
+    <button class="btn"
+            hx-post="/cart/{{.Variant.ID}}"
+            hx-swap="none">
+      add to cart
+      <span class="loading htmx-indicator" aria-hidden="true"></span>
+    </button>
+  {{end}}
+</div>
+{{end}}

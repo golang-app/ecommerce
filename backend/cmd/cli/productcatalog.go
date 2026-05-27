@@ -4,11 +4,13 @@ import (
 	"context"
 	"log"
 
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/spf13/cobra"
 )
 
 type productCatalog interface {
 	Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
+	AddVariantProduct(ctx context.Context, id, name, desc, currency, thumbnail string, optionTypes []productcatalog.OptionTypeInput, variants []productcatalog.VariantInput) error
 }
 
 func newProductCatalogCmd(pc productCatalog) *cobra.Command {
