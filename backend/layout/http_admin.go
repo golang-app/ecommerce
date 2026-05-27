@@ -61,7 +61,7 @@ func (handler httpHandler) AdminDashboard(w http.ResponseWriter, r *http.Request
 		orders = nil
 	}
 
-	handler.renderTemplate(w, r, "admin/dashboard", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/dashboard", map[string]any{
 		"Active":        "dashboard",
 		"Email":         email,
 		"ProductCount":  len(products),

@@ -1,11 +1,7 @@
 {{define "main"}}
-  <h1 class="page-title">admin</h1>
-  <div class="admin">
-    <aside class="admin__side">{{template "admin-nav" .}}</aside>
-    <div class="admin__content">
-      <p class="crumbs"><a href="/admin/orders">orders</a> / order</p>
+  <p class="crumbs"><a href="/admin/orders">orders</a> / order</p>
 
-      <article class="order">
+  <article class="order">
         <header class="order__header">
           <h2 class="account-card__title">order <span class="order__id">{{.Order.ID}}</span></h2>
           <p class="order__subtitle muted">
@@ -85,8 +81,6 @@
               <button type="submit" class="linkbtn linkbtn--danger">cancel order</button>
             </form>
           {{end}}
-        </div>
-      </article>
     </div>
-  </div>
+  </article>
 {{end}}

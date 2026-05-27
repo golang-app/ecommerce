@@ -20,7 +20,7 @@ func (handler httpHandler) AdminOrders(w http.ResponseWriter, r *http.Request) {
 		https.InternalError(w, "internal-error", err.Error())
 		return
 	}
-	handler.renderTemplate(w, r, "admin/orders", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/orders", map[string]any{
 		"Active": "orders",
 		"Email":  email,
 		"Orders": orders,
@@ -44,7 +44,7 @@ func (handler httpHandler) AdminOrderDetail(w http.ResponseWriter, r *http.Reque
 		https.InternalError(w, "internal-error", err.Error())
 		return
 	}
-	handler.renderTemplate(w, r, "admin/order_detail", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/order_detail", map[string]any{
 		"Active":    "orders",
 		"Email":     email,
 		"Order":     order,

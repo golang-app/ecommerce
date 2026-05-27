@@ -39,7 +39,7 @@ func (handler httpHandler) AdminProducts(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		products = nil
 	}
-	handler.renderTemplate(w, r, "admin/products", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/products", map[string]any{
 		"Active":   "products",
 		"Email":    email,
 		"Products": products,
@@ -111,7 +111,7 @@ func (handler httpHandler) AdminEditProductForm(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	handler.renderTemplate(w, r, "admin/product_edit", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/product_edit", map[string]any{
 		"Active":     "products",
 		"Email":      email,
 		"Product":    product,

@@ -1,56 +1,50 @@
 {{define "main"}}
-  <h1 class="page-title">admin</h1>
-  <div class="admin">
-    <aside class="admin__side">{{template "admin-nav" .}}</aside>
-    <div class="admin__content">
-      <h2 class="account-card__title">products</h2>
+  <h2 class="account-card__title">products</h2>
 
-      {{if .Products}}
-        <table class="admin-table">
-          <thead>
-            <tr><th>name</th><th>price</th><th>variants</th><th>stock</th><th>categories</th><th></th></tr>
-          </thead>
-          <tbody>
-            {{range $p := .Products}}
-              <tr>
-                <td>{{$p.Name}}<br><code>{{$p.ID}}</code></td>
-                <td>{{$p.Price.Currency}} {{$p.Price.Display}}</td>
-                <td>{{len $p.Variants}}</td>
-                <td>
-                  {{$total := 0}}
-                  {{range $v := $p.Variants}}{{$total = add $total $v.Stock}}{{end}}
-                  {{$total}}
-                </td>
-                <td>
-                  {{range $i, $c := $p.Categories}}{{if $i}}, {{end}}{{$c.Name}}{{else}}<span class="muted">&mdash;</span>{{end}}
-                </td>
-                <td class="admin-table__actions">
-                  <a href="/admin/products/{{$p.ID}}/edit">edit</a>
-                  <form method="post" action="/admin/products/{{$p.ID}}/delete"
-                        onsubmit="return confirm('Delete this product? Its variants, category and attribute links will be removed.');">
-                    <button type="submit" class="linkbtn linkbtn--danger">delete</button>
-                  </form>
-                </td>
-              </tr>
-            {{end}}
-          </tbody>
-        </table>
-      {{else}}
-        <p class="muted">no products yet.</p>
-      {{end}}
+  {{if .Products}}
+    <table class="admin-table">
+      <thead>
+        <tr><th>name</th><th>price</th><th>variants</th><th>stock</th><th>categories</th><th></th></tr>
+      </thead>
+      <tbody>
+        {{range $p := .Products}}
+          <tr>
+            <td>{{$p.Name}}<br><code>{{$p.ID}}</code></td>
+            <td>{{$p.Price.Currency}} {{$p.Price.Display}}</td>
+            <td>{{len $p.Variants}}</td>
+            <td>
+              {{$total := 0}}
+              {{range $v := $p.Variants}}{{$total = add $total $v.Stock}}{{end}}
+              {{$total}}
+            </td>
+            <td>
+              {{range $i, $c := $p.Categories}}{{if $i}}, {{end}}{{$c.Name}}{{else}}<span class="muted">&mdash;</span>{{end}}
+            </td>
+            <td class="admin-table__actions">
+              <a href="/admin/products/{{$p.ID}}/edit">edit</a>
+              <form method="post" action="/admin/products/{{$p.ID}}/delete"
+                    onsubmit="return confirm('Delete this product? Its variants, category and attribute links will be removed.');">
+                <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no products yet.</p>
+  {{end}}
 
-      <section class="admin-form">
-        <h3 class="account-card__title">add a product</h3>
-        <form class="form" method="post" action="/admin/products">
-          <div class="field"><label for="p-id">id (slug)</label><input id="p-id" name="id" required placeholder="lowercase-with-hyphens"></div>
-          <div class="field"><label for="p-name">name</label><input id="p-name" name="name" required></div>
-          <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required></textarea></div>
-          <div class="field"><label for="p-price">price (major units, e.g. 9.00)</label><input id="p-price" name="price" required placeholder="9.00"></div>
-          <div class="field"><label for="p-currency">currency</label><input id="p-currency" name="currency" value="USD"></div>
-          <div class="field"><label for="p-thumbnail">thumbnail URL</label><input id="p-thumbnail" name="thumbnail"></div>
-          <button type="submit" class="btn">create product</button>
-        </form>
-      </section>
-    </div>
-  </div>
+  <section class="admin-form">
+    <h3 class="account-card__title">add a product</h3>
+    <form class="form" method="post" action="/admin/products">
+      <div class="field"><label for="p-id">id (slug)</label><input id="p-id" name="id" required placeholder="lowercase-with-hyphens"></div>
+      <div class="field"><label for="p-name">name</label><input id="p-name" name="name" required></div>
+      <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required></textarea></div>
+      <div class="field"><label for="p-price">price (major units, e.g. 9.00)</label><input id="p-price" name="price" required placeholder="9.00"></div>
+      <div class="field"><label for="p-currency">currency</label><input id="p-currency" name="currency" value="USD"></div>
+      <div class="field"><label for="p-thumbnail">thumbnail URL</label><input id="p-thumbnail" name="thumbnail"></div>
+      <button type="submit" class="btn">create product</button>
+    </form>
+  </section>
 {{end}}

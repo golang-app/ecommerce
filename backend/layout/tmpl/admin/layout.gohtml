@@ -1,0 +1,50 @@
+{{define "adminbase"}}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Store Admin</title>
+
+    <link rel="stylesheet" href="/static/admin.css">
+    <script src="https://unpkg.com/htmx.org@1.9.5"></script>
+  </head>
+  <body class="admin-body">
+
+    <aside class="admin-sidebar">
+      <div class="admin-sidebar__brand">
+        <span class="admin-sidebar__brand-mark">◆</span>
+        <span class="admin-sidebar__brand-name">Store Admin</span>
+      </div>
+
+      {{template "admin-nav" .}}
+
+      <div class="admin-sidebar__foot">
+        <a href="/" class="admin-sidebar__foot-link">&#8617; View store</a>
+        <a href="/auth/logout" class="admin-sidebar__foot-link">Log out</a>
+      </div>
+    </aside>
+
+    <div class="admin-main">
+      <header class="admin-topbar">
+        <h1 class="admin-topbar__heading">{{with .Active}}{{.}}{{else}}admin{{end}}</h1>
+        {{with .AdminEmail}}<span class="admin-topbar__user">{{.}}</span>{{end}}
+      </header>
+
+      <div class="admin-flash">
+        {{ range .FlashInfo }}
+          <p class="flash flash--info">{{ . }}</p>
+        {{ end }}
+        {{ range .FlashError }}
+          <p class="flash flash--error">{{ . }}</p>
+        {{ end }}
+      </div>
+
+      <main class="admin-content">
+        {{template "main" .}}
+      </main>
+    </div>
+
+  </body>
+</html>
+{{end}}

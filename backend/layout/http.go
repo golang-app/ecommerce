@@ -185,6 +185,48 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// renderAdminTemplate mirrors renderTemplate but renders inside the dedicated
+// admin shell (tmpl/admin/layout.gohtml, which defines "adminbase") instead of
+// the storefront base. It still pulls in the shared partials glob (where the
+// admin-nav partial lives) and the page template (which defines "main"), but it
+// does not need AuthMenuItem/LoggedIn/IsAdmin — the admin shell exposes the
+// signed-in admin via data["AdminEmail"].
+func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
+	if data == nil {
+		data = make(map[string]any)
+	}
+
+	files := []string{
+		"./layout/tmpl/admin/layout.gohtml",
+		"./layout/tmpl/" + templateName + ".gohtml",
+	}
+	partials, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
+	files = append(files, partials...)
+
+	var ts = template.Must(template.New("").Funcs(template.FuncMap{
+		"html": func(value interface{}) template.HTML {
+			return template.HTML(fmt.Sprint(value))
+		},
+		"add": func(a, b int) int { return a + b },
+	}).ParseFiles(files...))
+
+	session, _ := store.Get(r, "ecommerce")
+	data["FlashInfo"] = session.Flashes()
+	data["FlashError"] = session.Flashes("error")
+	data["AdminEmail"] = handler.currentCustomerID(r)
+	err := session.Save(r, w)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+
+	err = ts.ExecuteTemplate(w, "adminbase", data)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 func renderPartial(w http.ResponseWriter, r *http.Request, h http.HandlerFunc) string {
 	buf := buffer{buf: bytes.NewBufferString("")}
 	h.ServeHTTP(http.ResponseWriter(&buf), r)

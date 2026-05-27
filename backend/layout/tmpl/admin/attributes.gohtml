@@ -1,56 +1,50 @@
 {{define "main"}}
-  <h1 class="page-title">admin</h1>
-  <div class="admin">
-    <aside class="admin__side">{{template "admin-nav" .}}</aside>
-    <div class="admin__content">
-      <h2 class="account-card__title">attribute types</h2>
+  <h2 class="account-card__title">attribute types</h2>
 
-      {{if .Attributes}}
-        <table class="admin-table">
-          <thead>
-            <tr><th>name</th><th>unit</th><th>kind</th><th>filterable</th><th>position</th><th></th></tr>
-          </thead>
-          <tbody>
-            {{range $t := .Attributes}}
-              <tr>
-                <td>{{$t.Name}}</td>
-                <td>{{with $t.Unit}}{{.}}{{else}}&mdash;{{end}}</td>
-                <td>{{$t.Kind}}</td>
-                <td>{{if $t.Filterable}}yes{{else}}no{{end}}</td>
-                <td>{{$t.Position}}</td>
-                <td class="admin-table__actions">
-                  <a href="/admin/attributes/{{$t.ID}}/edit">edit</a>
-                  <form method="post" action="/admin/attributes/{{$t.ID}}/delete"
-                        onsubmit="return confirm('Delete this attribute type? Its product values will be removed.');">
-                    <button type="submit" class="linkbtn linkbtn--danger">delete</button>
-                  </form>
-                </td>
-              </tr>
-            {{end}}
-          </tbody>
-        </table>
-      {{else}}
-        <p class="muted">no attribute types yet.</p>
-      {{end}}
+  {{if .Attributes}}
+    <table class="admin-table">
+      <thead>
+        <tr><th>name</th><th>unit</th><th>kind</th><th>filterable</th><th>position</th><th></th></tr>
+      </thead>
+      <tbody>
+        {{range $t := .Attributes}}
+          <tr>
+            <td>{{$t.Name}}</td>
+            <td>{{with $t.Unit}}{{.}}{{else}}&mdash;{{end}}</td>
+            <td>{{$t.Kind}}</td>
+            <td>{{if $t.Filterable}}yes{{else}}no{{end}}</td>
+            <td>{{$t.Position}}</td>
+            <td class="admin-table__actions">
+              <a href="/admin/attributes/{{$t.ID}}/edit">edit</a>
+              <form method="post" action="/admin/attributes/{{$t.ID}}/delete"
+                    onsubmit="return confirm('Delete this attribute type? Its product values will be removed.');">
+                <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no attribute types yet.</p>
+  {{end}}
 
-      <section class="admin-form">
-        <h3 class="account-card__title">add an attribute type</h3>
-        <form class="form" method="post" action="/admin/attributes">
-          <div class="field"><label for="a-name">name</label><input id="a-name" name="name" required></div>
-          <div class="field"><label for="a-unit">unit (optional)</label><input id="a-unit" name="unit"></div>
-          <div class="field">
-            <label for="a-kind">kind</label>
-            <select id="a-kind" name="kind">
-              <option value="numeric">numeric</option>
-              <option value="enum">enum</option>
-            </select>
-          </div>
-          <div class="field field--check">
-            <label><input type="checkbox" name="filterable" value="1"> filterable</label>
-          </div>
-          <button type="submit" class="btn">create attribute type</button>
-        </form>
-      </section>
-    </div>
-  </div>
+  <section class="admin-form">
+    <h3 class="account-card__title">add an attribute type</h3>
+    <form class="form" method="post" action="/admin/attributes">
+      <div class="field"><label for="a-name">name</label><input id="a-name" name="name" required></div>
+      <div class="field"><label for="a-unit">unit (optional)</label><input id="a-unit" name="unit"></div>
+      <div class="field">
+        <label for="a-kind">kind</label>
+        <select id="a-kind" name="kind">
+          <option value="numeric">numeric</option>
+          <option value="enum">enum</option>
+        </select>
+      </div>
+      <div class="field field--check">
+        <label><input type="checkbox" name="filterable" value="1"> filterable</label>
+      </div>
+      <button type="submit" class="btn">create attribute type</button>
+    </form>
+  </section>
 {{end}}

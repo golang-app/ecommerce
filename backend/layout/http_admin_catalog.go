@@ -18,7 +18,7 @@ func (handler httpHandler) AdminCategories(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		categories = nil
 	}
-	handler.renderTemplate(w, r, "admin/categories", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/categories", map[string]any{
 		"Active":     "categories",
 		"Email":      email,
 		"Categories": categories,
@@ -64,7 +64,7 @@ func (handler httpHandler) AdminEditCategoryForm(w http.ResponseWriter, r *http.
 		http.Redirect(w, r, "/admin/categories", http.StatusSeeOther)
 		return
 	}
-	handler.renderTemplate(w, r, "admin/category_edit", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/category_edit", map[string]any{
 		"Active":   "categories",
 		"Email":    email,
 		"Category": *found,
@@ -113,7 +113,7 @@ func (handler httpHandler) AdminAttributes(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		types = nil
 	}
-	handler.renderTemplate(w, r, "admin/attributes", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/attributes", map[string]any{
 		"Active":     "attributes",
 		"Email":      email,
 		"Attributes": types,
@@ -161,7 +161,7 @@ func (handler httpHandler) AdminEditAttributeForm(w http.ResponseWriter, r *http
 		http.Redirect(w, r, "/admin/attributes", http.StatusSeeOther)
 		return
 	}
-	handler.renderTemplate(w, r, "admin/attribute_edit", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/attribute_edit", map[string]any{
 		"Active":    "attributes",
 		"Email":     email,
 		"Attribute": *found,
