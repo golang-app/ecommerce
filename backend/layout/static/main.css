@@ -362,9 +362,11 @@ main {
   border: 1px solid currentColor;
   color: var(--fg-muted);
 }
-.order-status--paid    { color: var(--fg); }
-.order-status--failed  { color: var(--danger); }
-.order-status--pending { color: var(--info); }
+.order-status--paid      { color: var(--fg); }
+.order-status--failed    { color: var(--danger); }
+.order-status--pending   { color: var(--info); }
+.order-status--cancelled { color: var(--danger); }
+.order__actions { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
 
 /* ---------- order confirmation ---------- */
 .order {

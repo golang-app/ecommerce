@@ -46,3 +46,13 @@ type PaymentFailed struct {
 
 func (e PaymentFailed) EventType() string     { return "PaymentFailed" }
 func (e PaymentFailed) OccurredAt() time.Time { return e.At }
+
+// OrderCancelled is emitted when a placed order is cancelled by the customer.
+type OrderCancelled struct {
+	OrderID string
+	Reason  string
+	At      time.Time
+}
+
+func (e OrderCancelled) EventType() string     { return "OrderCancelled" }
+func (e OrderCancelled) OccurredAt() time.Time { return e.At }

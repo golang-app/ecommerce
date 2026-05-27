@@ -9,14 +9,16 @@ import (
 type Status string
 
 const (
-	StatusPending Status = "pending"
-	StatusPaid    Status = "paid"
-	StatusFailed  Status = "failed"
+	StatusPending   Status = "pending"
+	StatusPaid      Status = "paid"
+	StatusFailed    Status = "failed"
+	StatusCancelled Status = "cancelled"
 )
 
 var (
-	ErrOrderNotFound = errors.New("order not found")
-	ErrCartEmpty     = errors.New("cannot place order from an empty cart")
+	ErrOrderNotFound       = errors.New("order not found")
+	ErrCartEmpty           = errors.New("cannot place order from an empty cart")
+	ErrOrderNotCancellable = errors.New("order cannot be cancelled")
 )
 
 // Order is a placed (or attempted) checkout. Once created, line items are a
@@ -186,8 +188,20 @@ func (o *Order) apply(e Event) {
 		o.status = StatusPaid
 	case PaymentFailed:
 		o.status = StatusFailed
+	case OrderCancelled:
+		o.status = StatusCancelled
 	}
 	o.version++
+}
+
+// Cancel cancels a paid order. Only paid orders can be cancelled — pending,
+// failed and already-cancelled orders are rejected with ErrOrderNotCancellable.
+func (o *Order) Cancel(reason string, at time.Time) error {
+	if o.status != StatusPaid {
+		return ErrOrderNotCancellable
+	}
+	o.raise(OrderCancelled{OrderID: o.id, Reason: reason, At: at})
+	return nil
 }
 
 // PendingEvents returns events raised but not yet persisted.

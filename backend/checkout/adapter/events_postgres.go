@@ -60,6 +60,18 @@ func (p Postgres) LoadEvents(ctx context.Context, aggregateID string) ([]domain.
 	return events, rows.Err()
 }
 
+// Load rebuilds an order aggregate from its event history (write side).
+func (p Postgres) Load(ctx context.Context, id string) (*domain.Order, error) {
+	events, err := p.LoadEvents(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(events) == 0 {
+		return nil, domain.ErrOrderNotFound
+	}
+	return domain.RehydrateOrder(events), nil
+}
+
 // projectEventTx updates the read model (checkout_order / _item) for a single
 // event, inside the same transaction the event was appended in — so the read
 // model is always consistent with the event log.
@@ -71,6 +83,8 @@ func projectEventTx(ctx context.Context, tx *sql.Tx, e domain.Event) error {
 		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusPaid))
 	case domain.PaymentFailed:
 		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusFailed))
+	case domain.OrderCancelled:
+		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusCancelled))
 	default:
 		return fmt.Errorf("no projection for event %s", e.EventType())
 	}

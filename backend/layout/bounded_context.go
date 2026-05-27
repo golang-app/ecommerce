@@ -45,6 +45,7 @@ type checkoutService interface {
 	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod) (checkoutDomain.Order, error)
 	Find(ctx context.Context, id string) (checkoutDomain.Order, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]checkoutDomain.Order, error)
+	Cancel(ctx context.Context, orderID, customerID string) error
 }
 
 func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutService, shipSrv shippingService) application.BoundedContext {
