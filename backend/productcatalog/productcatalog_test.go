@@ -17,7 +17,8 @@ type productStorage interface {
 	FindVariant(ctx context.Context, variantID string) (productcatalog.Product, productcatalog.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot productcatalog.OptionType) error
 	AddVariant(ctx context.Context, productID string, position int, v productcatalog.Variant) error
-	ReduceStock(ctx context.Context, variantID string, qty int) error
+	Reserve(ctx context.Context, quantities map[string]int) error
+	Release(ctx context.Context, quantities map[string]int) error
 }
 
 var storage productStorage

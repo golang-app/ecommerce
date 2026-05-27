@@ -37,10 +37,13 @@ type PaymentProcessor interface {
 	Charge(ctx context.Context, amount int64, currency, cardNumber string) error
 }
 
-// StockReducer decrements catalogue stock for an ordered variant. Implemented
-// by the product catalogue; checkout calls it once an order is paid.
-type StockReducer interface {
-	ReduceStock(ctx context.Context, variantID string, qty int) error
+// StockReserver atomically reserves (decrements) catalogue stock for the
+// ordered variants, all-or-nothing, returning a non-nil error if any variant
+// is short. Release returns reserved stock if the order can't complete.
+// Implemented by the product catalogue.
+type StockReserver interface {
+	Reserve(ctx context.Context, quantities map[string]int) error
+	Release(ctx context.Context, quantities map[string]int) error
 }
 
 // IDGenerator returns a fresh order ID. Injected so tests can substitute a
@@ -52,7 +55,7 @@ type CheckoutService struct {
 	cartClr CartClearer
 	storage OrderStorage
 	payment PaymentProcessor
-	stock   StockReducer
+	stock   StockReserver
 	newID   IDGenerator
 	now     func() time.Time
 }
@@ -62,7 +65,7 @@ func NewCheckoutService(
 	cartClr CartClearer,
 	storage OrderStorage,
 	payment PaymentProcessor,
-	stock StockReducer,
+	stock StockReserver,
 	newID IDGenerator,
 ) CheckoutService {
 	return CheckoutService{
@@ -97,6 +100,7 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	}
 
 	lines := make([]domain.Line, 0, len(cart.Items()))
+	quantities := map[string]int{}
 	for _, item := range cart.Items() {
 		lines = append(lines, domain.NewLine(
 			item.Product().ID(),
@@ -105,14 +109,26 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 			item.Product().Price().Amount(),
 			string(item.Product().Price().Currency()),
 		))
+		quantities[item.Product().ID()] += item.Quantity()
+	}
+
+	// Reserve stock up front, atomically. If anything is short the order is
+	// not placed at all — this is the guard against overselling under
+	// concurrent checkouts.
+	if err := s.stock.Reserve(ctx, quantities); err != nil {
+		return domain.Order{}, fmt.Errorf("reserve stock: %w", err)
 	}
 
 	order, err := domain.PlaceOrder(s.newID(), sessID, customerID, shipTo, shipMethod, payMethod, lines, s.now())
 	if err != nil {
+		_ = s.stock.Release(ctx, quantities)
 		return domain.Order{}, err
 	}
 
 	if chargeErr := s.payment.Charge(ctx, order.TotalAmount(), order.TotalCurrency(), cardNumber); chargeErr != nil {
+		// Payment failed after reserving — give the stock back, record the
+		// failed attempt, and report the decline.
+		_ = s.stock.Release(ctx, quantities)
 		order.MarkFailed(chargeErr.Error(), s.now())
 		if err := s.storage.Save(ctx, order); err != nil {
 			return domain.Order{}, fmt.Errorf("save order: %w", err)
@@ -122,14 +138,9 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 
 	order.MarkPaid(s.now())
 	if err := s.storage.Save(ctx, order); err != nil {
+		// Order couldn't be persisted; return the reservation.
+		_ = s.stock.Release(ctx, quantities)
 		return domain.Order{}, fmt.Errorf("save order: %w", err)
-	}
-
-	// Decrement catalogue stock for each purchased variant (the cart line id
-	// is the variant id). Best-effort: the order is already placed, so a
-	// stock-update failure shouldn't fail the checkout.
-	for _, item := range cart.Items() {
-		_ = s.stock.ReduceStock(ctx, item.Product().ID(), item.Quantity())
 	}
 
 	// Cart clear failure is non-fatal — the order is already placed and the

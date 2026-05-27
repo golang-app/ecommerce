@@ -16,7 +16,8 @@ type ProductStorage interface {
 	FindVariant(ctx context.Context, variantID string) (Product, Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot OptionType) error
 	AddVariant(ctx context.Context, productID string, position int, v Variant) error
-	ReduceStock(ctx context.Context, variantID string, qty int) error
+	Reserve(ctx context.Context, quantities map[string]int) error
+	Release(ctx context.Context, quantities map[string]int) error
 }
 
 func NewProductService(s ProductStorage) ProductService {
@@ -36,9 +37,16 @@ func (ps ProductService) FindVariant(ctx context.Context, variantID string) (Pro
 	return ps.storage.FindVariant(ctx, variantID)
 }
 
-// ReduceStock decrements a variant's stock (called when an order is placed).
-func (ps ProductService) ReduceStock(ctx context.Context, variantID string, qty int) error {
-	return ps.storage.ReduceStock(ctx, variantID, qty)
+// Reserve atomically decrements stock for the given variants (variant id ->
+// quantity). All-or-nothing: returns ErrInsufficientStock if any variant is
+// short, leaving stock untouched.
+func (ps ProductService) Reserve(ctx context.Context, quantities map[string]int) error {
+	return ps.storage.Reserve(ctx, quantities)
+}
+
+// Release returns previously-reserved stock (e.g. after a failed payment).
+func (ps ProductService) Release(ctx context.Context, quantities map[string]int) error {
+	return ps.storage.Release(ctx, quantities)
 }
 
 // defaultStock is given to a simple product's auto-created default variant.
