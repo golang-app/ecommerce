@@ -2,9 +2,10 @@
   <p class="crumbs"><a href="/">products</a> / {{.Product.Name}}</p>
 
   <article class="product">
-    {{if .Product.Thumbnail}}
-      <img class="product__image"
-           src="{{.Product.Thumbnail}}"
+    {{$img := .Product.Thumbnail}}{{if .Variant.Image}}{{$img = .Variant.Image}}{{end}}
+    {{if $img}}
+      <img id="product-image" class="product__image"
+           src="{{$img}}"
            alt="{{.Product.Name}}"
            width="800" height="800">
     {{end}}

@@ -61,8 +61,8 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMi
 	}
 
 	// A simple product is purchasable through a single default variant
-	// carrying its price (no options).
-	defaultVariant := NewVariant("var-"+id, id, nil, priceVO)
+	// carrying its price (no options) and the product image.
+	defaultVariant := NewVariant("var-"+id, id, thumbnail, nil, priceVO)
 	return ps.storage.AddVariant(ctx, id, 0, defaultVariant)
 }
 
@@ -76,6 +76,7 @@ type OptionTypeInput struct {
 type VariantInput struct {
 	ID      string
 	SKU     string
+	Image   string
 	Options map[string]string
 	Price   int64
 }
@@ -125,7 +126,7 @@ func (ps ProductService) AddVariantProduct(ctx context.Context, id, name, desc, 
 		if err != nil {
 			return fmt.Errorf("invalid variant price: %w", err)
 		}
-		if err = ps.storage.AddVariant(ctx, id, i, NewVariant(v.ID, v.SKU, v.Options, price)); err != nil {
+		if err = ps.storage.AddVariant(ctx, id, i, NewVariant(v.ID, v.SKU, v.Image, v.Options, price)); err != nil {
 			return err
 		}
 	}

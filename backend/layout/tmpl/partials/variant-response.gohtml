@@ -1,0 +1,6 @@
+{{define "variant-response"}}
+{{template "variant-box" .}}
+{{if .Variant.Image}}
+<img id="product-image" hx-swap-oob="true" class="product__image" src="{{.Variant.Image}}" alt="{{.ProductName}}" width="800" height="800">
+{{end}}
+{{end}}
