@@ -225,6 +225,46 @@ func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
 	return products, nil
 }
 
+// Newest returns up to limit products ordered newest-first by created_at
+// (ties broken by id), each hydrated with its catalog/classification the same
+// way All does.
+func (db postgres) Newest(ctx context.Context, limit int) ([]domain.Product, error) {
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency
+		FROM productcatalog_product
+		ORDER BY created_at DESC, id DESC
+		LIMIT $1`
+
+	rows, err := db.db.QueryContext(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("cannot query newest products: %w", err)
+	}
+
+	var base []domain.Product
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			p, err := scanProduct(rows)
+			if err != nil {
+				return
+			}
+			base = append(base, p)
+		}
+	}()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("cannot fetch newest products: %w", err)
+	}
+
+	products := make([]domain.Product, 0, len(base))
+	for _, p := range base {
+		full, err := db.withCatalog(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, full)
+	}
+	return products, nil
+}
+
 func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) {
 	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product WHERE id = $1`
 	p, err := scanProduct(db.db.QueryRowContext(ctx, q, id))

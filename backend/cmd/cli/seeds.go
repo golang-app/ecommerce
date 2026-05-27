@@ -388,6 +388,39 @@ func seedReferenceData(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+// seededProductIDsInOrder returns the seeded product ids in the order they are
+// inserted (simple products first, then variant products).
+func seededProductIDsInOrder() []string {
+	ids := make([]string, 0, len(seedProducts)+len(variantSeeds))
+	for _, p := range seedProducts {
+		ids = append(ids, p.id)
+	}
+	for _, p := range variantSeeds {
+		ids = append(ids, p.id)
+	}
+	return ids
+}
+
+// seedCreatedAt makes the catalogue ordering deterministic so "new arrivals"
+// is stable: each seeded product's created_at is set to now() minus a per-row
+// day offset. The first-seeded product gets the largest offset (oldest) and
+// the last-seeded product the smallest (newest), so admin-created products
+// (which default to now()) sort newest of all. Idempotent: re-running simply
+// resets the timestamps.
+func seedCreatedAt(ctx context.Context, db *sql.DB) error {
+	ids := seededProductIDsInOrder()
+	n := len(ids)
+	for i, id := range ids {
+		offset := n - i // first row => largest offset (oldest)
+		if _, err := db.ExecContext(ctx,
+			`UPDATE productcatalog_product SET created_at = now() - make_interval(days => $2) WHERE id = $1`,
+			id, offset); err != nil {
+			return fmt.Errorf("seed created_at for %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
 func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "seeds",
@@ -409,6 +442,10 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				if err := pc.AddVariantProduct(ctx, p.id, p.name, p.description, p.currency, p.thumbnail, p.optionTypes, p.variants); err != nil {
 					return fmt.Errorf("seed variant product %s: %w", p.id, err)
 				}
+			}
+
+			if err := seedCreatedAt(ctx, db); err != nil {
+				return err
 			}
 
 			if err := seedReferenceData(ctx, db); err != nil {

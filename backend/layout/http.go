@@ -44,7 +44,21 @@ type httpHandler struct {
 	shipSrv     shippingService
 }
 
+// HomePage renders the storefront landing page: a "new arrivals" grid of the
+// newest products plus a link through to the full shop.
 func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
+	newest, err := handler.catalogSrv.Newest(r.Context(), 8)
+	if err != nil {
+		log.Printf("cannot get newest products: %s", err)
+		newest = nil
+	}
+	handler.renderTemplate(w, r, "home", map[string]any{
+		"Newest": newest,
+	})
+}
+
+// ShopPage renders the full filterable catalog (all categories).
+func (handler httpHandler) ShopPage(w http.ResponseWriter, r *http.Request) {
 	handler.renderProductsPage(w, r, "")
 }
 
@@ -72,7 +86,7 @@ func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Req
 		facets = nil
 	}
 
-	handler.renderTemplate(w, r, "home", map[string]any{
+	handler.renderTemplate(w, r, "productCatalog/catalog", map[string]any{
 		"Categories":     categories,
 		"Facets":         facets,
 		"ActiveCategory": activeCategory,
@@ -82,6 +96,7 @@ func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Req
 func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.PathPrefix("/static/").Handler(StaticHandler())
 	r.HandleFunc("/", m.handler.HomePage)
+	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
 	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
 
 	r.HandleFunc("/cart", observability.HTTPWrap(m.handler.Cart, m.logger)).Methods("GET")
@@ -172,7 +187,14 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
 	data["LoggedIn"] = handler.currentCustomerID(r) != ""
 	data["IsAdmin"] = handler.isAdmin(r)
-	err := session.Save(r, w)
+	// NavCategories lets the storefront header list category links on every page.
+	navCategories, err := handler.catalogSrv.Categories(r.Context())
+	if err != nil {
+		log.Printf("cannot get nav categories: %s", err)
+		navCategories = nil
+	}
+	data["NavCategories"] = navCategories
+	err = session.Save(r, w)
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

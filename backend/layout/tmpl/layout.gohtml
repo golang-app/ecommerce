@@ -20,7 +20,10 @@
         <a href="/" class="brand">Ecommerce</a>
         <nav>
           <ul class="nav">
-            <li><a href="/">products</a></li>
+            <li><a href="/products">shop</a></li>
+            {{range .NavCategories}}
+              <li><a href="/category/{{.Slug}}">{{.Name}}</a></li>
+            {{end}}
             <li>
               <a href="/cart" class="cart-link">cart
                 <span id="cartBudge"

@@ -17,6 +17,7 @@ import (
 
 type catalogService interface {
 	AllProducts(ctx context.Context) ([]pcdomain.Product, error)
+	Newest(ctx context.Context, limit int) ([]pcdomain.Product, error)
 	Find(ctx context.Context, id string) (pcdomain.Product, error)
 	List(ctx context.Context, q pcapp.ProductQuery) ([]pcdomain.Product, error)
 	Categories(ctx context.Context) ([]pcdomain.Category, error)

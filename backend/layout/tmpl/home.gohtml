@@ -1,64 +1,30 @@
 {{define "main"}}
-  <h1 class="page-title">products</h1>
-
-  <div class="catalog">
-    <aside class="filter-rail">
-      <nav class="category-nav">
-        <a class="category-nav__link{{if eq .ActiveCategory ""}} is-active{{end}}" href="/">all</a>
-        {{range .Categories}}
-          <a class="category-nav__link{{if eq $.ActiveCategory .Slug}} is-active{{end}}"
-             href="/category/{{.Slug}}">{{.Name}}</a>
-        {{end}}
-      </nav>
-
-      {{if .Facets}}
-        <form class="filter-form"
-              hx-get="/api/v1/products"
-              hx-target="#product-grid"
-              hx-trigger="submit, change delay:300ms"
-              hx-push-url="false">
-          <input type="hidden" name="category" value="{{.ActiveCategory}}">
-
-          {{range .Facets}}
-            <div class="facet">
-              <h3 class="facet__title">{{.Type.Name}}{{if .Type.Unit}} <span class="muted">({{.Type.Unit}})</span>{{end}}</h3>
-              {{if .Type.IsNumeric}}
-                <div class="facet__range">
-                  <input class="facet__num" type="number" step="any"
-                         name="{{.Type.ID}}_min" placeholder="min"
-                         aria-label="{{.Type.Name}} min">
-                  <span class="facet__sep">&ndash;</span>
-                  <input class="facet__num" type="number" step="any"
-                         name="{{.Type.ID}}_max" placeholder="max"
-                         aria-label="{{.Type.Name}} max">
-                </div>
-              {{else if .Type.IsEnum}}
-                <div class="facet__values">
-                  {{$tid := .Type.ID}}
-                  {{range .Values}}
-                    <label class="facet__check">
-                      <input type="checkbox" name="{{$tid}}" value="{{.}}">
-                      <span>{{.}}</span>
-                    </label>
-                  {{end}}
-                </div>
-              {{end}}
-            </div>
-          {{end}}
-
-          <div class="filter-form__actions">
-            <button type="submit" class="btn btn--block">apply</button>
-            <a class="filter-form__clear" href="{{if .ActiveCategory}}/category/{{.ActiveCategory}}{{else}}/{{end}}">clear</a>
-          </div>
-        </form>
-      {{end}}
-    </aside>
-
-    <div id="product-grid" class="catalog__grid"
-         hx-get="/api/v1/products?category={{.ActiveCategory}}"
-         hx-trigger="load"
-         hx-swap="innerHTML">
-      <p class="muted"><span class="loading"></span> loading&hellip;</p>
-    </div>
+  <div class="home-hero">
+    <h1 class="page-title">new arrivals</h1>
+    <a class="btn home-hero__shop" href="/products">shop all</a>
   </div>
+
+  {{if .Newest}}
+    <div class="product-grid">
+      {{range .Newest}}
+        <a class="product-card" href="/product/{{.ID}}">
+          {{if .Thumbnail}}
+            <img class="product-card__image"
+                 src="{{.Thumbnail}}"
+                 alt="{{.Name}}"
+                 loading="lazy"
+                 width="800" height="800">
+          {{end}}
+          <h2 class="product-card__name">{{.Name}}</h2>
+          <p class="product-card__price">{{if .HasPriceRange}}from {{end}}{{.PriceFrom.Display}} {{.PriceFrom.Currency}}</p>
+        </a>
+      {{end}}
+    </div>
+
+    <p class="home-browse">
+      <a href="/products">browse everything &rarr;</a>
+    </p>
+  {{else}}
+    <p class="muted">no products yet. <a href="/products">browse the shop</a>.</p>
+  {{end}}
 {{end}}

@@ -14,6 +14,7 @@ type ProductService struct {
 
 type ProductStorage interface {
 	All(ctx context.Context) ([]domain.Product, error)
+	Newest(ctx context.Context, limit int) ([]domain.Product, error)
 	Add(ctx context.Context, p domain.Product) error
 	UpdateProduct(ctx context.Context, p domain.Product) error
 	DeleteProduct(ctx context.Context, id string) error
@@ -46,6 +47,18 @@ func NewProductService(s ProductStorage) ProductService {
 
 func (ps ProductService) AllProducts(ctx context.Context) ([]domain.Product, error) {
 	return ps.storage.All(ctx)
+}
+
+// defaultNewestLimit is used when Newest is called with a non-positive limit.
+const defaultNewestLimit = 8
+
+// Newest returns up to limit most-recently-created products ("new arrivals").
+// A non-positive limit falls back to defaultNewestLimit.
+func (ps ProductService) Newest(ctx context.Context, limit int) ([]domain.Product, error) {
+	if limit <= 0 {
+		limit = defaultNewestLimit
+	}
+	return ps.storage.Newest(ctx, limit)
 }
 
 func (ps ProductService) Find(ctx context.Context, id string) (domain.Product, error) {

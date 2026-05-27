@@ -13,6 +13,7 @@ import (
 
 type productStorage interface {
 	All(ctx context.Context) ([]domain.Product, error)
+	Newest(ctx context.Context, limit int) ([]domain.Product, error)
 	Add(ctx context.Context, p domain.Product) error
 	UpdateProduct(ctx context.Context, p domain.Product) error
 	DeleteProduct(ctx context.Context, id string) error

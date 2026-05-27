@@ -58,6 +58,19 @@ func (im *inMemory) All(ctx context.Context) ([]domain.Product, error) {
 	return out, nil
 }
 
+// Newest returns up to limit products in insertion order (there is no
+// created_at in the in-memory store), hydrated like All.
+func (im *inMemory) Newest(ctx context.Context, limit int) ([]domain.Product, error) {
+	if limit > len(im.products) {
+		limit = len(im.products)
+	}
+	out := make([]domain.Product, 0, limit)
+	for i := 0; i < limit; i++ {
+		out = append(out, im.hydrate(im.products[i]))
+	}
+	return out, nil
+}
+
 func (im *inMemory) Find(ctx context.Context, id string) (domain.Product, error) {
 	for _, p := range im.products {
 		if string(p.ID()) == id {
