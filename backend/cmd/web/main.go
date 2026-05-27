@@ -79,11 +79,11 @@ func main() {
 	pcBD, catalogService := productcatalog.New(db)
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
 	authBD, authService := auth.New(db)
-	checkoutBD, checkoutSrv := checkout.New(db, cartSrv, cartSrv, catalogService)
+	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, cartSrv, catalogService)
 	shipSrv := shippinginfo.New(db)
 	app.AddBoundedContext(cartBD)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, shipSrv))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv))
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)

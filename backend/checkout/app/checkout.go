@@ -28,8 +28,6 @@ type OrderStorage interface {
 	Save(ctx context.Context, order *domain.Order) error
 	// Load rebuilds the order aggregate from its event history (write side).
 	Load(ctx context.Context, id string) (*domain.Order, error)
-	Find(ctx context.Context, id string) (domain.Order, error)
-	ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error)
 }
 
 // PaymentProcessor charges a card. The fake implementation always succeeds;
@@ -182,19 +180,4 @@ func (s CheckoutService) Cancel(ctx context.Context, orderID, customerID string)
 	_ = s.stock.Release(ctx, quantities)
 
 	return nil
-}
-
-func (s CheckoutService) Find(ctx context.Context, id string) (domain.Order, error) {
-	return s.storage.Find(ctx, id)
-}
-
-// ListByCustomer returns the authenticated customer's orders newest-first.
-// Anonymous orders (placed with an empty customerID) are never returned
-// here regardless of the value passed; this is enforced by Postgres treating
-// NULL = '' as false.
-func (s CheckoutService) ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error) {
-	if customerID == "" {
-		return nil, nil
-	}
-	return s.storage.ListByCustomer(ctx, customerID)
 }

@@ -3,7 +3,7 @@ package layout
 import (
 	"net/http"
 
-	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	"github.com/gorilla/mux"
 )
@@ -34,8 +34,8 @@ func (handler httpHandler) AccountOverview(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var latest checkoutDomain.Order
-	if orders, err := handler.checkoutSrv.ListByCustomer(r.Context(), cid); err == nil && len(orders) > 0 {
+	var latest checkoutQuery.OrderSummary
+	if orders, err := handler.checkoutQry.ListByCustomer(r.Context(), cid); err == nil && len(orders) > 0 {
 		latest = orders[0]
 	}
 	def, _, _ := handler.shipSrv.Default(r.Context(), cid)
@@ -53,7 +53,7 @@ func (handler httpHandler) AccountOrders(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	orders, err := handler.checkoutSrv.ListByCustomer(r.Context(), cid)
+	orders, err := handler.checkoutQry.ListByCustomer(r.Context(), cid)
 	if err != nil {
 		https.InternalError(w, "internal-error", err.Error())
 		return

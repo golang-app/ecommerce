@@ -9,6 +9,7 @@ import (
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/adapter"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/app"
+	"github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 )
 
@@ -30,11 +31,15 @@ type StockReserver interface {
 	Release(ctx context.Context, quantities map[string]int) error
 }
 
-func New(db *sql.DB, cart CartReader, cartClr CartClearer, stock StockReserver) (application.BoundedContext, app.CheckoutService) {
+// New wires the checkout context and returns its command service (write side,
+// event-sourced) and query service (read side, projection-backed) separately,
+// keeping the CQRS split explicit at the composition root.
+func New(db *sql.DB, cart CartReader, cartClr CartClearer, stock StockReserver) (application.BoundedContext, app.CheckoutService, query.Service) {
 	storage := adapter.NewPostgres(db)
 	payment := adapter.NewFakePayment()
-	srv := app.NewCheckoutService(cart, cartClr, storage, payment, stock, newOrderID)
-	return &boundedContext{}, srv
+	cmd := app.NewCheckoutService(cart, cartClr, storage, payment, stock, newOrderID)
+	queries := query.NewService(storage)
+	return &boundedContext{}, cmd, queries
 }
 
 type boundedContext struct{}

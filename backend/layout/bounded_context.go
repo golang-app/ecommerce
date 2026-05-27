@@ -7,6 +7,7 @@ import (
 	authDomain "github.com/bkielbasa/go-ecommerce/backend/auth/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
@@ -41,20 +42,27 @@ type shippingService interface {
 	Default(ctx context.Context, customerID string) (shipDomain.Address, bool, error)
 }
 
-type checkoutService interface {
+// checkoutCommands is the write side of the checkout context (CQRS).
+type checkoutCommands interface {
 	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod) (checkoutDomain.Order, error)
-	Find(ctx context.Context, id string) (checkoutDomain.Order, error)
-	ListByCustomer(ctx context.Context, customerID string) ([]checkoutDomain.Order, error)
 	Cancel(ctx context.Context, orderID, customerID string) error
 }
 
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutService, shipSrv shippingService) application.BoundedContext {
+// checkoutQueries is the read side of the checkout context (CQRS); it returns
+// dedicated read models, not the write aggregate.
+type checkoutQueries interface {
+	Find(ctx context.Context, id string) (checkoutQuery.OrderView, error)
+	ListByCustomer(ctx context.Context, customerID string) ([]checkoutQuery.OrderSummary, error)
+}
+
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService) application.BoundedContext {
 	return &boundedContext{
 		handler: httpHandler{
 			cartSrv:     cartSrv,
 			catalogSrv:  catalogSrv,
 			authSrv:     authSrv,
 			checkoutSrv: checkoutSrv,
+			checkoutQry: checkoutQry,
 			shipSrv:     shipSrv,
 		},
 		logger: logger,

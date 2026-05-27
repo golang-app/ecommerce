@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 )
 
 type Postgres struct {
@@ -54,7 +55,9 @@ func (p Postgres) Save(ctx context.Context, order *domain.Order) error {
 	return nil
 }
 
-func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
+// Find reads the projection tables and returns the detail read model. It never
+// touches the event log or the write aggregate.
+func (p Postgres) Find(ctx context.Context, id string) (query.OrderView, error) {
 	var userID, status, currency string
 	var customerID sql.NullString
 	var shipName, shipStreet1, shipStreet2, shipCity, shipZip, shipCountry sql.NullString
@@ -75,10 +78,10 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 		&shipMethodCode, &shipMethodLabel, &shipCost,
 		&payMethodCode, &payMethodLabel)
 	if errors.Is(err, sql.ErrNoRows) {
-		return domain.Order{}, domain.ErrOrderNotFound
+		return query.OrderView{}, domain.ErrOrderNotFound
 	}
 	if err != nil {
-		return domain.Order{}, fmt.Errorf("query order: %w", err)
+		return query.OrderView{}, fmt.Errorf("query order: %w", err)
 	}
 
 	rows, err := p.db.QueryContext(ctx, `
@@ -87,7 +90,7 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 		ORDER BY id
 	`, id)
 	if err != nil {
-		return domain.Order{}, fmt.Errorf("query items: %w", err)
+		return query.OrderView{}, fmt.Errorf("query items: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -97,12 +100,12 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 		var qty int
 		var amt int64
 		if err := rows.Scan(&productID, &productName, &qty, &amt, &ccy); err != nil {
-			return domain.Order{}, fmt.Errorf("scan item: %w", err)
+			return query.OrderView{}, fmt.Errorf("scan item: %w", err)
 		}
 		lines = append(lines, domain.NewLine(productID, productName, qty, amt, ccy))
 	}
 	if err := rows.Err(); err != nil {
-		return domain.Order{}, fmt.Errorf("rows: %w", err)
+		return query.OrderView{}, fmt.Errorf("rows: %w", err)
 	}
 
 	shipTo := domain.RebuildAddress(
@@ -112,42 +115,47 @@ func (p Postgres) Find(ctx context.Context, id string) (domain.Order, error) {
 	shipMethod := domain.RebuildShippingMethod(shipMethodCode.String, shipMethodLabel.String, shipCost)
 	payMethod := domain.RebuildPaymentMethod(payMethodCode.String, payMethodLabel.String)
 
-	return domain.NewOrder(id, userID, customerID.String, shipTo, shipMethod, payMethod, lines, domain.Status(status), placedAt), nil
+	return query.NewOrderView(
+		id, customerID.String, domain.Status(status), placedAt,
+		lines, shipTo, shipMethod, payMethod,
+		totalAmt-shipCost, totalAmt, currency,
+	), nil
 }
 
 // ListByCustomer returns the customer's orders newest-first. Anonymous
 // orders (NULL customer_id) are never returned. Items are hydrated by
 // calling Find for each row (N+1) — fine for the expected order volume of
 // this demo.
-func (p Postgres) ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error) {
+// ListByCustomer returns the customer's orders newest-first as list summaries,
+// reading straight from the projection tables in a single grouped query.
+func (p Postgres) ListByCustomer(ctx context.Context, customerID string) ([]query.OrderSummary, error) {
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT id FROM checkout_order WHERE customer_id = $1
-		ORDER BY placed_at DESC
+		SELECT o.id, o.status, o.placed_at, o.total_amount, o.total_currency,
+		       COUNT(i.id) AS item_count
+		FROM checkout_order o
+		LEFT JOIN checkout_order_item i ON i.order_id = o.id
+		WHERE o.customer_id = $1
+		GROUP BY o.id, o.status, o.placed_at, o.total_amount, o.total_currency
+		ORDER BY o.placed_at DESC
 	`, customerID)
 	if err != nil {
 		return nil, fmt.Errorf("query orders: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	var ids []string
+	var summaries []query.OrderSummary
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan order id: %w", err)
+		var id, status, currency string
+		var placedAt time.Time
+		var total int64
+		var itemCount int
+		if err := rows.Scan(&id, &status, &placedAt, &total, &currency, &itemCount); err != nil {
+			return nil, fmt.Errorf("scan order: %w", err)
 		}
-		ids = append(ids, id)
+		summaries = append(summaries, query.NewOrderSummary(id, domain.Status(status), placedAt, itemCount, total, currency))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows: %w", err)
 	}
-
-	orders := make([]domain.Order, 0, len(ids))
-	for _, id := range ids {
-		order, err := p.Find(ctx, id)
-		if err != nil {
-			return nil, fmt.Errorf("hydrate order %s: %w", id, err)
-		}
-		orders = append(orders, order)
-	}
-	return orders, nil
+	return summaries, nil
 }

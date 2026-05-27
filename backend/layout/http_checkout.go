@@ -148,7 +148,7 @@ func (handler httpHandler) Orders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	orders, err := handler.checkoutSrv.ListByCustomer(r.Context(), customerID)
+	orders, err := handler.checkoutQry.ListByCustomer(r.Context(), customerID)
 	if err != nil {
 		https.InternalError(w, "internal-error", err.Error())
 		return
@@ -162,7 +162,7 @@ func (handler httpHandler) Orders(w http.ResponseWriter, r *http.Request) {
 func (handler httpHandler) Order(w http.ResponseWriter, r *http.Request) {
 	orderID := mux.Vars(r)["orderID"]
 
-	order, err := handler.checkoutSrv.Find(r.Context(), orderID)
+	order, err := handler.checkoutQry.Find(r.Context(), orderID)
 	if errors.Is(err, checkoutDomain.ErrOrderNotFound) {
 		http.NotFound(w, r)
 		return
