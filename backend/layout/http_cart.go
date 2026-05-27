@@ -16,9 +16,9 @@ import (
 
 func (handler httpHandler) AddToCart(w http.ResponseWriter, r *http.Request) {
 	cartID := cartIDFromCookies(w, r)
-	productID := mux.Vars(r)["cartID"]
+	variantID := mux.Vars(r)["variantID"]
 
-	err := handler.cartSrv.AddToCart(r.Context(), cartID, productID, 1)
+	err := handler.cartSrv.AddToCart(r.Context(), cartID, variantID, 1)
 
 	if errors.Is(err, domain.ErrProductNotFound) {
 		https.NotFound(w, "cart-not-found", err.Error())
