@@ -130,6 +130,21 @@
   </section>
 
   <section class="admin-section">
+    <h3 class="admin-section__title">attribute set</h3>
+    <p class="form__aside muted">the chosen set controls which attributes appear below (and in what order). Choose &ldquo;none&rdquo; to fall back to all attribute types.</p>
+    <form class="form" method="post" action="/admin/products/{{.Product.ID}}/attribute-set">
+      <div class="field">
+        <label for="p-attribute-set">attribute set</label>
+        <select id="p-attribute-set" name="attribute_set">
+          <option value="" {{if eq .CurrentSetID ""}}selected{{end}}>&mdash; none &mdash;</option>
+          {{range $s := .AttributeSets}}<option value="{{$s.ID}}" {{if eq $s.ID $.CurrentSetID}}selected{{end}}>{{$s.Name}}</option>{{end}}
+        </select>
+      </div>
+      <button type="submit" class="btn">save attribute set</button>
+    </form>
+  </section>
+
+  <section class="admin-section">
     <h3 class="admin-section__title">attributes</h3>
     {{if .AttrTypes}}
       <form class="form" method="post" action="/admin/products/{{.Product.ID}}/attributes">

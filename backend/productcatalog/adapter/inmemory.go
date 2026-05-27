@@ -17,6 +17,9 @@ type inMemory struct {
 	categories map[string]domain.Category
 	prodAttrs  map[string][]domain.AttributeValue
 	prodCats   map[string][]domain.Category
+	// prodSets maps a product id to its assigned attribute set id (empty/absent
+	// means no set).
+	prodSets map[string]string
 	// attribute sets: the set row plus its ordered member attribute type ids.
 	attrSets     map[string]attrSetRow
 	attrSetItems map[string][]string
@@ -37,6 +40,7 @@ func NewInMemory() *inMemory {
 		categories:   map[string]domain.Category{},
 		prodAttrs:    map[string][]domain.AttributeValue{},
 		prodCats:     map[string][]domain.Category{},
+		prodSets:     map[string]string{},
 		attrSets:     map[string]attrSetRow{},
 		attrSetItems: map[string][]string{},
 	}
@@ -44,6 +48,9 @@ func NewInMemory() *inMemory {
 
 func (im *inMemory) Add(ctx context.Context, p domain.Product) error {
 	im.products = append(im.products, p)
+	if setID := p.AttributeSetID(); setID != "" {
+		im.prodSets[string(p.ID())] = setID
+	}
 	return nil
 }
 
@@ -154,7 +161,8 @@ func (im *inMemory) DeleteVariant(ctx context.Context, variantID string) error {
 
 func (im *inMemory) hydrate(p domain.Product) domain.Product {
 	return p.WithCatalog(im.optionTypes[string(p.ID())], im.variants[string(p.ID())]).
-		WithClassification(im.prodCats[string(p.ID())], im.prodAttrs[string(p.ID())])
+		WithClassification(im.prodCats[string(p.ID())], im.prodAttrs[string(p.ID())]).
+		WithAttributeSet(im.prodSets[string(p.ID())])
 }
 
 func (im *inMemory) All(ctx context.Context) ([]domain.Product, error) {
@@ -213,6 +221,7 @@ func (im *inMemory) DeleteProduct(ctx context.Context, id string) error {
 	delete(im.variants, id)
 	delete(im.prodCats, id)
 	delete(im.prodAttrs, id)
+	delete(im.prodSets, id)
 	return nil
 }
 
@@ -254,6 +263,17 @@ func (im *inMemory) SetProductAttributes(ctx context.Context, productID string, 
 		}
 	}
 	im.prodAttrs[productID] = out
+	return nil
+}
+
+// SetProductAttributeSet sets (or clears, when setID is empty) the product's
+// attribute set id.
+func (im *inMemory) SetProductAttributeSet(ctx context.Context, productID, setID string) error {
+	if setID == "" {
+		delete(im.prodSets, productID)
+		return nil
+	}
+	im.prodSets[productID] = setID
 	return nil
 }
 

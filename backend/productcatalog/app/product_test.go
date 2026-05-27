@@ -20,6 +20,7 @@ type productStorage interface {
 	SetVariantStock(ctx context.Context, variantID string, stock int) error
 	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
 	SetProductAttributes(ctx context.Context, productID string, values []app.AttributeAssignment) error
+	SetProductAttributeSet(ctx context.Context, productID, setID string) error
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error

@@ -332,7 +332,7 @@ func (db postgres) productAttributes(ctx context.Context, productID string) ([]d
 }
 
 func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
-	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product ORDER BY id`
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency, attribute_set_id FROM productcatalog_product ORDER BY id`
 
 	rows, err := db.db.QueryContext(ctx, q)
 	if err != nil {
@@ -369,7 +369,7 @@ func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
 // (ties broken by id), each hydrated with its catalog/classification the same
 // way All does.
 func (db postgres) Newest(ctx context.Context, limit int) ([]domain.Product, error) {
-	q := `SELECT id, name, description, thumbnail, price_amount, price_currency
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency, attribute_set_id
 		FROM productcatalog_product
 		ORDER BY created_at DESC, id DESC
 		LIMIT $1`
@@ -406,7 +406,7 @@ func (db postgres) Newest(ctx context.Context, limit int) ([]domain.Product, err
 }
 
 func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) {
-	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product WHERE id = $1`
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency, attribute_set_id FROM productcatalog_product WHERE id = $1`
 	p, err := scanProduct(db.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Product{}, domain.ErrProductNotFound
@@ -445,7 +445,8 @@ type rowScanner interface {
 func scanProduct(s rowScanner) (domain.Product, error) {
 	var id, name, description, thumbnail, currency string
 	var amount int64
-	if err := s.Scan(&id, &name, &description, &thumbnail, &amount, &currency); err != nil {
+	var attributeSetID sql.NullString
+	if err := s.Scan(&id, &name, &description, &thumbnail, &amount, &currency, &attributeSetID); err != nil {
 		return domain.Product{}, err
 	}
 	pid, err := domain.NewProductId(id)
@@ -460,7 +461,11 @@ func scanProduct(s rowScanner) (domain.Product, error) {
 	if err != nil {
 		return domain.Product{}, fmt.Errorf("rebuild price: %w", err)
 	}
-	return domain.NewProduct(pid, name, description, price, thumbnail)
+	p, err := domain.NewProduct(pid, name, description, price, thumbnail)
+	if err != nil {
+		return domain.Product{}, err
+	}
+	return p.WithAttributeSet(attributeSetID.String), nil
 }
 
 func scanVariant(s rowScanner) (domain.Variant, error) {
@@ -874,6 +879,22 @@ func (db postgres) SetProductCategories(ctx context.Context, productID string, c
 	}
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit product categories: %w", err)
+	}
+	return nil
+}
+
+// SetProductAttributeSet sets (or clears) the product's attribute_set_id. An
+// empty setID is written as SQL NULL.
+func (db postgres) SetProductAttributeSet(ctx context.Context, productID, setID string) error {
+	var setVal sql.NullString
+	if setID != "" {
+		setVal = sql.NullString{String: setID, Valid: true}
+	}
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_product SET attribute_set_id = $2 WHERE id = $1
+	`, productID, setVal)
+	if err != nil {
+		return fmt.Errorf("set product attribute set: %w", err)
 	}
 	return nil
 }

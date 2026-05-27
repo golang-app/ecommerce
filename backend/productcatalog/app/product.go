@@ -22,6 +22,7 @@ type ProductStorage interface {
 	SetVariantStock(ctx context.Context, variantID string, stock int) error
 	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
 	SetProductAttributes(ctx context.Context, productID string, values []AttributeAssignment) error
+	SetProductAttributeSet(ctx context.Context, productID, setID string) error
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
@@ -365,6 +366,36 @@ func (ps ProductService) SetProductCategories(ctx context.Context, productID str
 // SetProductAttributes replaces the product's attribute values with the given set.
 func (ps ProductService) SetProductAttributes(ctx context.Context, productID string, values []AttributeAssignment) error {
 	return ps.storage.SetProductAttributes(ctx, productID, values)
+}
+
+// SetProductAttributeSet assigns (or clears, when setID is empty) the product's
+// attribute set. A non-empty setID is validated to exist before assignment.
+func (ps ProductService) SetProductAttributeSet(ctx context.Context, productID, setID string) error {
+	if setID != "" {
+		if _, err := ps.storage.FindAttributeSet(ctx, setID); err != nil {
+			return err
+		}
+	}
+	return ps.storage.SetProductAttributeSet(ctx, productID, setID)
+}
+
+// ProductAttributeTypes returns the ordered attribute types a product's edit
+// form should show: when the product has an attribute set, its members (already
+// ordered); otherwise every attribute type as a fallback so products without a
+// set still work.
+func (ps ProductService) ProductAttributeTypes(ctx context.Context, productID string) ([]domain.AttributeType, error) {
+	product, err := ps.storage.Find(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	if setID := product.AttributeSetID(); setID != "" {
+		set, err := ps.storage.FindAttributeSet(ctx, setID)
+		if err != nil {
+			return nil, err
+		}
+		return set.Members(), nil
+	}
+	return ps.storage.AllAttributeTypes(ctx)
 }
 
 // OptionTypeInput / VariantInput describe a product's options and variants for

@@ -36,6 +36,8 @@ type catalogService interface {
 	SetVariantStock(ctx context.Context, variantID string, stock int) error
 	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
 	SetProductAttributes(ctx context.Context, productID string, values []pcapp.AttributeAssignment) error
+	SetProductAttributeSet(ctx context.Context, productID, setID string) error
+	ProductAttributeTypes(ctx context.Context, productID string) ([]pcdomain.AttributeType, error)
 
 	CreateCategory(ctx context.Context, name, slug string) error
 	UpdateCategory(ctx context.Context, id, name, slug string, position int) error

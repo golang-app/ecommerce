@@ -10,6 +10,14 @@
       <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required></textarea></div>
       <div class="field"><label for="p-currency">currency</label><input id="p-currency" name="currency" value="USD"></div>
       <div class="field"><label for="p-thumbnail">thumbnail URL</label><input id="p-thumbnail" name="thumbnail"></div>
+      <div class="field">
+        <label for="p-attribute-set">attribute set</label>
+        <select id="p-attribute-set" name="attribute_set">
+          <option value="">&mdash; none &mdash;</option>
+          {{range $s := .AttributeSets}}<option value="{{$s.ID}}">{{$s.Name}}</option>{{end}}
+        </select>
+        <p class="form__aside muted">the set defines which attributes this product has (and their order). You can change it later.</p>
+      </div>
     </section>
 
     <section class="admin-section">
