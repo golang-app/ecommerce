@@ -22,6 +22,13 @@ type catalogService interface {
 	Categories(ctx context.Context) ([]pcdomain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]pcapp.Facet, error)
 
+	Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
+	UpdateProduct(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
+	DeleteProduct(ctx context.Context, id string) error
+	SetVariantStock(ctx context.Context, variantID string, stock int) error
+	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
+	SetProductAttributes(ctx context.Context, productID string, values []pcapp.AttributeAssignment) error
+
 	CreateCategory(ctx context.Context, name, slug string) error
 	UpdateCategory(ctx context.Context, id, name, slug string, position int) error
 	DeleteCategory(ctx context.Context, id string) error

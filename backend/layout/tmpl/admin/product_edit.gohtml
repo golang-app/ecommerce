@@ -1,0 +1,86 @@
+{{define "main"}}
+  <h1 class="page-title">admin</h1>
+  <div class="admin">
+    <aside class="admin__side">{{template "admin-nav" .}}</aside>
+    <div class="admin__content">
+      <p class="crumbs"><a href="/admin/products">products</a> / edit</p>
+      <h2 class="account-card__title">edit product <code>{{.Product.ID}}</code></h2>
+
+      <section class="admin-section">
+        <h3 class="admin-section__title">core fields</h3>
+        <form class="form" method="post" action="/admin/products/{{.Product.ID}}">
+          <div class="field"><label for="p-name">name</label><input id="p-name" name="name" value="{{.Product.Name}}" required></div>
+          <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required>{{.Product.Description}}</textarea></div>
+          <div class="field"><label for="p-price">price (major units, e.g. 9.00)</label><input id="p-price" name="price" value="{{.Product.Price.Display}}" required></div>
+          <div class="field"><label for="p-currency">currency</label><input id="p-currency" name="currency" value="{{.Product.Price.Currency}}"></div>
+          <div class="field"><label for="p-thumbnail">thumbnail URL</label><input id="p-thumbnail" name="thumbnail" value="{{.Product.Thumbnail}}"></div>
+          <button type="submit" class="btn">save core fields</button>
+        </form>
+      </section>
+
+      <section class="admin-section">
+        <h3 class="admin-section__title">variant stock</h3>
+        {{if .Product.Variants}}
+          <form class="form" method="post" action="/admin/products/{{.Product.ID}}/stock">
+            <table class="admin-table">
+              <thead><tr><th>variant</th><th>sku</th><th>stock</th></tr></thead>
+              <tbody>
+                {{$ots := .Product.OptionTypes}}
+                {{range $v := .Product.Variants}}
+                  <tr>
+                    <td>{{with $v.Label $ots}}{{.}}{{else}}default{{end}}</td>
+                    <td><code>{{$v.SKU}}</code></td>
+                    <td><input type="number" name="stock_{{$v.ID}}" value="{{$v.Stock}}" min="0"></td>
+                  </tr>
+                {{end}}
+              </tbody>
+            </table>
+            <button type="submit" class="btn">save stock</button>
+          </form>
+        {{else}}
+          <p class="muted">no variants.</p>
+        {{end}}
+      </section>
+
+      <section class="admin-section">
+        <h3 class="admin-section__title">categories</h3>
+        {{if .Categories}}
+          <form class="form" method="post" action="/admin/products/{{.Product.ID}}/categories">
+            <div class="admin-checks">
+              {{range $c := .Categories}}
+                <label class="admin-check"><input type="checkbox" name="category" value="{{$c.ID}}" {{if index $.Assigned $c.ID}}checked{{end}}> {{$c.Name}}</label>
+              {{end}}
+            </div>
+            <button type="submit" class="btn">save categories</button>
+          </form>
+        {{else}}
+          <p class="muted">no categories defined.</p>
+        {{end}}
+      </section>
+
+      <section class="admin-section">
+        <h3 class="admin-section__title">attributes</h3>
+        {{if .AttrTypes}}
+          <form class="form" method="post" action="/admin/products/{{.Product.ID}}/attributes">
+            {{range $t := .AttrTypes}}
+              <div class="field">
+                <label for="attr-{{$t.ID}}">{{$t.Name}}{{with $t.Unit}} ({{.}}){{end}}</label>
+                {{if $t.IsNumeric}}
+                  <input id="attr-{{$t.ID}}" type="number" step="any" name="attr_{{$t.ID}}" value="{{index $.AttrValues $t.ID}}">
+                {{else}}
+                  <input id="attr-{{$t.ID}}" type="text" name="attr_{{$t.ID}}" value="{{index $.AttrValues $t.ID}}">
+                {{end}}
+              </div>
+            {{end}}
+            <button type="submit" class="btn">save attributes</button>
+            <p class="form__aside muted">leave a field empty to clear that attribute.</p>
+          </form>
+        {{else}}
+          <p class="muted">no attribute types defined.</p>
+        {{end}}
+      </section>
+
+      <p class="form__aside"><a href="/admin/products">&larr; back to products</a></p>
+    </div>
+  </div>
+{{end}}

@@ -484,6 +484,107 @@ func (db postgres) DeleteAttributeType(ctx context.Context, id string) error {
 	return nil
 }
 
+// UpdateProduct updates the core product row (name, description, thumbnail,
+// price) by id. Variants, categories and attributes are untouched.
+func (db postgres) UpdateProduct(ctx context.Context, p domain.Product) error {
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_product
+		SET name = $2, description = $3, thumbnail = $4, price_amount = $5, price_currency = $6
+		WHERE id = $1
+	`, string(p.ID()), p.Name(), p.Description(), p.Thumbnail(), p.Price().Amount(), string(p.Price().Currency()))
+	if err != nil {
+		return fmt.Errorf("update product: %w", err)
+	}
+	return nil
+}
+
+// DeleteProduct removes a product row; variants, category and attribute links
+// cascade via ON DELETE CASCADE foreign keys.
+func (db postgres) DeleteProduct(ctx context.Context, id string) error {
+	_, err := db.db.ExecContext(ctx, `DELETE FROM productcatalog_product WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete product: %w", err)
+	}
+	return nil
+}
+
+// SetVariantStock sets a single variant's stock level.
+func (db postgres) SetVariantStock(ctx context.Context, variantID string, stock int) error {
+	_, err := db.db.ExecContext(ctx, `UPDATE productcatalog_variant SET stock = $2 WHERE id = $1`, variantID, stock)
+	if err != nil {
+		return fmt.Errorf("set variant stock: %w", err)
+	}
+	return nil
+}
+
+// SetProductCategories replaces the product's category links: it deletes the
+// existing links and inserts the given set in a single transaction.
+func (db postgres) SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `DELETE FROM productcatalog_product_category WHERE product_id = $1`, productID); err != nil {
+		return fmt.Errorf("clear product categories: %w", err)
+	}
+	for _, cid := range categoryIDs {
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO productcatalog_product_category (product_id, category_id) VALUES ($1, $2)
+		`, productID, cid); err != nil {
+			return fmt.Errorf("insert product category: %w", err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit product categories: %w", err)
+	}
+	return nil
+}
+
+// SetProductAttributes replaces the product's attribute rows: it deletes the
+// existing rows and inserts the given set in a single transaction. Numeric
+// assignments set num_value (text null); enum assignments set text_value (num
+// null).
+func (db postgres) SetProductAttributes(ctx context.Context, productID string, values []app.AttributeAssignment) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `DELETE FROM productcatalog_product_attribute WHERE product_id = $1`, productID); err != nil {
+		return fmt.Errorf("clear product attributes: %w", err)
+	}
+	for _, v := range values {
+		var num sql.NullFloat64
+		var text sql.NullString
+		if v.Num != nil {
+			num = sql.NullFloat64{Float64: *v.Num, Valid: true}
+		} else {
+			text = sql.NullString{String: v.Text, Valid: true}
+		}
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO productcatalog_product_attribute (product_id, attribute_type_id, num_value, text_value)
+			VALUES ($1, $2, $3, $4)
+		`, productID, v.TypeID, num, text); err != nil {
+			return fmt.Errorf("insert product attribute: %w", err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit product attributes: %w", err)
+	}
+	return nil
+}
+
 // ListProducts returns the products matching the query. The WHERE clause is
 // built dynamically with parameterised placeholders only (never interpolating
 // user values), then each matching id is hydrated through the existing Find

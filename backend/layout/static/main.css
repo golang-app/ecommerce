@@ -675,6 +675,15 @@ main {
 .admin-form .field--check label { display: flex; align-items: center; gap: var(--space-2); }
 .field--check input[type="checkbox"] { width: auto; }
 
+/* admin product edit: stacked sections */
+.admin-section { border-top: 1px solid var(--rule); padding-top: var(--space-3); margin-bottom: var(--space-5); max-width: 32rem; }
+.admin-section__title { text-transform: lowercase; letter-spacing: .02em; color: var(--fg-muted); font-weight: 400; margin-bottom: var(--space-3); }
+.admin-section .admin-table { max-width: none; }
+.admin-section input[type="number"] { width: 6rem; }
+.admin-checks { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.admin-check { display: flex; align-items: center; gap: var(--space-2); }
+.admin-check input[type="checkbox"] { width: auto; }
+
 /* address book */
 .addr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
 .addr-card { position: relative; border: 1px solid var(--rule); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }

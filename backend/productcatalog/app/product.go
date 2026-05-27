@@ -15,6 +15,11 @@ type ProductService struct {
 type ProductStorage interface {
 	All(ctx context.Context) ([]domain.Product, error)
 	Add(ctx context.Context, p domain.Product) error
+	UpdateProduct(ctx context.Context, p domain.Product) error
+	DeleteProduct(ctx context.Context, id string) error
+	SetVariantStock(ctx context.Context, variantID string, stock int) error
+	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
+	SetProductAttributes(ctx context.Context, productID string, values []AttributeAssignment) error
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
@@ -194,6 +199,53 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMi
 	// carrying its price (no options) and the product image.
 	defaultVariant := domain.NewVariant("var-"+id, id, thumbnail, nil, priceVO, defaultStock)
 	return ps.storage.AddVariant(ctx, id, 0, defaultVariant)
+}
+
+// UpdateProduct validates the core product fields and persists them. It only
+// touches the product row (name/description/price/thumbnail); variants,
+// categories and attributes are managed by their own methods.
+func (ps ProductService) UpdateProduct(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error {
+	pID, err := domain.NewProductId(id)
+	if err != nil {
+		return err
+	}
+	cur, err := domain.NewCurrency(currency)
+	if err != nil {
+		return fmt.Errorf("invalid currency: %w", err)
+	}
+	priceVO, err := domain.NewPrice(priceMinorUnits, cur)
+	if err != nil {
+		return fmt.Errorf("invalid price: %w", err)
+	}
+	p, err := domain.NewProduct(pID, name, desc, priceVO, thumbnail)
+	if err != nil {
+		return err
+	}
+	return ps.storage.UpdateProduct(ctx, p)
+}
+
+// DeleteProduct removes a product; its variants, category and attribute links
+// cascade in storage.
+func (ps ProductService) DeleteProduct(ctx context.Context, id string) error {
+	return ps.storage.DeleteProduct(ctx, id)
+}
+
+// SetVariantStock sets a single variant's stock level (rejecting negatives).
+func (ps ProductService) SetVariantStock(ctx context.Context, variantID string, stock int) error {
+	if stock < 0 {
+		return fmt.Errorf("stock cannot be negative: %d", stock)
+	}
+	return ps.storage.SetVariantStock(ctx, variantID, stock)
+}
+
+// SetProductCategories replaces the product's category links with the given set.
+func (ps ProductService) SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error {
+	return ps.storage.SetProductCategories(ctx, productID, categoryIDs)
+}
+
+// SetProductAttributes replaces the product's attribute values with the given set.
+func (ps ProductService) SetProductAttributes(ctx context.Context, productID string, values []AttributeAssignment) error {
+	return ps.storage.SetProductAttributes(ctx, productID, values)
 }
 
 // OptionTypeInput / VariantInput describe a product's options and variants for

@@ -14,6 +14,11 @@ import (
 type productStorage interface {
 	All(ctx context.Context) ([]domain.Product, error)
 	Add(ctx context.Context, p domain.Product) error
+	UpdateProduct(ctx context.Context, p domain.Product) error
+	DeleteProduct(ctx context.Context, id string) error
+	SetVariantStock(ctx context.Context, variantID string, stock int) error
+	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
+	SetProductAttributes(ctx context.Context, productID string, values []app.AttributeAssignment) error
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error

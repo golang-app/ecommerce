@@ -120,6 +120,15 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	// /admin/attributes and /admin/orders handlers here, all behind requireAdmin.
 	r.HandleFunc("/admin", observability.HTTPWrap(m.handler.AdminDashboard, m.logger)).Methods("GET")
 
+	r.HandleFunc("/admin/products", observability.HTTPWrap(m.handler.AdminProducts, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/products", observability.HTTPWrap(m.handler.AdminCreateProduct, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/edit", observability.HTTPWrap(m.handler.AdminEditProductForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/products/{id}/stock", observability.HTTPWrap(m.handler.AdminUpdateProductStock, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/categories", observability.HTTPWrap(m.handler.AdminUpdateProductCategories, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/attributes", observability.HTTPWrap(m.handler.AdminUpdateProductAttributes, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteProduct, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}", observability.HTTPWrap(m.handler.AdminUpdateProduct, m.logger)).Methods("POST")
+
 	r.HandleFunc("/admin/categories", observability.HTTPWrap(m.handler.AdminCategories, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/categories", observability.HTTPWrap(m.handler.AdminCreateCategory, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/categories/{id}/edit", observability.HTTPWrap(m.handler.AdminEditCategoryForm, m.logger)).Methods("GET")
@@ -150,6 +159,7 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
 		},
+		"add": func(a, b int) int { return a + b },
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")

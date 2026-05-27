@@ -18,8 +18,8 @@ type inMemoryClassifier interface {
 	app.ProductStorage
 	AddAttributeType(t domain.AttributeType)
 	AddCategory(c domain.Category)
-	SetProductAttributes(productID string, values ...domain.AttributeValue)
-	SetProductCategories(productID string, cats ...domain.Category)
+	SeedProductAttributes(productID string, values ...domain.AttributeValue)
+	SeedProductCategories(productID string, cats ...domain.Category)
 }
 
 func fptr(v float64) *float64 { return &v }
@@ -52,9 +52,9 @@ func seedListFixtures(ctx context.Context, store inMemoryClassifier) error {
 		if err := store.Add(ctx, p); err != nil {
 			return err
 		}
-		store.SetProductAttributes(f.id, domain.NewNumericValue(weight, f.weight), domain.NewEnumValue(material, f.material))
+		store.SeedProductAttributes(f.id, domain.NewNumericValue(weight, f.weight), domain.NewEnumValue(material, f.material))
 		if f.inTools {
-			store.SetProductCategories(f.id, tools)
+			store.SeedProductCategories(f.id, tools)
 		}
 	}
 	return nil
