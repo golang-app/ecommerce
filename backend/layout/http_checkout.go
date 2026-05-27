@@ -45,11 +45,21 @@ func (handler httpHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler.renderTemplate(w, r, "checkout/show", map[string]any{
+	data := map[string]any{
 		"Cart":            cart,
 		"ShippingMethods": checkoutDomain.ShippingMethods(),
 		"PaymentMethods":  checkoutDomain.PaymentMethods(),
-	})
+	}
+
+	// Prefill the shipping form from the logged-in customer's default saved
+	// address, if they have one.
+	if customerID := handler.currentCustomerID(r); customerID != "" {
+		if addr, ok, err := handler.shipSrv.Default(r.Context(), customerID); err == nil && ok {
+			data["ShipTo"] = addr
+		}
+	}
+
+	handler.renderTemplate(w, r, "checkout/show", data)
 }
 
 func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
