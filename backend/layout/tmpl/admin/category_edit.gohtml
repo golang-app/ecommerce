@@ -1,0 +1,18 @@
+{{define "main"}}
+  <h1 class="page-title">admin</h1>
+  <div class="admin">
+    <aside class="admin__side">{{template "admin-nav" .}}</aside>
+    <div class="admin__content">
+      <p class="crumbs"><a href="/admin/categories">categories</a> / edit</p>
+      <h2 class="account-card__title">edit category</h2>
+
+      <form class="form" method="post" action="/admin/categories/{{.Category.ID}}">
+        <div class="field"><label for="c-name">name</label><input id="c-name" name="name" value="{{.Category.Name}}" required></div>
+        <div class="field"><label for="c-slug">slug</label><input id="c-slug" name="slug" value="{{.Category.Slug}}" required placeholder="lowercase-with-hyphens"></div>
+        <div class="field"><label for="c-position">position</label><input id="c-position" name="position" type="number" value="{{.Category.Position}}"></div>
+        <button type="submit" class="btn">save changes</button>
+        <p class="form__aside"><a href="/admin/categories">&larr; back to categories</a></p>
+      </form>
+    </div>
+  </div>
+{{end}}

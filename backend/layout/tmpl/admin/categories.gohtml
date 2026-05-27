@@ -1,0 +1,44 @@
+{{define "main"}}
+  <h1 class="page-title">admin</h1>
+  <div class="admin">
+    <aside class="admin__side">{{template "admin-nav" .}}</aside>
+    <div class="admin__content">
+      <h2 class="account-card__title">categories</h2>
+
+      {{if .Categories}}
+        <table class="admin-table">
+          <thead>
+            <tr><th>name</th><th>slug</th><th>position</th><th></th></tr>
+          </thead>
+          <tbody>
+            {{range $c := .Categories}}
+              <tr>
+                <td>{{$c.Name}}</td>
+                <td><code>{{$c.Slug}}</code></td>
+                <td>{{$c.Position}}</td>
+                <td class="admin-table__actions">
+                  <a href="/admin/categories/{{$c.ID}}/edit">edit</a>
+                  <form method="post" action="/admin/categories/{{$c.ID}}/delete"
+                        onsubmit="return confirm('Delete this category? Its product links will be removed.');">
+                    <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+                  </form>
+                </td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      {{else}}
+        <p class="muted">no categories yet.</p>
+      {{end}}
+
+      <section class="admin-form">
+        <h3 class="account-card__title">add a category</h3>
+        <form class="form" method="post" action="/admin/categories">
+          <div class="field"><label for="c-name">name</label><input id="c-name" name="name" required></div>
+          <div class="field"><label for="c-slug">slug</label><input id="c-slug" name="slug" required placeholder="lowercase-with-hyphens"></div>
+          <button type="submit" class="btn">create category</button>
+        </form>
+      </section>
+    </div>
+  </div>
+{{end}}

@@ -23,6 +23,13 @@ type productStorage interface {
 	ListProducts(ctx context.Context, q app.ProductQuery) ([]domain.Product, error)
 	Categories(ctx context.Context) ([]domain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]app.Facet, error)
+	CreateCategory(ctx context.Context, c domain.Category) error
+	UpdateCategory(ctx context.Context, c domain.Category) error
+	DeleteCategory(ctx context.Context, id string) error
+	AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error)
+	CreateAttributeType(ctx context.Context, t domain.AttributeType) error
+	UpdateAttributeType(ctx context.Context, t domain.AttributeType) error
+	DeleteAttributeType(ctx context.Context, id string) error
 }
 
 var storage productStorage

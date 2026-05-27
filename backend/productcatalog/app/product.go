@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 )
@@ -23,6 +24,15 @@ type ProductStorage interface {
 	ListProducts(ctx context.Context, q ProductQuery) ([]domain.Product, error)
 	Categories(ctx context.Context) ([]domain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]Facet, error)
+
+	CreateCategory(ctx context.Context, c domain.Category) error
+	UpdateCategory(ctx context.Context, c domain.Category) error
+	DeleteCategory(ctx context.Context, id string) error
+
+	AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error)
+	CreateAttributeType(ctx context.Context, t domain.AttributeType) error
+	UpdateAttributeType(ctx context.Context, t domain.AttributeType) error
+	DeleteAttributeType(ctx context.Context, id string) error
 }
 
 func NewProductService(s ProductStorage) ProductService {
@@ -67,6 +77,89 @@ func (ps ProductService) Categories(ctx context.Context) ([]domain.Category, err
 // Facets returns the available filter facets, optionally scoped to a category.
 func (ps ProductService) Facets(ctx context.Context, categorySlug string) ([]Facet, error) {
 	return ps.storage.Facets(ctx, categorySlug)
+}
+
+// CreateCategory validates and persists a new category. The id equals the slug
+// and the position is appended after the current categories.
+func (ps ProductService) CreateCategory(ctx context.Context, name, slug string) error {
+	existing, err := ps.storage.Categories(ctx)
+	if err != nil {
+		return err
+	}
+	c, err := domain.NewCategory(slug, name, slug, len(existing)+1)
+	if err != nil {
+		return err
+	}
+	return ps.storage.CreateCategory(ctx, c)
+}
+
+// UpdateCategory validates and persists changes to an existing category.
+func (ps ProductService) UpdateCategory(ctx context.Context, id, name, slug string, position int) error {
+	c, err := domain.NewCategory(id, name, slug, position)
+	if err != nil {
+		return err
+	}
+	return ps.storage.UpdateCategory(ctx, c)
+}
+
+// DeleteCategory removes a category (its product links cascade in storage).
+func (ps ProductService) DeleteCategory(ctx context.Context, id string) error {
+	return ps.storage.DeleteCategory(ctx, id)
+}
+
+// AttributeTypes returns every attribute type in display order (admin view).
+func (ps ProductService) AttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
+	return ps.storage.AllAttributeTypes(ctx)
+}
+
+// CreateAttributeType validates and persists a new attribute type. The id is a
+// slug derived from the name and the position is appended after existing types.
+func (ps ProductService) CreateAttributeType(ctx context.Context, name, unit string, kind domain.AttributeKind, filterable bool) error {
+	existing, err := ps.storage.AllAttributeTypes(ctx)
+	if err != nil {
+		return err
+	}
+	id := slugify(name)
+	t, err := domain.NewAttributeType(id, name, unit, kind, filterable, len(existing)+1)
+	if err != nil {
+		return err
+	}
+	return ps.storage.CreateAttributeType(ctx, t)
+}
+
+// UpdateAttributeType validates and persists changes to an attribute type.
+func (ps ProductService) UpdateAttributeType(ctx context.Context, id, name, unit string, kind domain.AttributeKind, filterable bool, position int) error {
+	t, err := domain.NewAttributeType(id, name, unit, kind, filterable, position)
+	if err != nil {
+		return err
+	}
+	return ps.storage.UpdateAttributeType(ctx, t)
+}
+
+// DeleteAttributeType removes an attribute type (its product links cascade).
+func (ps ProductService) DeleteAttributeType(ctx context.Context, id string) error {
+	return ps.storage.DeleteAttributeType(ctx, id)
+}
+
+// slugify turns a display name into a url-safe id: lowercase, spaces to
+// hyphens, dropping any character that is not a lowercase letter, digit or
+// hyphen, and collapsing repeated/edge hyphens.
+func slugify(name string) string {
+	var b strings.Builder
+	lastHyphen := false
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastHyphen = false
+		case r == ' ' || r == '-' || r == '_':
+			if !lastHyphen && b.Len() > 0 {
+				b.WriteByte('-')
+				lastHyphen = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
 }
 
 // defaultStock is given to a simple product's auto-created default variant.

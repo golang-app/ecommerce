@@ -393,6 +393,97 @@ func (db postgres) Categories(ctx context.Context) ([]domain.Category, error) {
 	return out, rows.Err()
 }
 
+// CreateCategory inserts a new category.
+func (db postgres) CreateCategory(ctx context.Context, c domain.Category) error {
+	_, err := db.db.ExecContext(ctx, `
+		INSERT INTO productcatalog_category (id, name, slug, position)
+		VALUES ($1, $2, $3, $4)
+	`, c.ID(), c.Name(), c.Slug(), c.Position())
+	if err != nil {
+		return fmt.Errorf("create category: %w", err)
+	}
+	return nil
+}
+
+// UpdateCategory updates an existing category by id.
+func (db postgres) UpdateCategory(ctx context.Context, c domain.Category) error {
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_category SET name = $2, slug = $3, position = $4 WHERE id = $1
+	`, c.ID(), c.Name(), c.Slug(), c.Position())
+	if err != nil {
+		return fmt.Errorf("update category: %w", err)
+	}
+	return nil
+}
+
+// DeleteCategory removes a category; its product links cascade.
+func (db postgres) DeleteCategory(ctx context.Context, id string) error {
+	_, err := db.db.ExecContext(ctx, `DELETE FROM productcatalog_category WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete category: %w", err)
+	}
+	return nil
+}
+
+// AllAttributeTypes returns every attribute type in display order.
+func (db postgres) AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, name, unit, kind, filterable, position
+		FROM productcatalog_attribute_type
+		ORDER BY position, name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query attribute types: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.AttributeType
+	for rows.Next() {
+		var id, name, unit, kind string
+		var filterable bool
+		var position int
+		if err := rows.Scan(&id, &name, &unit, &kind, &filterable, &position); err != nil {
+			return nil, fmt.Errorf("scan attribute type: %w", err)
+		}
+		out = append(out, domain.RebuildAttributeType(id, name, unit, domain.AttributeKind(kind), filterable, position))
+	}
+	return out, rows.Err()
+}
+
+// CreateAttributeType inserts a new attribute type.
+func (db postgres) CreateAttributeType(ctx context.Context, t domain.AttributeType) error {
+	_, err := db.db.ExecContext(ctx, `
+		INSERT INTO productcatalog_attribute_type (id, name, unit, kind, filterable, position)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, t.ID(), t.Name(), t.Unit(), string(t.Kind()), t.Filterable(), t.Position())
+	if err != nil {
+		return fmt.Errorf("create attribute type: %w", err)
+	}
+	return nil
+}
+
+// UpdateAttributeType updates an existing attribute type by id.
+func (db postgres) UpdateAttributeType(ctx context.Context, t domain.AttributeType) error {
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_attribute_type
+		SET name = $2, unit = $3, kind = $4, filterable = $5, position = $6
+		WHERE id = $1
+	`, t.ID(), t.Name(), t.Unit(), string(t.Kind()), t.Filterable(), t.Position())
+	if err != nil {
+		return fmt.Errorf("update attribute type: %w", err)
+	}
+	return nil
+}
+
+// DeleteAttributeType removes an attribute type; its product links cascade.
+func (db postgres) DeleteAttributeType(ctx context.Context, id string) error {
+	_, err := db.db.ExecContext(ctx, `DELETE FROM productcatalog_attribute_type WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete attribute type: %w", err)
+	}
+	return nil
+}
+
 // ListProducts returns the products matching the query. The WHERE clause is
 // built dynamically with parameterised placeholders only (never interpolating
 // user values), then each matching id is hydrated through the existing Find

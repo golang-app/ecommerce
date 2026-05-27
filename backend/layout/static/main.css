@@ -663,6 +663,18 @@ main {
 .admin-stat__link { font-size: 0.85rem; color: var(--fg-muted); }
 .admin-stat__link:hover { color: var(--fg); }
 
+/* admin crud tables + forms */
+.admin-table { width: 100%; border-collapse: collapse; margin-bottom: var(--space-5); font-size: var(--step-0); }
+.admin-table th { text-align: left; font-weight: 400; text-transform: lowercase; letter-spacing: .02em; color: var(--fg-muted); border-bottom: 1px solid var(--fg); padding: var(--space-1) var(--space-2) var(--space-1) 0; }
+.admin-table td { border-bottom: 1px solid var(--rule); padding: var(--space-2) var(--space-2) var(--space-2) 0; vertical-align: middle; }
+.admin-table code { font-size: 0.85em; color: var(--fg-muted); }
+.admin-table__actions { display: flex; align-items: center; gap: var(--space-3); white-space: nowrap; }
+.admin-table__actions form { display: inline; margin: 0; }
+.admin-form { border-top: 1px solid var(--rule); padding-top: var(--space-3); max-width: 28rem; }
+.admin-form .field--check { flex-direction: row; align-items: center; gap: var(--space-2); }
+.admin-form .field--check label { display: flex; align-items: center; gap: var(--space-2); }
+.field--check input[type="checkbox"] { width: auto; }
+
 /* address book */
 .addr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
 .addr-card { position: relative; border: 1px solid var(--rule); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }

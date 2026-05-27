@@ -21,6 +21,15 @@ type catalogService interface {
 	List(ctx context.Context, q pcapp.ProductQuery) ([]pcdomain.Product, error)
 	Categories(ctx context.Context) ([]pcdomain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]pcapp.Facet, error)
+
+	CreateCategory(ctx context.Context, name, slug string) error
+	UpdateCategory(ctx context.Context, id, name, slug string, position int) error
+	DeleteCategory(ctx context.Context, id string) error
+
+	AttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)
+	CreateAttributeType(ctx context.Context, name, unit string, kind pcdomain.AttributeKind, filterable bool) error
+	UpdateAttributeType(ctx context.Context, id, name, unit string, kind pcdomain.AttributeKind, filterable bool, position int) error
+	DeleteAttributeType(ctx context.Context, id string) error
 }
 
 type cartService interface {

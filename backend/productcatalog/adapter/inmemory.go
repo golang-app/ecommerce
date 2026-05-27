@@ -150,6 +150,50 @@ func (im *inMemory) Categories(ctx context.Context) ([]domain.Category, error) {
 	return out, nil
 }
 
+func (im *inMemory) CreateCategory(ctx context.Context, c domain.Category) error {
+	im.categories[c.ID()] = c
+	return nil
+}
+
+func (im *inMemory) UpdateCategory(ctx context.Context, c domain.Category) error {
+	im.categories[c.ID()] = c
+	return nil
+}
+
+func (im *inMemory) DeleteCategory(ctx context.Context, id string) error {
+	delete(im.categories, id)
+	return nil
+}
+
+func (im *inMemory) AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
+	out := make([]domain.AttributeType, 0, len(im.attrTypes))
+	for _, t := range im.attrTypes {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Position() != out[j].Position() {
+			return out[i].Position() < out[j].Position()
+		}
+		return out[i].Name() < out[j].Name()
+	})
+	return out, nil
+}
+
+func (im *inMemory) CreateAttributeType(ctx context.Context, t domain.AttributeType) error {
+	im.attrTypes[t.ID()] = t
+	return nil
+}
+
+func (im *inMemory) UpdateAttributeType(ctx context.Context, t domain.AttributeType) error {
+	im.attrTypes[t.ID()] = t
+	return nil
+}
+
+func (im *inMemory) DeleteAttributeType(ctx context.Context, id string) error {
+	delete(im.attrTypes, id)
+	return nil
+}
+
 func (im *inMemory) inCategory(productID, slug string) bool {
 	for _, c := range im.prodCats[productID] {
 		if c.Slug() == slug {

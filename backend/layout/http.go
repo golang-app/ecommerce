@@ -119,6 +119,18 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	// Admin panel. Later phases register the /admin/products, /admin/categories,
 	// /admin/attributes and /admin/orders handlers here, all behind requireAdmin.
 	r.HandleFunc("/admin", observability.HTTPWrap(m.handler.AdminDashboard, m.logger)).Methods("GET")
+
+	r.HandleFunc("/admin/categories", observability.HTTPWrap(m.handler.AdminCategories, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/categories", observability.HTTPWrap(m.handler.AdminCreateCategory, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/categories/{id}/edit", observability.HTTPWrap(m.handler.AdminEditCategoryForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/categories/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteCategory, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/categories/{id}", observability.HTTPWrap(m.handler.AdminUpdateCategory, m.logger)).Methods("POST")
+
+	r.HandleFunc("/admin/attributes", observability.HTTPWrap(m.handler.AdminAttributes, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/attributes", observability.HTTPWrap(m.handler.AdminCreateAttribute, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/attributes/{id}/edit", observability.HTTPWrap(m.handler.AdminEditAttributeForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/attributes/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteAttribute, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/attributes/{id}", observability.HTTPWrap(m.handler.AdminUpdateAttribute, m.logger)).Methods("POST")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
