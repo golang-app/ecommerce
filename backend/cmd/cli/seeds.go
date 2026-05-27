@@ -7,7 +7,32 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/bcrypt"
 )
+
+// seedAdmin email/password for the demo admin account. The password is
+// hashed with the same bcrypt cost the auth service uses (bcrypt.DefaultCost)
+// so the seeded credentials work against the normal login flow.
+const (
+	seedAdminEmail    = "admin@example.com"
+	seedAdminPassword = "Admin123!"
+)
+
+const upsertAdmin = `INSERT INTO auth_customer (username, password_hash, is_admin)
+	VALUES ($1, $2, true)
+	ON CONFLICT (username) DO UPDATE SET is_admin = true`
+
+// seedAdminUser idempotently creates (or promotes) the demo admin account.
+func seedAdminUser(ctx context.Context, db *sql.DB) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(seedAdminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash admin password: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, upsertAdmin, seedAdminEmail, string(hash)); err != nil {
+		return fmt.Errorf("seed admin user: %w", err)
+	}
+	return nil
+}
 
 type seedProduct struct {
 	id              string
@@ -390,9 +415,13 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values\n",
+			if err := seedAdminUser(ctx, db); err != nil {
+				return err
+			}
+
+			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values, admin user %s (password %s)\n",
 				len(seedProducts), len(variantSeeds), len(attributeTypeSeeds), len(categorySeeds),
-				countCategoryAssignments(), len(productAttributeSeeds))
+				countCategoryAssignments(), len(productAttributeSeeds), seedAdminEmail, seedAdminPassword)
 			return nil
 		},
 	}

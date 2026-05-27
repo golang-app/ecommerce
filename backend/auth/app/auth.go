@@ -159,6 +159,21 @@ func (a auth) ChangePassword(ctx context.Context, email, oldPassword, newPasswor
 	return a.authStorage.UpdatePassword(ctx, email, newHash)
 }
 
+// IsAdmin reports whether the customer identified by email has the admin
+// flag set. A missing customer is treated as a non-admin (false, nil); any
+// other lookup error is returned.
+func (a auth) IsAdmin(ctx context.Context, email string) (bool, error) {
+	customer, err := a.authStorage.Find(ctx, email)
+	if err == domain.ErrCustomerNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("could not find customer: %w", err)
+	}
+
+	return customer.IsAdmin, nil
+}
+
 func hashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	return string(bytes), err

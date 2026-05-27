@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE auth_customer DROP COLUMN IF EXISTS is_admin;
+
+COMMIT;

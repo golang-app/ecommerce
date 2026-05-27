@@ -34,6 +34,7 @@ type authService interface {
 	CreateNewCustomer(ctx context.Context, email, password string) error
 	FindByToken(ctx context.Context, sessToken string) (*authDomain.Session, error)
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
+	IsAdmin(ctx context.Context, email string) (bool, error)
 }
 
 type shippingService interface {

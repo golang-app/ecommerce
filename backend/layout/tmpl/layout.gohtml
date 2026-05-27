@@ -33,6 +33,9 @@
             {{if .LoggedIn}}
               <li><a href="/account">account</a></li>
             {{end}}
+            {{if .IsAdmin}}
+              <li><a href="/admin">admin</a></li>
+            {{end}}
             {{ html .AuthMenuItem }}
           </ul>
         </nav>

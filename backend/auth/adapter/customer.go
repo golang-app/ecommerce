@@ -7,4 +7,5 @@ package adapter
 type Customer struct {
 	Username     string
 	PasswordHash string
+	IsAdmin      bool
 }

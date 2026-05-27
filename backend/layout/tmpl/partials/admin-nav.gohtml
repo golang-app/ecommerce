@@ -1,0 +1,11 @@
+{{define "admin-nav"}}
+<nav class="admin-nav">
+  <a href="/admin" class="admin-nav__link {{if eq .Active "dashboard"}}is-active{{end}}">dashboard</a>
+  <a href="/admin/products" class="admin-nav__link {{if eq .Active "products"}}is-active{{end}}">products</a>
+  <a href="/admin/categories" class="admin-nav__link {{if eq .Active "categories"}}is-active{{end}}">categories</a>
+  <a href="/admin/attributes" class="admin-nav__link {{if eq .Active "attributes"}}is-active{{end}}">attributes</a>
+  <a href="/admin/orders" class="admin-nav__link {{if eq .Active "orders"}}is-active{{end}}">orders</a>
+  <span class="admin-nav__rule"></span>
+  <a href="/" class="admin-nav__link admin-nav__link--muted">back to store</a>
+</nav>
+{{end}}

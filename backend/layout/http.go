@@ -115,6 +115,10 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/account/addresses/{id}/default", observability.HTTPWrap(m.handler.AccountSetDefaultAddress, m.logger)).Methods("POST")
 	r.HandleFunc("/account/details", observability.HTTPWrap(m.handler.AccountDetails, m.logger)).Methods("GET")
 	r.HandleFunc("/account/details/password", observability.HTTPWrap(m.handler.AccountChangePassword, m.logger)).Methods("POST")
+
+	// Admin panel. Later phases register the /admin/products, /admin/categories,
+	// /admin/attributes and /admin/orders handlers here, all behind requireAdmin.
+	r.HandleFunc("/admin", observability.HTTPWrap(m.handler.AdminDashboard, m.logger)).Methods("GET")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
@@ -141,6 +145,7 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["FlashError"] = session.Flashes("error")
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
 	data["LoggedIn"] = handler.currentCustomerID(r) != ""
+	data["IsAdmin"] = handler.isAdmin(r)
 	err := session.Save(r, w)
 	if err != nil {
 		log.Print(err.Error())
