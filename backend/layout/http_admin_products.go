@@ -527,6 +527,70 @@ func (handler httpHandler) AdminDeleteVariant(w http.ResponseWriter, r *http.Req
 	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
 }
 
+// splitCSVValues splits a comma-separated string into trimmed, non-empty values.
+func splitCSVValues(raw string) []string {
+	var out []string
+	for _, v := range strings.Split(raw, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// AdminAddOptionType adds an option type to an existing product. The chosen
+// default value is applied to every existing variant so they stay resolvable.
+func (handler httpHandler) AdminAddOptionType(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	_ = r.ParseForm()
+	name := strings.TrimSpace(r.FormValue("name"))
+	values := splitCSVValues(r.FormValue("values"))
+	def := strings.TrimSpace(r.FormValue("default"))
+	if err := handler.catalogSrv.AddOptionType(r.Context(), id, name, values, def); err != nil {
+		handler.flash(w, r, err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Option type added", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
+// AdminUpdateOptionType renames an option type and/or replaces its values.
+func (handler httpHandler) AdminUpdateOptionType(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	_ = r.ParseForm()
+	currentName := strings.TrimSpace(r.FormValue("current_name"))
+	newName := strings.TrimSpace(r.FormValue("new_name"))
+	values := splitCSVValues(r.FormValue("values"))
+	if err := handler.catalogSrv.UpdateOptionType(r.Context(), id, currentName, newName, values); err != nil {
+		handler.flash(w, r, err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Option type updated", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
+// AdminDeleteOptionType removes an option type from a product.
+func (handler httpHandler) AdminDeleteOptionType(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	_ = r.ParseForm()
+	name := strings.TrimSpace(r.FormValue("name"))
+	if err := handler.catalogSrv.DeleteOptionType(r.Context(), id, name); err != nil {
+		handler.flash(w, r, err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Option type deleted", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
 // AdminDeleteProduct deletes a product (variants/links cascade).
 func (handler httpHandler) AdminDeleteProduct(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {

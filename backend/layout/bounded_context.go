@@ -26,6 +26,9 @@ type catalogService interface {
 	Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
 	AddVariantProduct(ctx context.Context, id, name, desc, currency, thumbnail string, optionTypes []pcapp.OptionTypeInput, variants []pcapp.VariantInput) error
 	AddVariantToProduct(ctx context.Context, productID, sku, image string, priceMinor int64, currency string, stock int, options map[string]string) error
+	AddOptionType(ctx context.Context, productID, name string, values []string, variantDefault string) error
+	UpdateOptionType(ctx context.Context, productID, currentName, newName string, values []string) error
+	DeleteOptionType(ctx context.Context, productID, name string) error
 	UpdateVariant(ctx context.Context, variantID, sku, image string, priceMinor int64, currency string, stock int) error
 	DeleteVariant(ctx context.Context, productID, variantID string) error
 	UpdateProduct(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error

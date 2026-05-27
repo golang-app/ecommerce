@@ -51,6 +51,124 @@ func (db postgres) AddOptionType(ctx context.Context, productID string, position
 	return nil
 }
 
+// AddProductOptionType inserts a new option type row and seeds the chosen
+// default value onto every existing variant's options jsonb (keyed by the
+// option-type name) so they remain resolvable. Both writes run in one
+// transaction.
+func (db postgres) AddProductOptionType(ctx context.Context, productID, optionTypeID, name string, position int, values []string, variantDefault string) error {
+	valuesJSON, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("marshal option values: %w", err)
+	}
+
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `
+		INSERT INTO productcatalog_option_type (id, product_id, name, position, values)
+		VALUES ($1, $2, $3, $4, $5)
+	`, optionTypeID, productID, name, position, valuesJSON); err != nil {
+		return fmt.Errorf("add option type: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE productcatalog_variant
+		SET options = options || jsonb_build_object($2::text, $3::text)
+		WHERE product_id = $1
+	`, productID, name, variantDefault); err != nil {
+		return fmt.Errorf("seed option default on variants: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit add option type: %w", err)
+	}
+	return nil
+}
+
+// UpdateProductOptionType renames/re-values an option type and, when the name
+// changes, rekeys the option in every variant's options jsonb. Runs in one
+// transaction.
+func (db postgres) UpdateProductOptionType(ctx context.Context, productID, currentName, newName string, values []string) error {
+	valuesJSON, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("marshal option values: %w", err)
+	}
+
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE productcatalog_option_type
+		SET name = $3, values = $4
+		WHERE product_id = $1 AND name = $2
+	`, productID, currentName, newName, valuesJSON); err != nil {
+		return fmt.Errorf("update option type: %w", err)
+	}
+
+	if newName != currentName {
+		if _, err = tx.ExecContext(ctx, `
+			UPDATE productcatalog_variant
+			SET options = (options - $2) || jsonb_build_object($3::text, options->>$2)
+			WHERE product_id = $1 AND options ? $2
+		`, productID, currentName, newName); err != nil {
+			return fmt.Errorf("rekey option on variants: %w", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit update option type: %w", err)
+	}
+	return nil
+}
+
+// DeleteProductOptionType removes an option type and strips its key from every
+// variant's options jsonb. Runs in one transaction.
+func (db postgres) DeleteProductOptionType(ctx context.Context, productID, name string) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `
+		DELETE FROM productcatalog_option_type
+		WHERE product_id = $1 AND name = $2
+	`, productID, name); err != nil {
+		return fmt.Errorf("delete option type: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE productcatalog_variant
+		SET options = options - $2
+		WHERE product_id = $1
+	`, productID, name); err != nil {
+		return fmt.Errorf("strip option from variants: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete option type: %w", err)
+	}
+	return nil
+}
+
 func (db postgres) AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error {
 	options, err := json.Marshal(v.Options())
 	if err != nil {

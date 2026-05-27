@@ -23,6 +23,9 @@ type productStorage interface {
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
+	AddProductOptionType(ctx context.Context, productID, optionTypeID, name string, position int, values []string, variantDefault string) error
+	UpdateProductOptionType(ctx context.Context, productID, currentName, newName string, values []string) error
+	DeleteProductOptionType(ctx context.Context, productID, name string) error
 	AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error
 	UpdateVariant(ctx context.Context, variantID, sku, image string, priceAmount int64, currency string, stock int) error
 	DeleteVariant(ctx context.Context, variantID string) error

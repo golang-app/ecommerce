@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
@@ -24,6 +25,9 @@ type ProductStorage interface {
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
+	AddProductOptionType(ctx context.Context, productID, optionTypeID, name string, position int, values []string, variantDefault string) error
+	UpdateProductOptionType(ctx context.Context, productID, currentName, newName string, values []string) error
+	DeleteProductOptionType(ctx context.Context, productID, name string) error
 	AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error
 	UpdateVariant(ctx context.Context, variantID, sku, image string, priceAmount int64, currency string, stock int) error
 	DeleteVariant(ctx context.Context, variantID string) error
@@ -427,4 +431,157 @@ func (ps ProductService) DeleteVariant(ctx context.Context, productID, variantID
 		return fmt.Errorf("cannot delete the last variant: a product needs at least one variant")
 	}
 	return ps.storage.DeleteVariant(ctx, variantID)
+}
+
+// AddOptionType adds a new option type to an existing product. Because a
+// variant must carry a value for every option type to stay resolvable, the
+// chosen variantDefault is seeded onto every existing variant.
+func (ps ProductService) AddOptionType(ctx context.Context, productID, name string, values []string, variantDefault string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("option type name is required")
+	}
+	product, err := ps.storage.Find(ctx, productID)
+	if err != nil {
+		return err
+	}
+	for _, ot := range product.OptionTypes() {
+		if ot.Name() == name {
+			return fmt.Errorf("option type %q already exists", name)
+		}
+	}
+
+	cleaned := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		cleaned = append(cleaned, v)
+	}
+	if len(cleaned) == 0 {
+		return fmt.Errorf("option type %q needs at least one value", name)
+	}
+
+	variantDefault = strings.TrimSpace(variantDefault)
+	allowed := false
+	for _, v := range cleaned {
+		if v == variantDefault {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
+		return fmt.Errorf("default value %q must be one of the option values", variantDefault)
+	}
+
+	id := fmt.Sprintf("opt-%s-%s", productID, slugify(name))
+	position := len(product.OptionTypes())
+	return ps.storage.AddProductOptionType(ctx, productID, id, name, position, cleaned, variantDefault)
+}
+
+// UpdateOptionType renames an option type and/or replaces its values. It
+// guards that every value currently used by a variant for this option remains
+// in the new values list, so no variant becomes unreachable.
+func (ps ProductService) UpdateOptionType(ctx context.Context, productID, currentName, newName string, values []string) error {
+	currentName = strings.TrimSpace(currentName)
+	newName = strings.TrimSpace(newName)
+	if newName == "" {
+		return fmt.Errorf("option type name is required")
+	}
+	product, err := ps.storage.Find(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	exists := false
+	for _, ot := range product.OptionTypes() {
+		if ot.Name() == currentName {
+			exists = true
+		} else if ot.Name() == newName {
+			return fmt.Errorf("option type %q already exists", newName)
+		}
+	}
+	if !exists {
+		return fmt.Errorf("option type %q does not exist", currentName)
+	}
+
+	cleaned := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		cleaned = append(cleaned, v)
+	}
+	if len(cleaned) == 0 {
+		return fmt.Errorf("option type %q needs at least one value", newName)
+	}
+	allowed := map[string]bool{}
+	for _, v := range cleaned {
+		allowed[v] = true
+	}
+
+	// Guard: every value a variant currently uses for this option must survive.
+	for _, v := range product.Variants() {
+		if used, ok := v.Options()[currentName]; ok && used != "" && !allowed[used] {
+			return fmt.Errorf("cannot remove value %q: it is in use by a variant", used)
+		}
+	}
+
+	return ps.storage.UpdateProductOptionType(ctx, productID, currentName, newName, cleaned)
+}
+
+// DeleteOptionType removes an option type from a product, stripping its key
+// from every variant. It rejects the deletion when two variants would collapse
+// to the same option combination (becoming ambiguous for ResolveVariant); this
+// also prevents removing the last distinguishing option type.
+func (ps ProductService) DeleteOptionType(ctx context.Context, productID, name string) error {
+	name = strings.TrimSpace(name)
+	product, err := ps.storage.Find(ctx, productID)
+	if err != nil {
+		return err
+	}
+
+	exists := false
+	for _, ot := range product.OptionTypes() {
+		if ot.Name() == name {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		return fmt.Errorf("option type %q does not exist", name)
+	}
+
+	// Guard: simulate removing the key from every variant and detect collisions.
+	seen := map[string]bool{}
+	for _, v := range product.Variants() {
+		keys := make([]string, 0, len(v.Options()))
+		for k := range v.Options() {
+			if k == name {
+				continue
+			}
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var b strings.Builder
+		for _, k := range keys {
+			b.WriteString(k)
+			b.WriteString("=")
+			b.WriteString(v.Options()[k])
+			b.WriteString(";")
+		}
+		sig := b.String()
+		if seen[sig] {
+			return fmt.Errorf("cannot delete option type %q: variants would become ambiguous", name)
+		}
+		seen[sig] = true
+	}
+
+	return ps.storage.DeleteProductOptionType(ctx, productID, name)
 }
