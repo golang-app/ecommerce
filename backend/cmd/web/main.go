@@ -12,10 +12,12 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/auth"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout"
+	checkoutintegration "github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
@@ -76,11 +78,19 @@ func main() {
 	}
 
 	app.AddDependency(dependency.NewSQL(db))
+	bus := eventbus.New(logger)
 	pcBD, catalogService := productcatalog.New(db)
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
 	authBD, authService := auth.New(db)
-	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, cartSrv, catalogService)
+	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, bus, catalogService)
 	shipSrv := shippinginfo.New(db)
+
+	// Cross-context integration: when checkout reports an order paid, the cart
+	// context empties the basket it was placed from.
+	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
+		return cartSrv.Clear(ctx, e.(checkoutintegration.OrderPaid).SessionID)
+	})
+
 	app.AddBoundedContext(cartBD)
 
 	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv))
