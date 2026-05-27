@@ -24,6 +24,10 @@ type catalogService interface {
 	Facets(ctx context.Context, categorySlug string) ([]pcapp.Facet, error)
 
 	Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
+	AddVariantProduct(ctx context.Context, id, name, desc, currency, thumbnail string, optionTypes []pcapp.OptionTypeInput, variants []pcapp.VariantInput) error
+	AddVariantToProduct(ctx context.Context, productID, sku, image string, priceMinor int64, currency string, stock int, options map[string]string) error
+	UpdateVariant(ctx context.Context, variantID, sku, image string, priceMinor int64, currency string, stock int) error
+	DeleteVariant(ctx context.Context, productID, variantID string) error
 	UpdateProduct(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
 	DeleteProduct(ctx context.Context, id string) error
 	SetVariantStock(ctx context.Context, variantID string, stock int) error

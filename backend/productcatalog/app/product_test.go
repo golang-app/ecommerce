@@ -24,6 +24,8 @@ type productStorage interface {
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
 	AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error
+	UpdateVariant(ctx context.Context, variantID, sku, image string, priceAmount int64, currency string, stock int) error
+	DeleteVariant(ctx context.Context, variantID string) error
 	Reserve(ctx context.Context, quantities map[string]int) error
 	Release(ctx context.Context, quantities map[string]int) error
 	ListProducts(ctx context.Context, q app.ProductQuery) ([]domain.Product, error)

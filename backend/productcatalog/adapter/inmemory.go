@@ -45,6 +45,35 @@ func (im *inMemory) AddVariant(ctx context.Context, productID string, position i
 	return nil
 }
 
+// UpdateVariant updates a single variant's sku, image, price and stock by id.
+func (im *inMemory) UpdateVariant(ctx context.Context, variantID, sku, image string, priceAmount int64, currency string, stock int) error {
+	pid, i, ok := im.find(variantID)
+	if !ok {
+		return domain.ErrProductNotFound
+	}
+	cur, err := domain.NewCurrency(currency)
+	if err != nil {
+		return err
+	}
+	price, err := domain.NewPrice(priceAmount, cur)
+	if err != nil {
+		return err
+	}
+	v := im.variants[pid][i]
+	im.variants[pid][i] = domain.NewVariant(v.ID(), sku, image, v.Options(), price, stock)
+	return nil
+}
+
+// DeleteVariant removes a single variant by id.
+func (im *inMemory) DeleteVariant(ctx context.Context, variantID string) error {
+	pid, i, ok := im.find(variantID)
+	if !ok {
+		return domain.ErrProductNotFound
+	}
+	im.variants[pid] = append(im.variants[pid][:i], im.variants[pid][i+1:]...)
+	return nil
+}
+
 func (im *inMemory) hydrate(p domain.Product) domain.Product {
 	return p.WithCatalog(im.optionTypes[string(p.ID())], im.variants[string(p.ID())]).
 		WithClassification(im.prodCats[string(p.ID())], im.prodAttrs[string(p.ID())])

@@ -1,0 +1,97 @@
+{{define "main"}}
+  <p class="crumbs"><a href="/admin/products">products</a> / new variant product</p>
+  <h2 class="account-card__title">create a variant product</h2>
+
+  <form class="form" method="post" action="/admin/products/new-variant">
+    <section class="admin-section">
+      <h3 class="admin-section__title">product</h3>
+      <div class="field"><label for="p-id">id (slug)</label><input id="p-id" name="id" required placeholder="lowercase-with-hyphens"></div>
+      <div class="field"><label for="p-name">name</label><input id="p-name" name="name" required></div>
+      <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required></textarea></div>
+      <div class="field"><label for="p-currency">currency</label><input id="p-currency" name="currency" value="USD"></div>
+      <div class="field"><label for="p-thumbnail">thumbnail URL</label><input id="p-thumbnail" name="thumbnail"></div>
+    </section>
+
+    <section class="admin-section">
+      <h3 class="admin-section__title">option types</h3>
+      <p class="form__aside muted">e.g. name "Color", values "Red, Blue, Green" (comma-separated).</p>
+      <table class="admin-table variant-table">
+        <thead><tr><th>name</th><th>values (comma-separated)</th><th></th></tr></thead>
+        <tbody id="ot-rows">
+          <tr class="ot-row">
+            <td><input name="ot_name[]" placeholder="Color"></td>
+            <td><input name="ot_values[]" placeholder="Red, Blue"></td>
+            <td><button type="button" class="linkbtn linkbtn--danger ot-remove">remove</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="button" class="btn btn--ghost" id="add-ot">add option type</button>
+    </section>
+
+    <section class="admin-section">
+      <h3 class="admin-section__title">variants</h3>
+      <p class="form__aside muted">options formatted as "Name=Value, Name2=Value2" (must match the option type names above). price in major units (e.g. 9.00).</p>
+      <table class="admin-table variant-table">
+        <thead><tr><th>sku</th><th>price</th><th>stock</th><th>image URL</th><th>options</th><th></th></tr></thead>
+        <tbody id="v-rows">
+          <tr class="v-row">
+            <td><input name="v_sku[]" placeholder="TSHIRT-RED-L"></td>
+            <td><input name="v_price[]" placeholder="9.00"></td>
+            <td><input name="v_stock[]" type="number" min="0" value="0"></td>
+            <td><input name="v_image[]"></td>
+            <td><input name="v_options[]" placeholder="Color=Red, Size=L"></td>
+            <td><button type="button" class="linkbtn linkbtn--danger v-remove">remove</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <button type="button" class="btn btn--ghost" id="add-v">add variant</button>
+    </section>
+
+    <button type="submit" class="btn">create variant product</button>
+  </form>
+
+  <p class="form__aside"><a href="/admin/products">&larr; back to products</a></p>
+
+  <script>
+    (function () {
+      function cloneLastRow(tbodyId, rowClass) {
+        var tbody = document.getElementById(tbodyId);
+        var rows = tbody.getElementsByClassName(rowClass);
+        if (rows.length === 0) { return; }
+        var clone = rows[rows.length - 1].cloneNode(true);
+        var inputs = clone.getElementsByTagName("input");
+        for (var i = 0; i < inputs.length; i++) {
+          if (inputs[i].type === "number") {
+            inputs[i].value = inputs[i].getAttribute("value") || "";
+          } else {
+            inputs[i].value = "";
+          }
+        }
+        tbody.appendChild(clone);
+      }
+
+      document.getElementById("add-ot").addEventListener("click", function () {
+        cloneLastRow("ot-rows", "ot-row");
+      });
+      document.getElementById("add-v").addEventListener("click", function () {
+        cloneLastRow("v-rows", "v-row");
+      });
+
+      document.addEventListener("click", function (e) {
+        var t = e.target;
+        if (t && t.classList && t.classList.contains("ot-remove")) {
+          var otBody = document.getElementById("ot-rows");
+          if (otBody.getElementsByClassName("ot-row").length > 1) {
+            t.closest(".ot-row").remove();
+          }
+        }
+        if (t && t.classList && t.classList.contains("v-remove")) {
+          var vBody = document.getElementById("v-rows");
+          if (vBody.getElementsByClassName("v-row").length > 1) {
+            t.closest(".v-row").remove();
+          }
+        }
+      });
+    })();
+  </script>
+{{end}}

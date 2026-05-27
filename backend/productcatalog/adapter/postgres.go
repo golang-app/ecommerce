@@ -66,6 +66,28 @@ func (db postgres) AddVariant(ctx context.Context, productID string, position in
 	return nil
 }
 
+// UpdateVariant updates a single variant row (sku, image, price, stock) by id.
+func (db postgres) UpdateVariant(ctx context.Context, variantID, sku, image string, priceAmount int64, currency string, stock int) error {
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_variant
+		SET sku = $2, image_url = $3, price_amount = $4, price_currency = $5, stock = $6
+		WHERE id = $1
+	`, variantID, sku, image, priceAmount, currency, stock)
+	if err != nil {
+		return fmt.Errorf("update variant: %w", err)
+	}
+	return nil
+}
+
+// DeleteVariant removes a single variant row by id.
+func (db postgres) DeleteVariant(ctx context.Context, variantID string) error {
+	_, err := db.db.ExecContext(ctx, `DELETE FROM productcatalog_variant WHERE id = $1`, variantID)
+	if err != nil {
+		return fmt.Errorf("delete variant: %w", err)
+	}
+	return nil
+}
+
 func (db postgres) optionTypes(ctx context.Context, productID string) ([]domain.OptionType, error) {
 	rows, err := db.db.QueryContext(ctx, `
 		SELECT name, values FROM productcatalog_option_type

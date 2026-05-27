@@ -431,3 +431,25 @@ input:focus, select:focus, textarea:focus {
   .admin-content { padding: 18px 16px 36px; }
   .admin-flash { padding: 0 16px; }
 }
+
+/* --- Variant management -------------------------------------------------- */
+.admin-section__subtitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 18px 0 8px;
+  color: #3a4150;
+}
+.variant-table { width: 100%; }
+.variant-table input,
+.variant-table select { width: 100%; }
+.form--inline {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  max-width: none;
+  margin: 0;
+}
+.form--inline input { width: auto; flex: 1 1 90px; min-width: 70px; }
+.form--inline input[type="number"] { flex: 0 0 80px; }
+.btn--small { padding: 5px 12px; font-size: 0.82rem; }
