@@ -45,12 +45,44 @@ type httpHandler struct {
 }
 
 func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
-	handler.renderTemplate(w, r, "home", nil)
+	handler.renderProductsPage(w, r, "")
+}
+
+// CategoryPage renders the full products page scoped to a single category
+// (by slug). An unknown slug still renders (with an empty grid) rather than
+// erroring.
+func (handler httpHandler) CategoryPage(w http.ResponseWriter, r *http.Request) {
+	slug := mux.Vars(r)["slug"]
+	handler.renderProductsPage(w, r, slug)
+}
+
+// renderProductsPage renders the full products page (left filter rail + grid
+// container) for the given category scope ("" means "all"). The grid itself is
+// lazy-loaded over HTMX from /api/v1/products.
+func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Request, activeCategory string) {
+	categories, err := handler.catalogSrv.Categories(r.Context())
+	if err != nil {
+		log.Printf("cannot get categories: %s", err)
+		categories = nil
+	}
+
+	facets, err := handler.catalogSrv.Facets(r.Context(), activeCategory)
+	if err != nil {
+		log.Printf("cannot get facets for %q: %s", activeCategory, err)
+		facets = nil
+	}
+
+	handler.renderTemplate(w, r, "home", map[string]any{
+		"Categories":     categories,
+		"Facets":         facets,
+		"ActiveCategory": activeCategory,
+	})
 }
 
 func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.PathPrefix("/static/").Handler(StaticHandler())
 	r.HandleFunc("/", m.handler.HomePage)
+	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
 
 	r.HandleFunc("/cart", observability.HTTPWrap(m.handler.Cart, m.logger)).Methods("GET")
 	r.HandleFunc("/cart/{variantID}", observability.HTTPWrap(m.handler.AddToCart, m.logger)).Methods("POST")

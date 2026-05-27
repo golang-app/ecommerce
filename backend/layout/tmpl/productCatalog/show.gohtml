@@ -34,6 +34,27 @@
 
       {{template "variant-box" .}}
 
+      {{if or .Product.Attributes .Product.Categories}}
+        <section class="product__details">
+          <h2 class="product__details-heading">details</h2>
+          {{if .Product.Attributes}}
+            <ul class="product__attrs">
+              {{range .Product.Attributes}}
+                <li class="product__attr">
+                  <span class="product__attr-name">{{.Type.Name}}</span>
+                  <span class="product__attr-value">{{.Display}}</span>
+                </li>
+              {{end}}
+            </ul>
+          {{end}}
+          {{if .Product.Categories}}
+            <p class="product__cats">
+              {{range .Product.Categories}}<a class="product__cat" href="/category/{{.Slug}}">{{.Name}}</a>{{end}}
+            </p>
+          {{end}}
+        </section>
+      {{end}}
+
       <p class="product__hint muted">added to your cart without a page reload.</p>
     </div>
   </article>
