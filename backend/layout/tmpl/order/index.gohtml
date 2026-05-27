@@ -16,7 +16,7 @@
           <tr>
             <td>
               <a href="/order/{{$order.ID}}" class="order-row__id">{{$order.ID}}</a>
-              <span class="muted order-row__count"> &middot; {{len $order.Items}} item{{if ne (len $order.Items) 1}}s{{end}}</span>
+              <span class="muted order-row__count"> &middot; {{$order.ItemCount}} item{{if ne $order.ItemCount 1}}s{{end}}</span>
             </td>
             <td class="muted">{{$order.PlacedAt.Format "Jan 2, 2006"}}</td>
             <td><span class="order-status order-status--{{$order.Status}}">{{$order.Status}}</span></td>

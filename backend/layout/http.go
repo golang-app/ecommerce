@@ -39,7 +39,8 @@ type httpHandler struct {
 	cartSrv     cartService
 	catalogSrv  catalogService
 	authSrv     authService
-	checkoutSrv checkoutService
+	checkoutSrv checkoutCommands
+	checkoutQry checkoutQueries
 	shipSrv     shippingService
 }
 
