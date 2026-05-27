@@ -1,0 +1,10 @@
+{{define "account-nav"}}
+<nav class="account-nav">
+  <a href="/account" class="account-nav__link {{if eq .Active "overview"}}is-active{{end}}">overview</a>
+  <a href="/account/orders" class="account-nav__link {{if eq .Active "orders"}}is-active{{end}}">orders</a>
+  <a href="/account/addresses" class="account-nav__link {{if eq .Active "addresses"}}is-active{{end}}">addresses</a>
+  <a href="/account/details" class="account-nav__link {{if eq .Active "details"}}is-active{{end}}">account details</a>
+  <span class="account-nav__rule"></span>
+  <a href="/auth/logout" class="account-nav__link account-nav__link--muted">sign out</a>
+</nav>
+{{end}}

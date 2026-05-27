@@ -31,6 +31,16 @@ func (i *inMemory) Create(ctx context.Context, email, hash string) error {
 	return nil
 }
 
+func (i *inMemory) UpdatePassword(ctx context.Context, email, hash string) error {
+	c, ok := i.customers[email]
+	if !ok {
+		return domain.ErrCustomerNotFound
+	}
+	c.PasswordHash = hash
+	i.customers[email] = c
+	return nil
+}
+
 func (i *inMemory) Find(ctx context.Context, email string) (Customer, error) {
 	customer, ok := i.customers[email]
 	if !ok {

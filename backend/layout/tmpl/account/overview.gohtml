@@ -1,0 +1,38 @@
+{{define "main"}}
+  <h1 class="page-title">account</h1>
+  <div class="account">
+    <aside class="account__side">{{template "account-nav" .}}</aside>
+    <div class="account__content">
+      <p class="account__hello">Hello, <strong>{{.Email}}</strong>.</p>
+
+      <div class="account__cards">
+        <section class="account-card">
+          <h2 class="account-card__title">latest order</h2>
+          {{if .LatestOrder.ID}}
+            <p><a href="/order/{{.LatestOrder.ID}}" class="order-row__id">{{.LatestOrder.ID}}</a></p>
+            <p class="muted">{{.LatestOrder.PlacedAt.Format "Jan 2, 2006"}} &middot; {{.LatestOrder.TotalDisplay}} {{.LatestOrder.TotalCurrency}} &middot; {{.LatestOrder.Status}}</p>
+            <p><a href="/account/orders">all orders &rarr;</a></p>
+          {{else}}
+            <p class="muted">no orders yet. <a href="/">browse products</a></p>
+          {{end}}
+        </section>
+
+        <section class="account-card">
+          <h2 class="account-card__title">default address</h2>
+          {{if not .DefaultAddress.IsZero}}
+            <address class="order__address">
+              {{.DefaultAddress.Name}}<br>
+              {{.DefaultAddress.Street1}}<br>
+              {{with .DefaultAddress.Street2}}{{.}}<br>{{end}}
+              {{.DefaultAddress.City}}, {{.DefaultAddress.Zip}}<br>
+              {{.DefaultAddress.Country}}
+            </address>
+            <p><a href="/account/addresses">manage addresses &rarr;</a></p>
+          {{else}}
+            <p class="muted">none saved. <a href="/account/addresses">add one</a></p>
+          {{end}}
+        </section>
+      </div>
+    </div>
+  </div>
+{{end}}

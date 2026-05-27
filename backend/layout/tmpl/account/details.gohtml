@@ -1,0 +1,29 @@
+{{define "main"}}
+  <h1 class="page-title">account</h1>
+  <div class="account">
+    <aside class="account__side">{{template "account-nav" .}}</aside>
+    <div class="account__content">
+      <h2 class="account-card__title">account details</h2>
+
+      <div class="field">
+        <label>email</label>
+        <p>{{.Email}}</p>
+      </div>
+
+      <section class="addr-add">
+        <h3 class="account-card__title">change password</h3>
+        <form class="form" method="post" action="/account/details/password">
+          <div class="field">
+            <label for="cur">current password</label>
+            <input id="cur" type="password" name="current_password" autocomplete="current-password" required>
+          </div>
+          <div class="field">
+            <label for="new">new password</label>
+            <input id="new" type="password" name="new_password" autocomplete="new-password" required>
+          </div>
+          <button type="submit" class="btn">update password</button>
+        </form>
+      </section>
+    </div>
+  </div>
+{{end}}

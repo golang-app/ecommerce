@@ -416,6 +416,59 @@ main {
   line-height: 1.7;
 }
 
+/* ---------- account area ---------- */
+.account {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 48rem) {
+  .account { grid-template-columns: 1fr; gap: var(--space-3); }
+}
+.account-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.account-nav__link {
+  border: 0;
+  padding: var(--space-1) 0;
+  color: var(--fg-muted);
+  text-transform: lowercase;
+  letter-spacing: .02em;
+  transition: color .15s ease;
+}
+.account-nav__link:hover { color: var(--fg); border: 0; }
+.account-nav__link.is-active { color: var(--fg); border-left: 2px solid var(--fg); padding-left: var(--space-2); margin-left: calc(-1 * var(--space-2) - 2px); }
+.account-nav__link--muted { color: var(--fg-muted); }
+.account-nav__rule { display: block; border-top: 1px solid var(--rule); margin: var(--space-2) 0; }
+
+.account__hello { font-size: var(--step-1); margin-bottom: var(--space-4); }
+.account__cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-3); }
+.account-card { border-top: 1px solid var(--rule); padding-top: var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); }
+.account-card__title {
+  font-family: var(--serif);
+  font-size: var(--step-1);
+  text-transform: lowercase;
+  letter-spacing: -.01em;
+  margin-bottom: var(--space-2);
+}
+
+/* address book */
+.addr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }
+.addr-card { position: relative; border: 1px solid var(--rule); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.addr-card--default { border-color: var(--fg); }
+.addr-card__badge { position: absolute; top: var(--space-2); right: var(--space-2); font-size: 0.7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--fg-muted); }
+.addr-card__actions { display: flex; gap: var(--space-3); margin-top: auto; font-size: 0.85rem; align-items: center; }
+.addr-card__actions a { border: 0; }
+.addr-card__actions a:hover { border-bottom: 1px solid var(--fg); }
+.addr-add { margin-top: var(--space-4); border-top: 1px solid var(--rule); padding-top: var(--space-3); }
+
+.linkbtn { background: 0; border: 0; padding: 0; cursor: pointer; font-size: 0.85rem; color: var(--fg-muted); text-transform: lowercase; }
+.linkbtn:hover { color: var(--fg); }
+.linkbtn--danger:hover { color: var(--danger); }
+
 /* ---------- forms ---------- */
 .form {
   max-width: 28rem;

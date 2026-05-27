@@ -1,0 +1,21 @@
+{{define "main"}}
+  <h1 class="page-title">account</h1>
+  <div class="account">
+    <aside class="account__side">{{template "account-nav" .}}</aside>
+    <div class="account__content">
+      <p class="crumbs"><a href="/account/addresses">addresses</a> / edit</p>
+      <h2 class="account-card__title">edit address</h2>
+
+      <form class="form" method="post" action="/account/addresses/{{.Address.ID}}">
+        <div class="field"><label for="a-name">full name</label><input id="a-name" name="name" value="{{.Address.Name}}" required></div>
+        <div class="field"><label for="a-street1">street</label><input id="a-street1" name="street1" value="{{.Address.Street1}}" required></div>
+        <div class="field"><label for="a-street2">street (line 2)</label><input id="a-street2" name="street2" value="{{.Address.Street2}}"></div>
+        <div class="field"><label for="a-city">city</label><input id="a-city" name="city" value="{{.Address.City}}" required></div>
+        <div class="field"><label for="a-zip">zip code</label><input id="a-zip" name="zip" value="{{.Address.Zip}}" required></div>
+        <div class="field"><label for="a-country">country</label><input id="a-country" name="country" value="{{.Address.Country}}" required></div>
+        <button type="submit" class="btn">save changes</button>
+        <p class="form__aside"><a href="/account/addresses">&larr; back to addresses</a></p>
+      </form>
+    </div>
+  </div>
+{{end}}

@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"path/filepath"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/gorilla/mux"
@@ -39,6 +40,7 @@ type httpHandler struct {
 	catalogSrv  catalogService
 	authSrv     authService
 	checkoutSrv checkoutService
+	shipSrv     shippingService
 }
 
 func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +69,17 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/checkout", observability.HTTPWrap(m.handler.PlaceOrder, m.logger)).Methods("POST")
 	r.HandleFunc("/orders", observability.HTTPWrap(m.handler.Orders, m.logger)).Methods("GET")
 	r.HandleFunc("/order/{orderID}", observability.HTTPWrap(m.handler.Order, m.logger)).Methods("GET")
+
+	r.HandleFunc("/account", observability.HTTPWrap(m.handler.AccountOverview, m.logger)).Methods("GET")
+	r.HandleFunc("/account/orders", observability.HTTPWrap(m.handler.AccountOrders, m.logger)).Methods("GET")
+	r.HandleFunc("/account/addresses", observability.HTTPWrap(m.handler.AccountAddresses, m.logger)).Methods("GET")
+	r.HandleFunc("/account/addresses", observability.HTTPWrap(m.handler.AccountAddAddress, m.logger)).Methods("POST")
+	r.HandleFunc("/account/addresses/{id}/edit", observability.HTTPWrap(m.handler.AccountEditAddressForm, m.logger)).Methods("GET")
+	r.HandleFunc("/account/addresses/{id}", observability.HTTPWrap(m.handler.AccountUpdateAddress, m.logger)).Methods("POST")
+	r.HandleFunc("/account/addresses/{id}/delete", observability.HTTPWrap(m.handler.AccountDeleteAddress, m.logger)).Methods("POST")
+	r.HandleFunc("/account/addresses/{id}/default", observability.HTTPWrap(m.handler.AccountSetDefaultAddress, m.logger)).Methods("POST")
+	r.HandleFunc("/account/details", observability.HTTPWrap(m.handler.AccountDetails, m.logger)).Methods("GET")
+	r.HandleFunc("/account/details/password", observability.HTTPWrap(m.handler.AccountChangePassword, m.logger)).Methods("POST")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
@@ -78,6 +91,9 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		"./layout/tmpl/layout.gohtml",
 		"./layout/tmpl/" + templateName + ".gohtml",
 	}
+	// Shared partials (e.g. the account sidebar) are available to every page.
+	partials, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
+	files = append(files, partials...)
 
 	var ts = template.Must(template.New("").Funcs(template.FuncMap{
 		"html": func(value interface{}) template.HTML {

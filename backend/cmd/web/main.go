@@ -12,6 +12,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/auth"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout"
+	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
@@ -79,9 +80,10 @@ func main() {
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
 	authBD, authService := auth.New(db)
 	checkoutBD, checkoutSrv := checkout.New(db, cartSrv, cartSrv)
+	shipSrv := shippinginfo.New(db)
 	app.AddBoundedContext(cartBD)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, shipSrv))
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)
