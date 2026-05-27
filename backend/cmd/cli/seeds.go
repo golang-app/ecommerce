@@ -7,7 +7,32 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/bcrypt"
 )
+
+// seedAdmin email/password for the demo admin account. The password is
+// hashed with the same bcrypt cost the auth service uses (bcrypt.DefaultCost)
+// so the seeded credentials work against the normal login flow.
+const (
+	seedAdminEmail    = "admin@example.com"
+	seedAdminPassword = "Admin123!"
+)
+
+const upsertAdmin = `INSERT INTO auth_customer (username, password_hash, is_admin)
+	VALUES ($1, $2, true)
+	ON CONFLICT (username) DO UPDATE SET is_admin = true`
+
+// seedAdminUser idempotently creates (or promotes) the demo admin account.
+func seedAdminUser(ctx context.Context, db *sql.DB) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(seedAdminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash admin password: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, upsertAdmin, seedAdminEmail, string(hash)); err != nil {
+		return fmt.Errorf("seed admin user: %w", err)
+	}
+	return nil
+}
 
 type seedProduct struct {
 	id              string
@@ -363,6 +388,39 @@ func seedReferenceData(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+// seededProductIDsInOrder returns the seeded product ids in the order they are
+// inserted (simple products first, then variant products).
+func seededProductIDsInOrder() []string {
+	ids := make([]string, 0, len(seedProducts)+len(variantSeeds))
+	for _, p := range seedProducts {
+		ids = append(ids, p.id)
+	}
+	for _, p := range variantSeeds {
+		ids = append(ids, p.id)
+	}
+	return ids
+}
+
+// seedCreatedAt makes the catalogue ordering deterministic so "new arrivals"
+// is stable: each seeded product's created_at is set to now() minus a per-row
+// day offset. The first-seeded product gets the largest offset (oldest) and
+// the last-seeded product the smallest (newest), so admin-created products
+// (which default to now()) sort newest of all. Idempotent: re-running simply
+// resets the timestamps.
+func seedCreatedAt(ctx context.Context, db *sql.DB) error {
+	ids := seededProductIDsInOrder()
+	n := len(ids)
+	for i, id := range ids {
+		offset := n - i // first row => largest offset (oldest)
+		if _, err := db.ExecContext(ctx,
+			`UPDATE productcatalog_product SET created_at = now() - make_interval(days => $2) WHERE id = $1`,
+			id, offset); err != nil {
+			return fmt.Errorf("seed created_at for %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
 func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "seeds",
@@ -386,13 +444,21 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				}
 			}
 
+			if err := seedCreatedAt(ctx, db); err != nil {
+				return err
+			}
+
 			if err := seedReferenceData(ctx, db); err != nil {
 				return err
 			}
 
-			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values\n",
+			if err := seedAdminUser(ctx, db); err != nil {
+				return err
+			}
+
+			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values, admin user %s (password %s)\n",
 				len(seedProducts), len(variantSeeds), len(attributeTypeSeeds), len(categorySeeds),
-				countCategoryAssignments(), len(productAttributeSeeds))
+				countCategoryAssignments(), len(productAttributeSeeds), seedAdminEmail, seedAdminPassword)
 			return nil
 		},
 	}

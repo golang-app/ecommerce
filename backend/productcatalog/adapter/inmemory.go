@@ -58,6 +58,19 @@ func (im *inMemory) All(ctx context.Context) ([]domain.Product, error) {
 	return out, nil
 }
 
+// Newest returns up to limit products in insertion order (there is no
+// created_at in the in-memory store), hydrated like All.
+func (im *inMemory) Newest(ctx context.Context, limit int) ([]domain.Product, error) {
+	if limit > len(im.products) {
+		limit = len(im.products)
+	}
+	out := make([]domain.Product, 0, limit)
+	for i := 0; i < limit; i++ {
+		out = append(out, im.hydrate(im.products[i]))
+	}
+	return out, nil
+}
+
 func (im *inMemory) Find(ctx context.Context, id string) (domain.Product, error) {
 	for _, p := range im.products {
 		if string(p.ID()) == id {
@@ -65,6 +78,76 @@ func (im *inMemory) Find(ctx context.Context, id string) (domain.Product, error)
 		}
 	}
 	return domain.Product{}, domain.ErrProductNotFound
+}
+
+// UpdateProduct replaces the core product fields (name/description/price/
+// thumbnail) for the matching id, preserving its option types/variants and
+// classification (held in separate maps).
+func (im *inMemory) UpdateProduct(ctx context.Context, p domain.Product) error {
+	for i, existing := range im.products {
+		if existing.ID() == p.ID() {
+			im.products[i] = p
+			return nil
+		}
+	}
+	return domain.ErrProductNotFound
+}
+
+// DeleteProduct removes a product and its associated option types, variants and
+// classification (mirroring the postgres ON DELETE CASCADE behaviour).
+func (im *inMemory) DeleteProduct(ctx context.Context, id string) error {
+	for i, existing := range im.products {
+		if string(existing.ID()) == id {
+			im.products = append(im.products[:i], im.products[i+1:]...)
+			break
+		}
+	}
+	delete(im.optionTypes, id)
+	delete(im.variants, id)
+	delete(im.prodCats, id)
+	delete(im.prodAttrs, id)
+	return nil
+}
+
+// SetVariantStock sets a single variant's stock, wherever it lives.
+func (im *inMemory) SetVariantStock(ctx context.Context, variantID string, stock int) error {
+	pid, i, ok := im.find(variantID)
+	if !ok {
+		return domain.ErrProductNotFound
+	}
+	v := im.variants[pid][i]
+	im.variants[pid][i] = domain.NewVariant(v.ID(), v.SKU(), v.Image(), v.Options(), v.Price(), stock)
+	return nil
+}
+
+// SetProductCategories replaces the product's category links with the given set.
+func (im *inMemory) SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error {
+	cats := make([]domain.Category, 0, len(categoryIDs))
+	for _, cid := range categoryIDs {
+		if c, ok := im.categories[cid]; ok {
+			cats = append(cats, c)
+		}
+	}
+	im.prodCats[productID] = cats
+	return nil
+}
+
+// SetProductAttributes replaces the product's attribute values with the given set.
+func (im *inMemory) SetProductAttributes(ctx context.Context, productID string, values []app.AttributeAssignment) error {
+	out := make([]domain.AttributeValue, 0, len(values))
+	for _, v := range values {
+		t, ok := im.attrTypes[v.TypeID]
+		if !ok {
+			continue
+		}
+		if v.Num != nil {
+			out = append(out, domain.NewNumericValue(t, *v.Num))
+		} else {
+			out = append(out, domain.NewEnumValue(t, v.Text))
+		}
+	}
+	im.prodAttrs[productID] = out
+	return nil
 }
 
 func (im *inMemory) find(variantID string) (string, int, bool) {
@@ -126,13 +209,13 @@ func (im *inMemory) AddCategory(c domain.Category) {
 	im.categories[c.ID()] = c
 }
 
-// SetProductAttributes attaches attribute values to a product. Test/seed helper.
-func (im *inMemory) SetProductAttributes(productID string, values ...domain.AttributeValue) {
+// SeedProductAttributes attaches attribute values to a product. Test/seed helper.
+func (im *inMemory) SeedProductAttributes(productID string, values ...domain.AttributeValue) {
 	im.prodAttrs[productID] = append(im.prodAttrs[productID], values...)
 }
 
-// SetProductCategories attaches categories to a product. Test/seed helper.
-func (im *inMemory) SetProductCategories(productID string, cats ...domain.Category) {
+// SeedProductCategories attaches categories to a product. Test/seed helper.
+func (im *inMemory) SeedProductCategories(productID string, cats ...domain.Category) {
 	im.prodCats[productID] = append(im.prodCats[productID], cats...)
 }
 
@@ -148,6 +231,50 @@ func (im *inMemory) Categories(ctx context.Context) ([]domain.Category, error) {
 		return out[i].Name() < out[j].Name()
 	})
 	return out, nil
+}
+
+func (im *inMemory) CreateCategory(ctx context.Context, c domain.Category) error {
+	im.categories[c.ID()] = c
+	return nil
+}
+
+func (im *inMemory) UpdateCategory(ctx context.Context, c domain.Category) error {
+	im.categories[c.ID()] = c
+	return nil
+}
+
+func (im *inMemory) DeleteCategory(ctx context.Context, id string) error {
+	delete(im.categories, id)
+	return nil
+}
+
+func (im *inMemory) AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
+	out := make([]domain.AttributeType, 0, len(im.attrTypes))
+	for _, t := range im.attrTypes {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Position() != out[j].Position() {
+			return out[i].Position() < out[j].Position()
+		}
+		return out[i].Name() < out[j].Name()
+	})
+	return out, nil
+}
+
+func (im *inMemory) CreateAttributeType(ctx context.Context, t domain.AttributeType) error {
+	im.attrTypes[t.ID()] = t
+	return nil
+}
+
+func (im *inMemory) UpdateAttributeType(ctx context.Context, t domain.AttributeType) error {
+	im.attrTypes[t.ID()] = t
+	return nil
+}
+
+func (im *inMemory) DeleteAttributeType(ctx context.Context, id string) error {
+	delete(im.attrTypes, id)
+	return nil
 }
 
 func (im *inMemory) inCategory(productID, slug string) bool {

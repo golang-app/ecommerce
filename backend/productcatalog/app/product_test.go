@@ -13,7 +13,13 @@ import (
 
 type productStorage interface {
 	All(ctx context.Context) ([]domain.Product, error)
+	Newest(ctx context.Context, limit int) ([]domain.Product, error)
 	Add(ctx context.Context, p domain.Product) error
+	UpdateProduct(ctx context.Context, p domain.Product) error
+	DeleteProduct(ctx context.Context, id string) error
+	SetVariantStock(ctx context.Context, variantID string, stock int) error
+	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
+	SetProductAttributes(ctx context.Context, productID string, values []app.AttributeAssignment) error
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
@@ -23,6 +29,13 @@ type productStorage interface {
 	ListProducts(ctx context.Context, q app.ProductQuery) ([]domain.Product, error)
 	Categories(ctx context.Context) ([]domain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]app.Facet, error)
+	CreateCategory(ctx context.Context, c domain.Category) error
+	UpdateCategory(ctx context.Context, c domain.Category) error
+	DeleteCategory(ctx context.Context, id string) error
+	AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error)
+	CreateAttributeType(ctx context.Context, t domain.AttributeType) error
+	UpdateAttributeType(ctx context.Context, t domain.AttributeType) error
+	DeleteAttributeType(ctx context.Context, id string) error
 }
 
 var storage productStorage

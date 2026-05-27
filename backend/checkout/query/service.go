@@ -7,6 +7,7 @@ import "context"
 type Repository interface {
 	Find(ctx context.Context, id string) (OrderView, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]OrderSummary, error)
+	ListAll(ctx context.Context) ([]OrderSummary, error)
 }
 
 // Service is the checkout query side. It is intentionally separate from the
@@ -31,4 +32,10 @@ func (s Service) ListByCustomer(ctx context.Context, customerID string) ([]Order
 		return nil, nil
 	}
 	return s.repo.ListByCustomer(ctx, customerID)
+}
+
+// ListAll returns every order newest-first as summaries, regardless of
+// customer. Intended for the admin order list.
+func (s Service) ListAll(ctx context.Context) ([]OrderSummary, error) {
+	return s.repo.ListAll(ctx)
 }

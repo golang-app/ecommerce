@@ -1,0 +1,22 @@
+{{define "main"}}
+  <p class="crumbs"><a href="/admin/attributes">attributes</a> / edit</p>
+  <h2 class="account-card__title">edit attribute type</h2>
+
+  <form class="form" method="post" action="/admin/attributes/{{.Attribute.ID}}">
+    <div class="field"><label for="a-name">name</label><input id="a-name" name="name" value="{{.Attribute.Name}}" required></div>
+    <div class="field"><label for="a-unit">unit (optional)</label><input id="a-unit" name="unit" value="{{.Attribute.Unit}}"></div>
+    <div class="field">
+      <label for="a-kind">kind</label>
+      <select id="a-kind" name="kind">
+        <option value="numeric" {{if .Attribute.IsNumeric}}selected{{end}}>numeric</option>
+        <option value="enum" {{if .Attribute.IsEnum}}selected{{end}}>enum</option>
+      </select>
+    </div>
+    <div class="field field--check">
+      <label><input type="checkbox" name="filterable" value="1" {{if .Attribute.Filterable}}checked{{end}}> filterable</label>
+    </div>
+    <div class="field"><label for="a-position">position</label><input id="a-position" name="position" type="number" value="{{.Attribute.Position}}"></div>
+    <button type="submit" class="btn">save changes</button>
+    <p class="form__aside"><a href="/admin/attributes">&larr; back to attributes</a></p>
+  </form>
+{{end}}

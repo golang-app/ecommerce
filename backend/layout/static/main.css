@@ -108,7 +108,9 @@ main {
 .brand:hover { border: 0; }
 .nav {
   display: flex;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
   list-style: none;
   padding: 0;
   font-size: 0.95rem;
@@ -161,6 +163,22 @@ main {
   text-transform: lowercase;
 }
 .crumbs a { border: 0; }
+
+/* ---------- home / new arrivals ---------- */
+.home-hero {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.home-hero .page-title { margin-bottom: var(--space-4); }
+.home-hero__shop { white-space: nowrap; }
+.home-browse {
+  margin-top: var(--space-4);
+  text-align: center;
+}
+.home-browse a { border: 0; text-transform: lowercase; letter-spacing: .02em; }
 
 /* ---------- product list ---------- */
 .product-grid {
@@ -626,6 +644,63 @@ main {
   letter-spacing: -.01em;
   margin-bottom: var(--space-2);
 }
+
+/* ---------- admin panel ---------- */
+.admin {
+  display: grid;
+  grid-template-columns: 12rem 1fr;
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 48rem) {
+  .admin { grid-template-columns: 1fr; gap: var(--space-3); }
+}
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.admin-nav__link {
+  border: 0;
+  padding: var(--space-1) 0;
+  color: var(--fg-muted);
+  text-transform: lowercase;
+  letter-spacing: .02em;
+  transition: color .15s ease;
+}
+.admin-nav__link:hover { color: var(--fg); border: 0; }
+.admin-nav__link.is-active { color: var(--fg); border-left: 2px solid var(--fg); padding-left: var(--space-2); margin-left: calc(-1 * var(--space-2) - 2px); }
+.admin-nav__link--muted { color: var(--fg-muted); }
+.admin-nav__rule { display: block; border-top: 1px solid var(--rule); margin: var(--space-2) 0; }
+
+.admin__hello { font-size: var(--step-1); margin-bottom: var(--space-4); }
+.admin__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--space-3); }
+.admin-stat { border-top: 1px solid var(--rule); padding-top: var(--space-2); display: flex; flex-direction: column; gap: var(--space-1); }
+.admin-stat__value { font-family: var(--serif); font-size: var(--step-3); line-height: 1; }
+.admin-stat__label { font-size: var(--step-0); text-transform: lowercase; letter-spacing: .02em; color: var(--fg-muted); margin: 0; }
+.admin-stat__link { font-size: 0.85rem; color: var(--fg-muted); }
+.admin-stat__link:hover { color: var(--fg); }
+
+/* admin crud tables + forms */
+.admin-table { width: 100%; border-collapse: collapse; margin-bottom: var(--space-5); font-size: var(--step-0); }
+.admin-table th { text-align: left; font-weight: 400; text-transform: lowercase; letter-spacing: .02em; color: var(--fg-muted); border-bottom: 1px solid var(--fg); padding: var(--space-1) var(--space-2) var(--space-1) 0; }
+.admin-table td { border-bottom: 1px solid var(--rule); padding: var(--space-2) var(--space-2) var(--space-2) 0; vertical-align: middle; }
+.admin-table code { font-size: 0.85em; color: var(--fg-muted); }
+.admin-table__actions { display: flex; align-items: center; gap: var(--space-3); white-space: nowrap; }
+.admin-table__actions form { display: inline; margin: 0; }
+.admin-form { border-top: 1px solid var(--rule); padding-top: var(--space-3); max-width: 28rem; }
+.admin-form .field--check { flex-direction: row; align-items: center; gap: var(--space-2); }
+.admin-form .field--check label { display: flex; align-items: center; gap: var(--space-2); }
+.field--check input[type="checkbox"] { width: auto; }
+
+/* admin product edit: stacked sections */
+.admin-section { border-top: 1px solid var(--rule); padding-top: var(--space-3); margin-bottom: var(--space-5); max-width: 32rem; }
+.admin-section__title { text-transform: lowercase; letter-spacing: .02em; color: var(--fg-muted); font-weight: 400; margin-bottom: var(--space-3); }
+.admin-section .admin-table { max-width: none; }
+.admin-section input[type="number"] { width: 6rem; }
+.admin-checks { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.admin-check { display: flex; align-items: center; gap: var(--space-2); }
+.admin-check input[type="checkbox"] { width: auto; }
 
 /* address book */
 .addr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--space-3); margin-bottom: var(--space-4); }

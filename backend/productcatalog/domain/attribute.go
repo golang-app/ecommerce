@@ -1,6 +1,12 @@
 package domain
 
-import "strconv"
+import (
+	"errors"
+	"strconv"
+)
+
+// ErrInvalidAttributeType is returned when an AttributeType fails validation.
+var ErrInvalidAttributeType = errors.New("invalid attribute type")
 
 // AttributeKind distinguishes the two predefined attribute shapes: numeric
 // (a number with an optional unit, e.g. Weight in kg) and enum (a value drawn
@@ -22,6 +28,25 @@ type AttributeType struct {
 	kind       AttributeKind
 	filterable bool
 	position   int
+}
+
+// NewAttributeType builds a validated AttributeType. It errors when the name is
+// empty or the kind is neither numeric nor enum.
+func NewAttributeType(id, name, unit string, kind AttributeKind, filterable bool, position int) (AttributeType, error) {
+	if name == "" {
+		return AttributeType{}, ErrInvalidAttributeType
+	}
+	if kind != AttributeNumeric && kind != AttributeEnum {
+		return AttributeType{}, ErrInvalidAttributeType
+	}
+	return AttributeType{
+		id:         id,
+		name:       name,
+		unit:       unit,
+		kind:       kind,
+		filterable: filterable,
+		position:   position,
+	}, nil
 }
 
 // RebuildAttributeType reconstructs an AttributeType from storage.

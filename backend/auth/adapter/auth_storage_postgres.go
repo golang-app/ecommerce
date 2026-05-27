@@ -31,7 +31,7 @@ func (p authStoragePostgres) UpdatePassword(ctx context.Context, email, password
 func (p authStoragePostgres) Find(ctx context.Context, email string) (Customer, error) {
 	c := Customer{}
 
-	err := p.db.QueryRowContext(ctx, "SELECT username, password_hash FROM auth_customer WHERE username = $1", email).Scan(&c.Username, &c.PasswordHash)
+	err := p.db.QueryRowContext(ctx, "SELECT username, password_hash, is_admin FROM auth_customer WHERE username = $1", email).Scan(&c.Username, &c.PasswordHash, &c.IsAdmin)
 
 	if err == sql.ErrNoRows {
 		return Customer{}, domain.ErrCustomerNotFound

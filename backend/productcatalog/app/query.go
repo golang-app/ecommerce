@@ -17,6 +17,15 @@ type ProductQuery struct {
 	EnumSelections map[string][]string
 }
 
+// AttributeAssignment is a single product attribute value to persist. Num is
+// set (and Text empty) for numeric types; Text is set (and Num nil) for enum
+// types.
+type AttributeAssignment struct {
+	TypeID string
+	Num    *float64
+	Text   string
+}
+
 // Facet describes the available filter options for one attribute type among
 // the in-scope products. For a numeric type Min/Max bound the available range;
 // for an enum type Values lists the distinct available values, sorted.

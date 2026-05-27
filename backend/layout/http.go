@@ -44,7 +44,21 @@ type httpHandler struct {
 	shipSrv     shippingService
 }
 
+// HomePage renders the storefront landing page: a "new arrivals" grid of the
+// newest products plus a link through to the full shop.
 func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
+	newest, err := handler.catalogSrv.Newest(r.Context(), 8)
+	if err != nil {
+		log.Printf("cannot get newest products: %s", err)
+		newest = nil
+	}
+	handler.renderTemplate(w, r, "home", map[string]any{
+		"Newest": newest,
+	})
+}
+
+// ShopPage renders the full filterable catalog (all categories).
+func (handler httpHandler) ShopPage(w http.ResponseWriter, r *http.Request) {
 	handler.renderProductsPage(w, r, "")
 }
 
@@ -72,7 +86,7 @@ func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Req
 		facets = nil
 	}
 
-	handler.renderTemplate(w, r, "home", map[string]any{
+	handler.renderTemplate(w, r, "productCatalog/catalog", map[string]any{
 		"Categories":     categories,
 		"Facets":         facets,
 		"ActiveCategory": activeCategory,
@@ -82,6 +96,7 @@ func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Req
 func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.PathPrefix("/static/").Handler(StaticHandler())
 	r.HandleFunc("/", m.handler.HomePage)
+	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
 	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
 
 	r.HandleFunc("/cart", observability.HTTPWrap(m.handler.Cart, m.logger)).Methods("GET")
@@ -115,6 +130,35 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/account/addresses/{id}/default", observability.HTTPWrap(m.handler.AccountSetDefaultAddress, m.logger)).Methods("POST")
 	r.HandleFunc("/account/details", observability.HTTPWrap(m.handler.AccountDetails, m.logger)).Methods("GET")
 	r.HandleFunc("/account/details/password", observability.HTTPWrap(m.handler.AccountChangePassword, m.logger)).Methods("POST")
+
+	// Admin panel. Later phases register the /admin/products, /admin/categories,
+	// /admin/attributes and /admin/orders handlers here, all behind requireAdmin.
+	r.HandleFunc("/admin", observability.HTTPWrap(m.handler.AdminDashboard, m.logger)).Methods("GET")
+
+	r.HandleFunc("/admin/products", observability.HTTPWrap(m.handler.AdminProducts, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/products", observability.HTTPWrap(m.handler.AdminCreateProduct, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/edit", observability.HTTPWrap(m.handler.AdminEditProductForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/products/{id}/stock", observability.HTTPWrap(m.handler.AdminUpdateProductStock, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/categories", observability.HTTPWrap(m.handler.AdminUpdateProductCategories, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/attributes", observability.HTTPWrap(m.handler.AdminUpdateProductAttributes, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteProduct, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}", observability.HTTPWrap(m.handler.AdminUpdateProduct, m.logger)).Methods("POST")
+
+	r.HandleFunc("/admin/categories", observability.HTTPWrap(m.handler.AdminCategories, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/categories", observability.HTTPWrap(m.handler.AdminCreateCategory, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/categories/{id}/edit", observability.HTTPWrap(m.handler.AdminEditCategoryForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/categories/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteCategory, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/categories/{id}", observability.HTTPWrap(m.handler.AdminUpdateCategory, m.logger)).Methods("POST")
+
+	r.HandleFunc("/admin/attributes", observability.HTTPWrap(m.handler.AdminAttributes, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/attributes", observability.HTTPWrap(m.handler.AdminCreateAttribute, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/attributes/{id}/edit", observability.HTTPWrap(m.handler.AdminEditAttributeForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/attributes/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteAttribute, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/attributes/{id}", observability.HTTPWrap(m.handler.AdminUpdateAttribute, m.logger)).Methods("POST")
+
+	r.HandleFunc("/admin/orders", observability.HTTPWrap(m.handler.AdminOrders, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/orders/{orderID}/cancel", observability.HTTPWrap(m.handler.AdminCancelOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}", observability.HTTPWrap(m.handler.AdminOrderDetail, m.logger)).Methods("GET")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
@@ -134,6 +178,7 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
 		},
+		"add": func(a, b int) int { return a + b },
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
@@ -141,13 +186,63 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["FlashError"] = session.Flashes("error")
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
 	data["LoggedIn"] = handler.currentCustomerID(r) != ""
-	err := session.Save(r, w)
+	data["IsAdmin"] = handler.isAdmin(r)
+	// NavCategories lets the storefront header list category links on every page.
+	navCategories, err := handler.catalogSrv.Categories(r.Context())
+	if err != nil {
+		log.Printf("cannot get nav categories: %s", err)
+		navCategories = nil
+	}
+	data["NavCategories"] = navCategories
+	err = session.Save(r, w)
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 
 	err = ts.ExecuteTemplate(w, "base", data)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// renderAdminTemplate mirrors renderTemplate but renders inside the dedicated
+// admin shell (tmpl/admin/layout.gohtml, which defines "adminbase") instead of
+// the storefront base. It still pulls in the shared partials glob (where the
+// admin-nav partial lives) and the page template (which defines "main"), but it
+// does not need AuthMenuItem/LoggedIn/IsAdmin — the admin shell exposes the
+// signed-in admin via data["AdminEmail"].
+func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
+	if data == nil {
+		data = make(map[string]any)
+	}
+
+	files := []string{
+		"./layout/tmpl/admin/layout.gohtml",
+		"./layout/tmpl/" + templateName + ".gohtml",
+	}
+	partials, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
+	files = append(files, partials...)
+
+	var ts = template.Must(template.New("").Funcs(template.FuncMap{
+		"html": func(value interface{}) template.HTML {
+			return template.HTML(fmt.Sprint(value))
+		},
+		"add": func(a, b int) int { return a + b },
+	}).ParseFiles(files...))
+
+	session, _ := store.Get(r, "ecommerce")
+	data["FlashInfo"] = session.Flashes()
+	data["FlashError"] = session.Flashes("error")
+	data["AdminEmail"] = handler.currentCustomerID(r)
+	err := session.Save(r, w)
+	if err != nil {
+		log.Print(err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+
+	err = ts.ExecuteTemplate(w, "adminbase", data)
 	if err != nil {
 		log.Print(err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

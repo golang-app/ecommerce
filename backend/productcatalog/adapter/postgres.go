@@ -225,6 +225,46 @@ func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
 	return products, nil
 }
 
+// Newest returns up to limit products ordered newest-first by created_at
+// (ties broken by id), each hydrated with its catalog/classification the same
+// way All does.
+func (db postgres) Newest(ctx context.Context, limit int) ([]domain.Product, error) {
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency
+		FROM productcatalog_product
+		ORDER BY created_at DESC, id DESC
+		LIMIT $1`
+
+	rows, err := db.db.QueryContext(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("cannot query newest products: %w", err)
+	}
+
+	var base []domain.Product
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			p, err := scanProduct(rows)
+			if err != nil {
+				return
+			}
+			base = append(base, p)
+		}
+	}()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("cannot fetch newest products: %w", err)
+	}
+
+	products := make([]domain.Product, 0, len(base))
+	for _, p := range base {
+		full, err := db.withCatalog(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, full)
+	}
+	return products, nil
+}
+
 func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) {
 	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product WHERE id = $1`
 	p, err := scanProduct(db.db.QueryRowContext(ctx, q, id))
@@ -391,6 +431,198 @@ func (db postgres) Categories(ctx context.Context) ([]domain.Category, error) {
 		out = append(out, domain.RebuildCategory(id, name, slug, position))
 	}
 	return out, rows.Err()
+}
+
+// CreateCategory inserts a new category.
+func (db postgres) CreateCategory(ctx context.Context, c domain.Category) error {
+	_, err := db.db.ExecContext(ctx, `
+		INSERT INTO productcatalog_category (id, name, slug, position)
+		VALUES ($1, $2, $3, $4)
+	`, c.ID(), c.Name(), c.Slug(), c.Position())
+	if err != nil {
+		return fmt.Errorf("create category: %w", err)
+	}
+	return nil
+}
+
+// UpdateCategory updates an existing category by id.
+func (db postgres) UpdateCategory(ctx context.Context, c domain.Category) error {
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_category SET name = $2, slug = $3, position = $4 WHERE id = $1
+	`, c.ID(), c.Name(), c.Slug(), c.Position())
+	if err != nil {
+		return fmt.Errorf("update category: %w", err)
+	}
+	return nil
+}
+
+// DeleteCategory removes a category; its product links cascade.
+func (db postgres) DeleteCategory(ctx context.Context, id string) error {
+	_, err := db.db.ExecContext(ctx, `DELETE FROM productcatalog_category WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete category: %w", err)
+	}
+	return nil
+}
+
+// AllAttributeTypes returns every attribute type in display order.
+func (db postgres) AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, name, unit, kind, filterable, position
+		FROM productcatalog_attribute_type
+		ORDER BY position, name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query attribute types: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.AttributeType
+	for rows.Next() {
+		var id, name, unit, kind string
+		var filterable bool
+		var position int
+		if err := rows.Scan(&id, &name, &unit, &kind, &filterable, &position); err != nil {
+			return nil, fmt.Errorf("scan attribute type: %w", err)
+		}
+		out = append(out, domain.RebuildAttributeType(id, name, unit, domain.AttributeKind(kind), filterable, position))
+	}
+	return out, rows.Err()
+}
+
+// CreateAttributeType inserts a new attribute type.
+func (db postgres) CreateAttributeType(ctx context.Context, t domain.AttributeType) error {
+	_, err := db.db.ExecContext(ctx, `
+		INSERT INTO productcatalog_attribute_type (id, name, unit, kind, filterable, position)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, t.ID(), t.Name(), t.Unit(), string(t.Kind()), t.Filterable(), t.Position())
+	if err != nil {
+		return fmt.Errorf("create attribute type: %w", err)
+	}
+	return nil
+}
+
+// UpdateAttributeType updates an existing attribute type by id.
+func (db postgres) UpdateAttributeType(ctx context.Context, t domain.AttributeType) error {
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_attribute_type
+		SET name = $2, unit = $3, kind = $4, filterable = $5, position = $6
+		WHERE id = $1
+	`, t.ID(), t.Name(), t.Unit(), string(t.Kind()), t.Filterable(), t.Position())
+	if err != nil {
+		return fmt.Errorf("update attribute type: %w", err)
+	}
+	return nil
+}
+
+// DeleteAttributeType removes an attribute type; its product links cascade.
+func (db postgres) DeleteAttributeType(ctx context.Context, id string) error {
+	_, err := db.db.ExecContext(ctx, `DELETE FROM productcatalog_attribute_type WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete attribute type: %w", err)
+	}
+	return nil
+}
+
+// UpdateProduct updates the core product row (name, description, thumbnail,
+// price) by id. Variants, categories and attributes are untouched.
+func (db postgres) UpdateProduct(ctx context.Context, p domain.Product) error {
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_product
+		SET name = $2, description = $3, thumbnail = $4, price_amount = $5, price_currency = $6
+		WHERE id = $1
+	`, string(p.ID()), p.Name(), p.Description(), p.Thumbnail(), p.Price().Amount(), string(p.Price().Currency()))
+	if err != nil {
+		return fmt.Errorf("update product: %w", err)
+	}
+	return nil
+}
+
+// DeleteProduct removes a product row; variants, category and attribute links
+// cascade via ON DELETE CASCADE foreign keys.
+func (db postgres) DeleteProduct(ctx context.Context, id string) error {
+	_, err := db.db.ExecContext(ctx, `DELETE FROM productcatalog_product WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete product: %w", err)
+	}
+	return nil
+}
+
+// SetVariantStock sets a single variant's stock level.
+func (db postgres) SetVariantStock(ctx context.Context, variantID string, stock int) error {
+	_, err := db.db.ExecContext(ctx, `UPDATE productcatalog_variant SET stock = $2 WHERE id = $1`, variantID, stock)
+	if err != nil {
+		return fmt.Errorf("set variant stock: %w", err)
+	}
+	return nil
+}
+
+// SetProductCategories replaces the product's category links: it deletes the
+// existing links and inserts the given set in a single transaction.
+func (db postgres) SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `DELETE FROM productcatalog_product_category WHERE product_id = $1`, productID); err != nil {
+		return fmt.Errorf("clear product categories: %w", err)
+	}
+	for _, cid := range categoryIDs {
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO productcatalog_product_category (product_id, category_id) VALUES ($1, $2)
+		`, productID, cid); err != nil {
+			return fmt.Errorf("insert product category: %w", err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit product categories: %w", err)
+	}
+	return nil
+}
+
+// SetProductAttributes replaces the product's attribute rows: it deletes the
+// existing rows and inserts the given set in a single transaction. Numeric
+// assignments set num_value (text null); enum assignments set text_value (num
+// null).
+func (db postgres) SetProductAttributes(ctx context.Context, productID string, values []app.AttributeAssignment) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `DELETE FROM productcatalog_product_attribute WHERE product_id = $1`, productID); err != nil {
+		return fmt.Errorf("clear product attributes: %w", err)
+	}
+	for _, v := range values {
+		var num sql.NullFloat64
+		var text sql.NullString
+		if v.Num != nil {
+			num = sql.NullFloat64{Float64: *v.Num, Valid: true}
+		} else {
+			text = sql.NullString{String: v.Text, Valid: true}
+		}
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO productcatalog_product_attribute (product_id, attribute_type_id, num_value, text_value)
+			VALUES ($1, $2, $3, $4)
+		`, productID, v.TypeID, num, text); err != nil {
+			return fmt.Errorf("insert product attribute: %w", err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit product attributes: %w", err)
+	}
+	return nil
 }
 
 // ListProducts returns the products matching the query. The WHERE clause is

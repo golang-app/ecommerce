@@ -1,0 +1,86 @@
+{{define "main"}}
+  <p class="crumbs"><a href="/admin/orders">orders</a> / order</p>
+
+  <article class="order">
+        <header class="order__header">
+          <h2 class="account-card__title">order <span class="order__id">{{.Order.ID}}</span></h2>
+          <p class="order__subtitle muted">
+            <span class="order-status order-status--{{.Order.Status}}">{{.Order.Status}}</span> &middot;
+            placed {{.Order.PlacedAt.Format "Jan 2, 2006 15:04 MST"}} &middot;
+            customer {{if .Order.CustomerID}}{{.Order.CustomerID}}{{else}}<span class="muted">guest</span>{{end}}
+          </p>
+        </header>
+
+        <table class="cart-table order__lines">
+          <thead>
+            <tr>
+              <th>item</th>
+              <th class="col-qty">qty</th>
+              <th class="col-price">unit</th>
+              <th class="col-total">subtotal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range $line := .Order.Items}}
+              <tr>
+                <td>{{$line.ProductName}}</td>
+                <td class="col-qty">{{$line.Quantity}}</td>
+                <td class="col-price">{{$line.PriceDisplay}} {{$line.PriceCurrency}}</td>
+                <td class="col-total">{{$line.LineTotalDisplay}} {{$line.PriceCurrency}}</td>
+              </tr>
+            {{end}}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="3">subtotal</td>
+              <td class="col-total">{{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}</td>
+            </tr>
+            {{if not .Order.ShippingMethod.IsZero}}
+              <tr>
+                <td colspan="3">shipping &middot; {{.Order.ShippingMethod.Label}}</td>
+                <td class="col-total">{{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}</td>
+              </tr>
+            {{end}}
+            <tr>
+              <td colspan="3">total</td>
+              <td class="col-total">{{.Order.TotalDisplay}} {{.Order.TotalCurrency}}</td>
+            </tr>
+          </tfoot>
+        </table>
+
+        {{if eq .Order.ShippingMethod.Code "pickup"}}
+          <section class="order__ship">
+            <h2 class="order__ship-heading">collection</h2>
+            <p>Personal pickup — collect in store.</p>
+          </section>
+        {{else if not .Order.ShipTo.IsZero}}
+          <section class="order__ship">
+            <h2 class="order__ship-heading">shipping to</h2>
+            <address class="order__address">
+              {{.Order.ShipTo.Name}}<br>
+              {{.Order.ShipTo.Street1}}<br>
+              {{with .Order.ShipTo.Street2}}{{.}}<br>{{end}}
+              {{.Order.ShipTo.City}}, {{.Order.ShipTo.Zip}}<br>
+              {{.Order.ShipTo.Country}}
+            </address>
+          </section>
+        {{end}}
+
+        {{if not .Order.PaymentMethod.IsZero}}
+          <section class="order__ship">
+            <h2 class="order__ship-heading">payment</h2>
+            <p>{{.Order.PaymentMethod.Label}}</p>
+          </section>
+        {{end}}
+
+        <div class="order__actions">
+          <a href="/admin/orders" class="btn btn--ghost">back to orders</a>
+          {{if .CanCancel}}
+            <form method="post" action="/admin/orders/{{.Order.ID}}/cancel"
+                  onsubmit="return confirm('Cancel this order as admin? Reserved stock will be released.');">
+              <button type="submit" class="linkbtn linkbtn--danger">cancel order</button>
+            </form>
+          {{end}}
+    </div>
+  </article>
+{{end}}

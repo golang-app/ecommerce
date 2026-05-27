@@ -15,20 +15,23 @@ func money(amount int64) string {
 	return fmt.Sprintf("%d.%02d", amount/100, amount%100)
 }
 
-// OrderSummary is the read model for order lists (account orders, overview).
+// OrderSummary is the read model for order lists (account orders, overview,
+// admin order list).
 type OrderSummary struct {
-	id        string
-	status    domain.Status
-	placedAt  time.Time
-	itemCount int
-	total     int64
-	currency  string
+	customerID string
+	id         string
+	status     domain.Status
+	placedAt   time.Time
+	itemCount  int
+	total      int64
+	currency   string
 }
 
-func NewOrderSummary(id string, status domain.Status, placedAt time.Time, itemCount int, total int64, currency string) OrderSummary {
-	return OrderSummary{id: id, status: status, placedAt: placedAt, itemCount: itemCount, total: total, currency: currency}
+func NewOrderSummary(customerID, id string, status domain.Status, placedAt time.Time, itemCount int, total int64, currency string) OrderSummary {
+	return OrderSummary{customerID: customerID, id: id, status: status, placedAt: placedAt, itemCount: itemCount, total: total, currency: currency}
 }
 
+func (s OrderSummary) CustomerID() string    { return s.customerID }
 func (s OrderSummary) ID() string            { return s.id }
 func (s OrderSummary) Status() domain.Status { return s.status }
 func (s OrderSummary) PlacedAt() time.Time   { return s.placedAt }

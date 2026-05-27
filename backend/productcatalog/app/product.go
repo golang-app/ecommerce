@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 )
@@ -13,7 +14,13 @@ type ProductService struct {
 
 type ProductStorage interface {
 	All(ctx context.Context) ([]domain.Product, error)
+	Newest(ctx context.Context, limit int) ([]domain.Product, error)
 	Add(ctx context.Context, p domain.Product) error
+	UpdateProduct(ctx context.Context, p domain.Product) error
+	DeleteProduct(ctx context.Context, id string) error
+	SetVariantStock(ctx context.Context, variantID string, stock int) error
+	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
+	SetProductAttributes(ctx context.Context, productID string, values []AttributeAssignment) error
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
@@ -23,6 +30,15 @@ type ProductStorage interface {
 	ListProducts(ctx context.Context, q ProductQuery) ([]domain.Product, error)
 	Categories(ctx context.Context) ([]domain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]Facet, error)
+
+	CreateCategory(ctx context.Context, c domain.Category) error
+	UpdateCategory(ctx context.Context, c domain.Category) error
+	DeleteCategory(ctx context.Context, id string) error
+
+	AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error)
+	CreateAttributeType(ctx context.Context, t domain.AttributeType) error
+	UpdateAttributeType(ctx context.Context, t domain.AttributeType) error
+	DeleteAttributeType(ctx context.Context, id string) error
 }
 
 func NewProductService(s ProductStorage) ProductService {
@@ -31,6 +47,18 @@ func NewProductService(s ProductStorage) ProductService {
 
 func (ps ProductService) AllProducts(ctx context.Context) ([]domain.Product, error) {
 	return ps.storage.All(ctx)
+}
+
+// defaultNewestLimit is used when Newest is called with a non-positive limit.
+const defaultNewestLimit = 8
+
+// Newest returns up to limit most-recently-created products ("new arrivals").
+// A non-positive limit falls back to defaultNewestLimit.
+func (ps ProductService) Newest(ctx context.Context, limit int) ([]domain.Product, error) {
+	if limit <= 0 {
+		limit = defaultNewestLimit
+	}
+	return ps.storage.Newest(ctx, limit)
 }
 
 func (ps ProductService) Find(ctx context.Context, id string) (domain.Product, error) {
@@ -69,6 +97,89 @@ func (ps ProductService) Facets(ctx context.Context, categorySlug string) ([]Fac
 	return ps.storage.Facets(ctx, categorySlug)
 }
 
+// CreateCategory validates and persists a new category. The id equals the slug
+// and the position is appended after the current categories.
+func (ps ProductService) CreateCategory(ctx context.Context, name, slug string) error {
+	existing, err := ps.storage.Categories(ctx)
+	if err != nil {
+		return err
+	}
+	c, err := domain.NewCategory(slug, name, slug, len(existing)+1)
+	if err != nil {
+		return err
+	}
+	return ps.storage.CreateCategory(ctx, c)
+}
+
+// UpdateCategory validates and persists changes to an existing category.
+func (ps ProductService) UpdateCategory(ctx context.Context, id, name, slug string, position int) error {
+	c, err := domain.NewCategory(id, name, slug, position)
+	if err != nil {
+		return err
+	}
+	return ps.storage.UpdateCategory(ctx, c)
+}
+
+// DeleteCategory removes a category (its product links cascade in storage).
+func (ps ProductService) DeleteCategory(ctx context.Context, id string) error {
+	return ps.storage.DeleteCategory(ctx, id)
+}
+
+// AttributeTypes returns every attribute type in display order (admin view).
+func (ps ProductService) AttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
+	return ps.storage.AllAttributeTypes(ctx)
+}
+
+// CreateAttributeType validates and persists a new attribute type. The id is a
+// slug derived from the name and the position is appended after existing types.
+func (ps ProductService) CreateAttributeType(ctx context.Context, name, unit string, kind domain.AttributeKind, filterable bool) error {
+	existing, err := ps.storage.AllAttributeTypes(ctx)
+	if err != nil {
+		return err
+	}
+	id := slugify(name)
+	t, err := domain.NewAttributeType(id, name, unit, kind, filterable, len(existing)+1)
+	if err != nil {
+		return err
+	}
+	return ps.storage.CreateAttributeType(ctx, t)
+}
+
+// UpdateAttributeType validates and persists changes to an attribute type.
+func (ps ProductService) UpdateAttributeType(ctx context.Context, id, name, unit string, kind domain.AttributeKind, filterable bool, position int) error {
+	t, err := domain.NewAttributeType(id, name, unit, kind, filterable, position)
+	if err != nil {
+		return err
+	}
+	return ps.storage.UpdateAttributeType(ctx, t)
+}
+
+// DeleteAttributeType removes an attribute type (its product links cascade).
+func (ps ProductService) DeleteAttributeType(ctx context.Context, id string) error {
+	return ps.storage.DeleteAttributeType(ctx, id)
+}
+
+// slugify turns a display name into a url-safe id: lowercase, spaces to
+// hyphens, dropping any character that is not a lowercase letter, digit or
+// hyphen, and collapsing repeated/edge hyphens.
+func slugify(name string) string {
+	var b strings.Builder
+	lastHyphen := false
+	for _, r := range strings.ToLower(name) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastHyphen = false
+		case r == ' ' || r == '-' || r == '_':
+			if !lastHyphen && b.Len() > 0 {
+				b.WriteByte('-')
+				lastHyphen = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
 // defaultStock is given to a simple product's auto-created default variant.
 const defaultStock = 100
 
@@ -101,6 +212,53 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMi
 	// carrying its price (no options) and the product image.
 	defaultVariant := domain.NewVariant("var-"+id, id, thumbnail, nil, priceVO, defaultStock)
 	return ps.storage.AddVariant(ctx, id, 0, defaultVariant)
+}
+
+// UpdateProduct validates the core product fields and persists them. It only
+// touches the product row (name/description/price/thumbnail); variants,
+// categories and attributes are managed by their own methods.
+func (ps ProductService) UpdateProduct(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error {
+	pID, err := domain.NewProductId(id)
+	if err != nil {
+		return err
+	}
+	cur, err := domain.NewCurrency(currency)
+	if err != nil {
+		return fmt.Errorf("invalid currency: %w", err)
+	}
+	priceVO, err := domain.NewPrice(priceMinorUnits, cur)
+	if err != nil {
+		return fmt.Errorf("invalid price: %w", err)
+	}
+	p, err := domain.NewProduct(pID, name, desc, priceVO, thumbnail)
+	if err != nil {
+		return err
+	}
+	return ps.storage.UpdateProduct(ctx, p)
+}
+
+// DeleteProduct removes a product; its variants, category and attribute links
+// cascade in storage.
+func (ps ProductService) DeleteProduct(ctx context.Context, id string) error {
+	return ps.storage.DeleteProduct(ctx, id)
+}
+
+// SetVariantStock sets a single variant's stock level (rejecting negatives).
+func (ps ProductService) SetVariantStock(ctx context.Context, variantID string, stock int) error {
+	if stock < 0 {
+		return fmt.Errorf("stock cannot be negative: %d", stock)
+	}
+	return ps.storage.SetVariantStock(ctx, variantID, stock)
+}
+
+// SetProductCategories replaces the product's category links with the given set.
+func (ps ProductService) SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error {
+	return ps.storage.SetProductCategories(ctx, productID, categoryIDs)
+}
+
+// SetProductAttributes replaces the product's attribute values with the given set.
+func (ps ProductService) SetProductAttributes(ctx context.Context, productID string, values []AttributeAssignment) error {
+	return ps.storage.SetProductAttributes(ctx, productID, values)
 }
 
 // OptionTypeInput / VariantInput describe a product's options and variants for
