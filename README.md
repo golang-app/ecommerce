@@ -11,6 +11,51 @@ If you find anything that you can improve or add - feel free to talk about it in
 
 The project is a very early stage so there's a lot of work to do so every contribution is welcome!
 
+## Context map
+
+The backend is organised as a set of DDD bounded contexts. Each context owns its
+data and is split into `domain` (entities, value objects, invariants), `app`
+(application services / use cases), and `adapter` (persistence — a Postgres and
+an in-memory implementation), with a thin `bounded_context.go` wiring it together.
+The `layout` context is the presentation layer (HTMX storefront + admin panel);
+it depends on the others through small, locally-defined interfaces.
+
+```mermaid
+graph TD
+    layout["layout<br/><i>presentation: storefront + admin (HTMX)</i>"]
+    productcatalog["productcatalog<br/><i>products, variants, option types,<br/>attributes, categories, stock</i>"]
+    cart["cart<br/><i>shopping carts</i>"]
+    checkout["checkout<br/><i>orders — event-sourced + CQRS</i>"]
+    auth["auth<br/><i>customers, sessions, admin role</i>"]
+    shippinginfo["shippinginfo<br/><i>saved addresses</i>"]
+
+    layout --> productcatalog
+    layout --> cart
+    layout --> checkout
+    layout --> auth
+    layout --> shippinginfo
+
+    cart -- "ACL: variant → cart product" --> productcatalog
+    checkout -- "reads cart at order time" --> cart
+    checkout -- "reserves / releases stock" --> productcatalog
+    checkout -. "OrderPaid event (bus)" .-> cart
+```
+
+| Context | Responsibility | Talks to |
+| --- | --- | --- |
+| **productcatalog** | Products, variants, option types, filterable attributes, categories, and stock reservation. No dependencies on other contexts. | — |
+| **cart** | Session-scoped shopping carts. Resolves a variant id into its own product notion through an anti-corruption layer over productcatalog. | productcatalog (sync, ACL) |
+| **checkout** | Orders as an event-sourced aggregate with a separate CQRS read side. Snapshots the cart, reserves stock, records payment, and publishes an `OrderPaid` integration event. | cart, productcatalog (sync); cart (async, via event bus) |
+| **auth** | Customers, sessions, password policy, and the admin role. Standalone. | — |
+| **shippinginfo** | Customers' saved shipping addresses. Standalone. | — |
+| **layout** | HTTP presentation: the HTMX storefront and the admin panel. Orchestrates every context through narrow interfaces. | all contexts |
+
+Cross-context integration is mostly synchronous through anti-corruption interfaces
+defined at the composition root (`backend/cmd/web/main.go`). The one decoupled
+path is an in-process event bus (`backend/internal/eventbus`): checkout publishes
+`OrderPaid` after a successful payment and the cart context subscribes to empty
+the basket, so checkout never calls the cart directly for that side effect.
+
 
 ## Quick start
 
