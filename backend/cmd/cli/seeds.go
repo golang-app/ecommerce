@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/spf13/cobra"
 )
 
@@ -22,22 +23,6 @@ type seedProduct struct {
 // photo matching the keywords. If a specific photo doesn't look right, bump
 // the lock number for that product.
 var seedProducts = []seedProduct{
-	{
-		id:              "ceramic-mug-cream",
-		name:            "Ceramic Mug",
-		description:     "A small-batch mug thrown by a single potter in Tokyo. Cream glaze over speckled stoneware. Holds 350ml. Sold individually.",
-		priceMinorUnits: 2400,
-		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/ceramic,mug?lock=11",
-	},
-	{
-		id:              "linen-apron-navy",
-		name:            "Linen Apron",
-		description:     "Heavyweight Belgian linen apron in deep navy. Long cotton ties, double-stitched seams. Washes softer with every use.",
-		priceMinorUnits: 5800,
-		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/apron,linen?lock=22",
-	},
 	{
 		id:              "brass-paperclips",
 		name:            "Brass Paperclips",
@@ -104,9 +89,58 @@ var seedProducts = []seedProduct{
 	},
 }
 
+type variantSeed struct {
+	id          string
+	name        string
+	description string
+	currency    string
+	thumbnail   string
+	optionTypes []productcatalog.OptionTypeInput
+	variants    []productcatalog.VariantInput
+}
+
+// variantSeeds are products with selectable options where each variant has
+// its own price — the mug in two colours and the apron as a Colour×Size
+// matrix.
+var variantSeeds = []variantSeed{
+	{
+		id:          "ceramic-mug",
+		name:        "Ceramic Mug",
+		description: "A small-batch mug thrown by a single potter in Tokyo. Speckled stoneware, holds 350ml.",
+		currency:    "USD",
+		thumbnail:   "https://loremflickr.com/800/800/ceramic,mug?lock=11",
+		optionTypes: []productcatalog.OptionTypeInput{
+			{Name: "Color", Values: []string{"Cream", "Charcoal"}},
+		},
+		variants: []productcatalog.VariantInput{
+			{ID: "ceramic-mug-cream", SKU: "MUG-CRM", Options: map[string]string{"Color": "Cream"}, Price: 2400},
+			{ID: "ceramic-mug-charcoal", SKU: "MUG-CHR", Options: map[string]string{"Color": "Charcoal"}, Price: 2600},
+		},
+	},
+	{
+		id:          "linen-apron",
+		name:        "Linen Apron",
+		description: "Heavyweight Belgian linen apron. Long cotton ties, double-stitched seams. Washes softer with every use.",
+		currency:    "USD",
+		thumbnail:   "https://loremflickr.com/800/800/apron,linen?lock=22",
+		optionTypes: []productcatalog.OptionTypeInput{
+			{Name: "Color", Values: []string{"Natural", "Navy"}},
+			{Name: "Size", Values: []string{"S", "M", "L"}},
+		},
+		variants: []productcatalog.VariantInput{
+			{ID: "linen-apron-nat-s", SKU: "APR-NAT-S", Options: map[string]string{"Color": "Natural", "Size": "S"}, Price: 5400},
+			{ID: "linen-apron-nat-m", SKU: "APR-NAT-M", Options: map[string]string{"Color": "Natural", "Size": "M"}, Price: 5800},
+			{ID: "linen-apron-nat-l", SKU: "APR-NAT-L", Options: map[string]string{"Color": "Natural", "Size": "L"}, Price: 6200},
+			{ID: "linen-apron-navy-s", SKU: "APR-NVY-S", Options: map[string]string{"Color": "Navy", "Size": "S"}, Price: 5600},
+			{ID: "linen-apron-navy-m", SKU: "APR-NVY-M", Options: map[string]string{"Color": "Navy", "Size": "M"}, Price: 6000},
+			{ID: "linen-apron-navy-l", SKU: "APR-NVY-L", Options: map[string]string{"Color": "Navy", "Size": "L"}, Price: 6400},
+		},
+	},
+}
+
 // wipeTables clears all product and cart data so seed re-runs are
-// idempotent. CASCADE keeps the cart tables consistent with the wiped
-// products.
+// idempotent. CASCADE clears the variant/option-type and cart tables that
+// reference the wiped products.
 const wipeTables = `TRUNCATE TABLE
 	productcatalog_product,
 	cart_cart_item,
@@ -130,7 +164,13 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				}
 			}
 
-			fmt.Printf("seeded %d products\n", len(seedProducts))
+			for _, p := range variantSeeds {
+				if err := pc.AddVariantProduct(ctx, p.id, p.name, p.description, p.currency, p.thumbnail, p.optionTypes, p.variants); err != nil {
+					return fmt.Errorf("seed variant product %s: %w", p.id, err)
+				}
+			}
+
+			fmt.Printf("seeded %d simple + %d variant products\n", len(seedProducts), len(variantSeeds))
 			return nil
 		},
 	}

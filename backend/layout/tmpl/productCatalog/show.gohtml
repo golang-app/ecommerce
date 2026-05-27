@@ -12,14 +12,26 @@
     <div class="product__body">
       <h1 class="product__name">{{.Product.Name}}</h1>
       <p class="product__description">{{.Product.Description}}</p>
-      <p class="product__price">{{.Product.Price.Display}} {{.Product.Price.Currency}}</p>
 
-      <button class="btn"
-              hx-post="/cart/{{.Product.ID}}"
-              hx-swap="none">
-        add to cart
-        <span class="loading htmx-indicator" aria-hidden="true"></span>
-      </button>
+      {{if .Product.HasOptions}}
+        <form class="variant-form">
+          {{range .Product.OptionTypes}}
+            <div class="field">
+              <label for="opt-{{.Name}}">{{.Name}}</label>
+              <select id="opt-{{.Name}}" name="{{.Name}}"
+                      hx-get="/product/{{$.Product.ID}}/variant"
+                      hx-trigger="change"
+                      hx-include="closest form"
+                      hx-target="#variant-box"
+                      hx-swap="outerHTML">
+                {{range .Values}}<option value="{{.}}">{{.}}</option>{{end}}
+              </select>
+            </div>
+          {{end}}
+        </form>
+      {{end}}
+
+      {{template "variant-box" .}}
 
       <p class="product__hint muted">added to your cart without a page reload.</p>
     </div>
