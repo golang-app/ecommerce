@@ -53,7 +53,7 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/", m.handler.HomePage)
 
 	r.HandleFunc("/cart", observability.HTTPWrap(m.handler.Cart, m.logger)).Methods("GET")
-	r.HandleFunc("/cart/{cartID}", observability.HTTPWrap(m.handler.AddToCart, m.logger)).Methods("POST")
+	r.HandleFunc("/cart/{variantID}", observability.HTTPWrap(m.handler.AddToCart, m.logger)).Methods("POST")
 	r.HandleFunc("/cart/budge", observability.HTTPWrap(m.handler.Budge, m.logger)).Methods("GET", "OPTIONS")
 
 	r.HandleFunc("/api/v1/products", observability.HTTPWrap(m.handler.AllProducts, m.logger))

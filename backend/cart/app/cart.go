@@ -20,18 +20,18 @@ type CartStorage interface {
 }
 
 type ProductCatalog interface {
-	Find(ctx context.Context, productID string) (domain.Product, error)
+	Find(ctx context.Context, variantID string) (domain.Product, error)
 }
 
 func NewCartService(storage CartStorage, pc ProductCatalog) CartService {
 	return CartService{storage: storage, productCatalog: pc}
 }
 
-func (c CartService) AddToCart(ctx context.Context, sessID string, productID string, qty int) error {
+func (c CartService) AddToCart(ctx context.Context, sessID string, variantID string, qty int) error {
 	user := domain.NewUser(sessID)
-	p, err := c.productCatalog.Find(ctx, productID)
+	p, err := c.productCatalog.Find(ctx, variantID)
 	if err != nil {
-		return fmt.Errorf("could not find product (%s): %w", productID, err)
+		return fmt.Errorf("could not find product for variant (%s): %w", variantID, err)
 	}
 
 	cart, err := c.storage.Get(ctx, user)
