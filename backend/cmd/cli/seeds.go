@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/spf13/cobra"
 )
 
@@ -95,8 +95,8 @@ type variantSeed struct {
 	description string
 	currency    string
 	thumbnail   string
-	optionTypes []productcatalog.OptionTypeInput
-	variants    []productcatalog.VariantInput
+	optionTypes []app.OptionTypeInput
+	variants    []app.VariantInput
 }
 
 // Per-colour apron images, shared across that colour's size variants so
@@ -116,10 +116,10 @@ var variantSeeds = []variantSeed{
 		description: "A small-batch mug thrown by a single potter in Tokyo. Speckled stoneware, holds 350ml.",
 		currency:    "USD",
 		thumbnail:   "https://loremflickr.com/800/800/ceramic,mug?lock=11",
-		optionTypes: []productcatalog.OptionTypeInput{
+		optionTypes: []app.OptionTypeInput{
 			{Name: "Color", Values: []string{"Cream", "Charcoal"}},
 		},
-		variants: []productcatalog.VariantInput{
+		variants: []app.VariantInput{
 			{ID: "ceramic-mug-cream", SKU: "MUG-CRM", Options: map[string]string{"Color": "Cream"}, Price: 2400, Image: "https://loremflickr.com/800/800/ceramic,mug,cream?lock=11", Stock: 40},
 			{ID: "ceramic-mug-charcoal", SKU: "MUG-CHR", Options: map[string]string{"Color": "Charcoal"}, Price: 2600, Image: "https://loremflickr.com/800/800/ceramic,mug,black?lock=211", Stock: 0},
 		},
@@ -130,11 +130,11 @@ var variantSeeds = []variantSeed{
 		description: "Heavyweight Belgian linen apron. Long cotton ties, double-stitched seams. Washes softer with every use.",
 		currency:    "USD",
 		thumbnail:   "https://loremflickr.com/800/800/apron,linen?lock=22",
-		optionTypes: []productcatalog.OptionTypeInput{
+		optionTypes: []app.OptionTypeInput{
 			{Name: "Color", Values: []string{"Natural", "Navy"}},
 			{Name: "Size", Values: []string{"S", "M", "L"}},
 		},
-		variants: []productcatalog.VariantInput{
+		variants: []app.VariantInput{
 			{ID: "linen-apron-nat-s", SKU: "APR-NAT-S", Options: map[string]string{"Color": "Natural", "Size": "S"}, Price: 5400, Image: natApron, Stock: 12},
 			{ID: "linen-apron-nat-m", SKU: "APR-NAT-M", Options: map[string]string{"Color": "Natural", "Size": "M"}, Price: 5800, Image: natApron, Stock: 8},
 			{ID: "linen-apron-nat-l", SKU: "APR-NAT-L", Options: map[string]string{"Color": "Natural", "Size": "L"}, Price: 6200, Image: natApron, Stock: 5},

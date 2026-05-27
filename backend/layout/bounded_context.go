@@ -9,14 +9,14 @@ import (
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
 	"github.com/sirupsen/logrus"
 )
 
 type catalogService interface {
-	AllProducts(ctx context.Context) ([]productcatalog.Product, error)
-	Find(ctx context.Context, id string) (productcatalog.Product, error)
+	AllProducts(ctx context.Context) ([]pcdomain.Product, error)
+	Find(ctx context.Context, id string) (pcdomain.Product, error)
 }
 
 type cartService interface {

@@ -1,8 +1,10 @@
-package productcatalog
+package app
 
 import (
 	"context"
 	"fmt"
+
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 )
 
 type ProductService struct {
@@ -10,12 +12,12 @@ type ProductService struct {
 }
 
 type ProductStorage interface {
-	All(ctx context.Context) ([]Product, error)
-	Add(ctx context.Context, p Product) error
-	Find(ctx context.Context, id string) (Product, error)
-	FindVariant(ctx context.Context, variantID string) (Product, Variant, error)
-	AddOptionType(ctx context.Context, productID string, position int, ot OptionType) error
-	AddVariant(ctx context.Context, productID string, position int, v Variant) error
+	All(ctx context.Context) ([]domain.Product, error)
+	Add(ctx context.Context, p domain.Product) error
+	Find(ctx context.Context, id string) (domain.Product, error)
+	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
+	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
+	AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error
 	Reserve(ctx context.Context, quantities map[string]int) error
 	Release(ctx context.Context, quantities map[string]int) error
 }
@@ -24,16 +26,16 @@ func NewProductService(s ProductStorage) ProductService {
 	return ProductService{storage: s}
 }
 
-func (ps ProductService) AllProducts(ctx context.Context) ([]Product, error) {
+func (ps ProductService) AllProducts(ctx context.Context) ([]domain.Product, error) {
 	return ps.storage.All(ctx)
 }
 
-func (ps ProductService) Find(ctx context.Context, id string) (Product, error) {
+func (ps ProductService) Find(ctx context.Context, id string) (domain.Product, error) {
 	return ps.storage.Find(ctx, id)
 }
 
 // FindVariant resolves a variant id to its variant and owning product.
-func (ps ProductService) FindVariant(ctx context.Context, variantID string) (Product, Variant, error) {
+func (ps ProductService) FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error) {
 	return ps.storage.FindVariant(ctx, variantID)
 }
 
@@ -53,22 +55,22 @@ func (ps ProductService) Release(ctx context.Context, quantities map[string]int)
 const defaultStock = 100
 
 func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error {
-	pId, err := NewProductId(id)
+	pId, err := domain.NewProductId(id)
 	if err != nil {
 		return err
 	}
 
-	cur, err := NewCurrency(currency)
+	cur, err := domain.NewCurrency(currency)
 	if err != nil {
 		return fmt.Errorf("invalid currency: %w", err)
 	}
 
-	priceVO, err := NewPrice(priceMinorUnits, cur)
+	priceVO, err := domain.NewPrice(priceMinorUnits, cur)
 	if err != nil {
 		return fmt.Errorf("invalid price: %w", err)
 	}
 
-	p, err := NewProduct(pId, name, desc, priceVO, thumbnail)
+	p, err := domain.NewProduct(pId, name, desc, priceVO, thumbnail)
 	if err != nil {
 		return err
 	}
@@ -79,7 +81,7 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMi
 
 	// A simple product is purchasable through a single default variant
 	// carrying its price (no options) and the product image.
-	defaultVariant := NewVariant("var-"+id, id, thumbnail, nil, priceVO, defaultStock)
+	defaultVariant := domain.NewVariant("var-"+id, id, thumbnail, nil, priceVO, defaultStock)
 	return ps.storage.AddVariant(ctx, id, 0, defaultVariant)
 }
 
@@ -106,11 +108,11 @@ func (ps ProductService) AddVariantProduct(ctx context.Context, id, name, desc, 
 	if len(variants) == 0 {
 		return fmt.Errorf("a variant product needs at least one variant")
 	}
-	pID, err := NewProductId(id)
+	pID, err := domain.NewProductId(id)
 	if err != nil {
 		return err
 	}
-	cur, err := NewCurrency(currency)
+	cur, err := domain.NewCurrency(currency)
 	if err != nil {
 		return fmt.Errorf("invalid currency: %w", err)
 	}
@@ -121,12 +123,12 @@ func (ps ProductService) AddVariantProduct(ctx context.Context, id, name, desc, 
 			base = v.Price
 		}
 	}
-	basePrice, err := NewPrice(base, cur)
+	basePrice, err := domain.NewPrice(base, cur)
 	if err != nil {
 		return fmt.Errorf("invalid base price: %w", err)
 	}
 
-	product, err := NewProduct(pID, name, desc, basePrice, thumbnail)
+	product, err := domain.NewProduct(pID, name, desc, basePrice, thumbnail)
 	if err != nil {
 		return err
 	}
@@ -135,16 +137,16 @@ func (ps ProductService) AddVariantProduct(ctx context.Context, id, name, desc, 
 	}
 
 	for i, ot := range optionTypes {
-		if err = ps.storage.AddOptionType(ctx, id, i, NewOptionType(ot.Name, ot.Values)); err != nil {
+		if err = ps.storage.AddOptionType(ctx, id, i, domain.NewOptionType(ot.Name, ot.Values)); err != nil {
 			return err
 		}
 	}
 	for i, v := range variants {
-		price, err := NewPrice(v.Price, cur)
+		price, err := domain.NewPrice(v.Price, cur)
 		if err != nil {
 			return fmt.Errorf("invalid variant price: %w", err)
 		}
-		if err = ps.storage.AddVariant(ctx, id, i, NewVariant(v.ID, v.SKU, v.Image, v.Options, price, v.Stock)); err != nil {
+		if err = ps.storage.AddVariant(ctx, id, i, domain.NewVariant(v.ID, v.SKU, v.Image, v.Options, price, v.Stock)); err != nil {
 			return err
 		}
 	}

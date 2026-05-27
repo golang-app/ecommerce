@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/spf13/cobra"
 )
 
 type productCatalog interface {
 	Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
-	AddVariantProduct(ctx context.Context, id, name, desc, currency, thumbnail string, optionTypes []productcatalog.OptionTypeInput, variants []productcatalog.VariantInput) error
+	AddVariantProduct(ctx context.Context, id, name, desc, currency, thumbnail string, optionTypes []app.OptionTypeInput, variants []app.VariantInput) error
 }
 
 func newProductCatalogCmd(pc productCatalog) *cobra.Command {
@@ -94,8 +94,8 @@ Product with variants (each variant priced independently):
 	return cmd
 }
 
-func parseOptionTypes(flags []string) ([]productcatalog.OptionTypeInput, error) {
-	out := make([]productcatalog.OptionTypeInput, 0, len(flags))
+func parseOptionTypes(flags []string) ([]app.OptionTypeInput, error) {
+	out := make([]app.OptionTypeInput, 0, len(flags))
 	for _, f := range flags {
 		name, valuesCSV, found := strings.Cut(f, ":")
 		name = strings.TrimSpace(name)
@@ -111,13 +111,13 @@ func parseOptionTypes(flags []string) ([]productcatalog.OptionTypeInput, error) 
 		if len(values) == 0 {
 			return nil, fmt.Errorf("--option %q has no values", f)
 		}
-		out = append(out, productcatalog.OptionTypeInput{Name: name, Values: values})
+		out = append(out, app.OptionTypeInput{Name: name, Values: values})
 	}
 	return out, nil
 }
 
-func parseVariants(flags []string, productID string) ([]productcatalog.VariantInput, error) {
-	out := make([]productcatalog.VariantInput, 0, len(flags))
+func parseVariants(flags []string, productID string) ([]app.VariantInput, error) {
+	out := make([]app.VariantInput, 0, len(flags))
 	for i, f := range flags {
 		parts := strings.Split(f, ";")
 		if len(parts) < 2 {
@@ -160,7 +160,7 @@ func parseVariants(flags []string, productID string) ([]productcatalog.VariantIn
 		if sku != "" {
 			vid = productID + "-" + strings.ToLower(sku)
 		}
-		out = append(out, productcatalog.VariantInput{ID: vid, SKU: sku, Image: image, Options: options, Price: price, Stock: stock})
+		out = append(out, app.VariantInput{ID: vid, SKU: sku, Image: image, Options: options, Price: price, Stock: stock})
 	}
 	return out, nil
 }

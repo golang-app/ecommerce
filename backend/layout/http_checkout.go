@@ -8,7 +8,7 @@ import (
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/gorilla/mux"
 )
 
@@ -124,7 +124,7 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return
 	}
-	if errors.Is(err, productcatalog.ErrInsufficientStock) {
+	if errors.Is(err, pcdomain.ErrInsufficientStock) {
 		handler.flash(w, r, "Sorry — an item in your cart just went out of stock. Please review your cart.", "error")
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return

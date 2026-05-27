@@ -10,12 +10,12 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/cart/app"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/sirupsen/logrus"
 )
 
 type productStorage interface {
-	FindVariant(ctx context.Context, variantID string) (productcatalog.Product, productcatalog.Variant, error)
+	FindVariant(ctx context.Context, variantID string) (pcdomain.Product, pcdomain.Variant, error)
 }
 
 func New(db *sql.DB, logger logrus.FieldLogger, pc productStorage) (application.BoundedContext, app.CartService) {
@@ -41,7 +41,7 @@ type transformProductCatalog struct {
 func (tpc transformProductCatalog) Find(ctx context.Context, variantID string) (domain.Product, error) {
 	p, v, err := tpc.pc.FindVariant(ctx, variantID)
 
-	if errors.Is(err, productcatalog.ErrProductNotFound) {
+	if errors.Is(err, pcdomain.ErrProductNotFound) {
 		return domain.Product{}, domain.ErrProductNotFound
 	}
 

@@ -1,15 +1,17 @@
-package productcatalog
+package app
 
 import (
 	"context"
 	"fmt"
+
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 )
 
 type productBuilder struct {
 	id          string
 	name        string
 	description string
-	price       Price
+	price       domain.Price
 	thumbnail   string
 }
 
@@ -17,13 +19,13 @@ func NewProductBuilder() productBuilder {
 	return productBuilder{}
 }
 
-func (pb productBuilder) Build(ctx context.Context) (Product, error) {
-	id, err := NewProductId(pb.id)
+func (pb productBuilder) Build(ctx context.Context) (domain.Product, error) {
+	id, err := domain.NewProductId(pb.id)
 	if err != nil {
-		return Product{}, fmt.Errorf("cannot create product: %w", err)
+		return domain.Product{}, fmt.Errorf("cannot create product: %w", err)
 	}
 
-	return NewProduct(id, pb.name, pb.description, pb.price, pb.thumbnail)
+	return domain.NewProduct(id, pb.name, pb.description, pb.price, pb.thumbnail)
 }
 
 func (pb productBuilder) WithID(id string) productBuilder {
@@ -41,7 +43,7 @@ func (pb productBuilder) WithDescription(description string) productBuilder {
 	return pb
 }
 
-func (pb productBuilder) WithPrice(p Price) productBuilder {
+func (pb productBuilder) WithPrice(p domain.Price) productBuilder {
 	pb.price = p
 	return pb
 }
