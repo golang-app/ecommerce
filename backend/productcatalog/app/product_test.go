@@ -1,4 +1,4 @@
-package productcatalog_test
+package app_test
 
 import (
 	"context"
@@ -6,19 +6,23 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/matryer/is"
 )
 
 type productStorage interface {
-	All(ctx context.Context) ([]productcatalog.Product, error)
-	Add(ctx context.Context, p productcatalog.Product) error
-	Find(ctx context.Context, id string) (productcatalog.Product, error)
-	FindVariant(ctx context.Context, variantID string) (productcatalog.Product, productcatalog.Variant, error)
-	AddOptionType(ctx context.Context, productID string, position int, ot productcatalog.OptionType) error
-	AddVariant(ctx context.Context, productID string, position int, v productcatalog.Variant) error
+	All(ctx context.Context) ([]domain.Product, error)
+	Add(ctx context.Context, p domain.Product) error
+	Find(ctx context.Context, id string) (domain.Product, error)
+	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
+	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
+	AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error
 	Reserve(ctx context.Context, quantities map[string]int) error
 	Release(ctx context.Context, quantities map[string]int) error
+	ListProducts(ctx context.Context, q app.ProductQuery) ([]domain.Product, error)
+	Categories(ctx context.Context) ([]domain.Category, error)
+	Facets(ctx context.Context, categorySlug string) ([]app.Facet, error)
 }
 
 var storage productStorage
@@ -27,7 +31,7 @@ func TestFetchingProductsInTheCatalog(t *testing.T) {
 	is := is.New(t)
 	// given
 	ctx := context.Background()
-	appServ := productcatalog.NewProductService(storage)
+	appServ := app.NewProductService(storage)
 
 	p, err := buildProduct(ctx, storage)
 	is.NoErr(err)
@@ -46,16 +50,16 @@ func TestFetchingNonExistingProduct(t *testing.T) {
 	is := is.New(t)
 	// given
 	ctx := context.Background()
-	appServ := productcatalog.NewProductService(storage)
+	appServ := app.NewProductService(storage)
 
 	// when
 	_, err := appServ.Find(ctx, "i-dont-exist")
 
 	// then
-	is.True(errors.Is(err, productcatalog.ErrProductNotFound))
+	is.True(errors.Is(err, domain.ErrProductNotFound))
 }
 
-func productEquals(p1, p2 productcatalog.Product) error {
+func productEquals(p1, p2 domain.Product) error {
 	if p1.ID() != p2.ID() {
 		return errors.New("id misatch")
 	}
@@ -72,9 +76,9 @@ func productEquals(p1, p2 productcatalog.Product) error {
 	return nil
 }
 
-func buildProduct(ctx context.Context, storage productcatalog.ProductStorage) (productcatalog.Product, error) {
-	pb := productcatalog.NewProductBuilder()
-	price := productcatalog.MustNewPrice(234, productcatalog.MustNewCurrency("USD"))
+func buildProduct(ctx context.Context, storage app.ProductStorage) (domain.Product, error) {
+	pb := app.NewProductBuilder()
+	price := domain.MustNewPrice(234, domain.MustNewCurrency("USD"))
 	pb = pb.WithName("Test product").
 		WithID(randomID()).
 		WithDescription("description of the test product").

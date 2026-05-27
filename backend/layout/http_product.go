@@ -6,14 +6,68 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
+	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/gorilla/mux"
 )
 
+// AllProducts renders the filterable product grid fragment (no base layout).
+// The query string drives the filter: `category` selects the scope, while each
+// filterable attribute type contributes either `<typeID>_min`/`<typeID>_max`
+// (numeric) or a repeated `<typeID>` checkbox group (enum).
 func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
-	products, err := handler.catalogSrv.AllProducts(r.Context())
+	ctx := r.Context()
+	q := r.URL.Query()
+	category := q.Get("category")
+
+	query := pcapp.ProductQuery{
+		CategorySlug:   category,
+		NumericRanges:  map[string]pcapp.Range{},
+		EnumSelections: map[string][]string{},
+	}
+
+	// Use the facets for this scope to know which params are numeric vs enum.
+	facets, err := handler.catalogSrv.Facets(ctx, category)
+	if err != nil {
+		log.Printf("cannot get facets for %q: %s", category, err)
+		facets = nil
+	}
+
+	for _, f := range facets {
+		typeID := f.Type.ID()
+		switch {
+		case f.Type.IsNumeric():
+			minStr := q.Get(typeID + "_min")
+			maxStr := q.Get(typeID + "_max")
+			if minStr == "" && maxStr == "" {
+				continue
+			}
+			rng := pcapp.Range{}
+			if minStr != "" {
+				if v, errParse := strconv.ParseFloat(minStr, 64); errParse == nil {
+					rng.Min = &v
+				}
+			}
+			if maxStr != "" {
+				if v, errParse := strconv.ParseFloat(maxStr, 64); errParse == nil {
+					rng.Max = &v
+				}
+			}
+			if rng.Min == nil && rng.Max == nil {
+				continue
+			}
+			query.NumericRanges[typeID] = rng
+		case f.Type.IsEnum():
+			if vals := q[typeID]; len(vals) > 0 {
+				query.EnumSelections[typeID] = vals
+			}
+		}
+	}
+
+	products, err := handler.catalogSrv.List(ctx, query)
 	if err != nil {
 		https.InternalError(w, "internal-error", "cannot get list of all products")
 		log.Printf("cannot get list of all products: %s", err)

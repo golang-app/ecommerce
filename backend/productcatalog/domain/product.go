@@ -1,4 +1,4 @@
-package productcatalog
+package domain
 
 import (
 	"errors"
@@ -83,6 +83,8 @@ type Product struct {
 	thumbnail   string
 	optionTypes []OptionType
 	variants    []Variant
+	categories  []Category
+	attributes  []AttributeValue
 }
 
 var emptyProduct = Product{}
@@ -148,6 +150,17 @@ func (p Product) WithCatalog(optionTypes []OptionType, variants []Variant) Produ
 func (p Product) OptionTypes() []OptionType { return p.optionTypes }
 func (p Product) Variants() []Variant       { return p.variants }
 func (p Product) HasOptions() bool          { return len(p.optionTypes) > 0 }
+
+// WithClassification returns a copy of the product with its categories and
+// attribute values attached (used by the storage layer after loading them).
+func (p Product) WithClassification(categories []Category, attributes []AttributeValue) Product {
+	p.categories = categories
+	p.attributes = attributes
+	return p
+}
+
+func (p Product) Categories() []Category       { return p.categories }
+func (p Product) Attributes() []AttributeValue { return p.attributes }
 
 // Variant returns the variant with the given id, if it belongs to this product.
 func (p Product) Variant(id string) (Variant, bool) {

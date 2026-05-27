@@ -1,0 +1,587 @@
+package adapter
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"sort"
+
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	"github.com/lib/pq"
+)
+
+type postgres struct {
+	db *sql.DB
+}
+
+func NewPostgres(db *sql.DB) postgres {
+	return postgres{
+		db: db,
+	}
+}
+
+func (db postgres) Add(ctx context.Context, p domain.Product) error {
+	q := `INSERT INTO productcatalog_product (id, name, description, thumbnail, price_amount, price_currency)
+		VALUES ($1, $2, $3, $4, $5, $6)`
+
+	_, err := db.db.ExecContext(ctx, q, p.ID(), p.Name(), p.Description(), p.Thumbnail(), p.Price().Amount(), p.Price().Currency())
+	if err != nil {
+		return fmt.Errorf("cannot add the product: %w", err)
+	}
+
+	return nil
+}
+
+func (db postgres) AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error {
+	values, err := json.Marshal(ot.Values())
+	if err != nil {
+		return fmt.Errorf("marshal option values: %w", err)
+	}
+	id := fmt.Sprintf("opt-%s-%d", productID, position)
+	_, err = db.db.ExecContext(ctx, `
+		INSERT INTO productcatalog_option_type (id, product_id, name, position, values)
+		VALUES ($1, $2, $3, $4, $5)
+	`, id, productID, ot.Name(), position, values)
+	if err != nil {
+		return fmt.Errorf("add option type: %w", err)
+	}
+	return nil
+}
+
+func (db postgres) AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error {
+	options, err := json.Marshal(v.Options())
+	if err != nil {
+		return fmt.Errorf("marshal variant options: %w", err)
+	}
+	_, err = db.db.ExecContext(ctx, `
+		INSERT INTO productcatalog_variant (id, product_id, sku, image_url, price_amount, price_currency, position, options, stock)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`, v.ID(), productID, v.SKU(), v.Image(), v.Price().Amount(), string(v.Price().Currency()), position, options, v.Stock())
+	if err != nil {
+		return fmt.Errorf("add variant: %w", err)
+	}
+	return nil
+}
+
+func (db postgres) optionTypes(ctx context.Context, productID string) ([]domain.OptionType, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT name, values FROM productcatalog_option_type
+		WHERE product_id = $1 ORDER BY position
+	`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("query option types: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.OptionType
+	for rows.Next() {
+		var name string
+		var valuesRaw []byte
+		if err := rows.Scan(&name, &valuesRaw); err != nil {
+			return nil, fmt.Errorf("scan option type: %w", err)
+		}
+		var values []string
+		if err := json.Unmarshal(valuesRaw, &values); err != nil {
+			return nil, fmt.Errorf("unmarshal option values: %w", err)
+		}
+		out = append(out, domain.NewOptionType(name, values))
+	}
+	return out, rows.Err()
+}
+
+func (db postgres) variants(ctx context.Context, productID string) ([]domain.Variant, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, sku, image_url, price_amount, price_currency, options, stock FROM productcatalog_variant
+		WHERE product_id = $1 ORDER BY position
+	`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("query variants: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.Variant
+	for rows.Next() {
+		v, err := scanVariant(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+func (db postgres) withCatalog(ctx context.Context, p domain.Product) (domain.Product, error) {
+	ots, err := db.optionTypes(ctx, string(p.ID()))
+	if err != nil {
+		return domain.Product{}, err
+	}
+	vs, err := db.variants(ctx, string(p.ID()))
+	if err != nil {
+		return domain.Product{}, err
+	}
+	cats, err := db.productCategories(ctx, string(p.ID()))
+	if err != nil {
+		return domain.Product{}, err
+	}
+	attrs, err := db.productAttributes(ctx, string(p.ID()))
+	if err != nil {
+		return domain.Product{}, err
+	}
+	return p.WithCatalog(ots, vs).WithClassification(cats, attrs), nil
+}
+
+func (db postgres) productCategories(ctx context.Context, productID string) ([]domain.Category, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT c.id, c.name, c.slug, c.position
+		FROM productcatalog_category c
+		JOIN productcatalog_product_category pc ON pc.category_id = c.id
+		WHERE pc.product_id = $1
+		ORDER BY c.position, c.name
+	`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("query product categories: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.Category
+	for rows.Next() {
+		var id, name, slug string
+		var position int
+		if err := rows.Scan(&id, &name, &slug, &position); err != nil {
+			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		out = append(out, domain.RebuildCategory(id, name, slug, position))
+	}
+	return out, rows.Err()
+}
+
+func (db postgres) productAttributes(ctx context.Context, productID string) ([]domain.AttributeValue, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT t.id, t.name, t.unit, t.kind, t.filterable, t.position, pa.num_value, pa.text_value
+		FROM productcatalog_product_attribute pa
+		JOIN productcatalog_attribute_type t ON t.id = pa.attribute_type_id
+		WHERE pa.product_id = $1
+		ORDER BY t.position, t.name
+	`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("query product attributes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.AttributeValue
+	for rows.Next() {
+		var id, name, unit, kind string
+		var filterable bool
+		var position int
+		var num sql.NullFloat64
+		var text sql.NullString
+		if err := rows.Scan(&id, &name, &unit, &kind, &filterable, &position, &num, &text); err != nil {
+			return nil, fmt.Errorf("scan attribute: %w", err)
+		}
+		t := domain.RebuildAttributeType(id, name, unit, domain.AttributeKind(kind), filterable, position)
+		if t.IsNumeric() {
+			out = append(out, domain.NewNumericValue(t, num.Float64))
+		} else {
+			out = append(out, domain.NewEnumValue(t, text.String))
+		}
+	}
+	return out, rows.Err()
+}
+
+func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product ORDER BY id`
+
+	rows, err := db.db.QueryContext(ctx, q)
+	if err != nil {
+		return nil, fmt.Errorf("cannot query products: %w", err)
+	}
+
+	var base []domain.Product
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			p, err := scanProduct(rows)
+			if err != nil {
+				return
+			}
+			base = append(base, p)
+		}
+	}()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("cannot fetch products: %w", err)
+	}
+
+	products := make([]domain.Product, 0, len(base))
+	for _, p := range base {
+		full, err := db.withCatalog(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, full)
+	}
+	return products, nil
+}
+
+func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) {
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product WHERE id = $1`
+	p, err := scanProduct(db.db.QueryRowContext(ctx, q, id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Product{}, domain.ErrProductNotFound
+	}
+	if err != nil {
+		return domain.Product{}, fmt.Errorf("cannot scan product: %w", err)
+	}
+	return db.withCatalog(ctx, p)
+}
+
+// FindVariant resolves a variant id to its variant and owning product.
+func (db postgres) FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error) {
+	var productID string
+	err := db.db.QueryRowContext(ctx, `SELECT product_id FROM productcatalog_variant WHERE id = $1`, variantID).Scan(&productID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Product{}, domain.Variant{}, domain.ErrProductNotFound
+	}
+	if err != nil {
+		return domain.Product{}, domain.Variant{}, fmt.Errorf("find variant: %w", err)
+	}
+	p, err := db.Find(ctx, productID)
+	if err != nil {
+		return domain.Product{}, domain.Variant{}, err
+	}
+	v, ok := p.Variant(variantID)
+	if !ok {
+		return domain.Product{}, domain.Variant{}, domain.ErrProductNotFound
+	}
+	return p, v, nil
+}
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanProduct(s rowScanner) (domain.Product, error) {
+	var id, name, description, thumbnail, currency string
+	var amount int64
+	if err := s.Scan(&id, &name, &description, &thumbnail, &amount, &currency); err != nil {
+		return domain.Product{}, err
+	}
+	pid, err := domain.NewProductId(id)
+	if err != nil {
+		return domain.Product{}, fmt.Errorf("rebuild product id: %w", err)
+	}
+	cur, err := domain.NewCurrency(currency)
+	if err != nil {
+		return domain.Product{}, fmt.Errorf("rebuild currency: %w", err)
+	}
+	price, err := domain.NewPrice(amount, cur)
+	if err != nil {
+		return domain.Product{}, fmt.Errorf("rebuild price: %w", err)
+	}
+	return domain.NewProduct(pid, name, description, price, thumbnail)
+}
+
+func scanVariant(s rowScanner) (domain.Variant, error) {
+	var id, sku, image, currency string
+	var amount int64
+	var stock int
+	var optionsRaw []byte
+	if err := s.Scan(&id, &sku, &image, &amount, &currency, &optionsRaw, &stock); err != nil {
+		return domain.Variant{}, err
+	}
+	cur, err := domain.NewCurrency(currency)
+	if err != nil {
+		return domain.Variant{}, fmt.Errorf("rebuild variant currency: %w", err)
+	}
+	price, err := domain.NewPrice(amount, cur)
+	if err != nil {
+		return domain.Variant{}, fmt.Errorf("rebuild variant price: %w", err)
+	}
+	var options map[string]string
+	if err := json.Unmarshal(optionsRaw, &options); err != nil {
+		return domain.Variant{}, fmt.Errorf("unmarshal variant options: %w", err)
+	}
+	return domain.NewVariant(id, sku, image, options, price, stock), nil
+}
+
+// Reserve atomically decrements stock for every variant in quantities. It is
+// all-or-nothing: if any variant lacks sufficient stock the whole change is
+// rolled back and ErrInsufficientStock is returned. Variants are locked in a
+// stable (sorted) order to avoid deadlocks between concurrent reservations.
+func (db postgres) Reserve(ctx context.Context, quantities map[string]int) error {
+	if len(quantities) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(quantities))
+	for id := range quantities {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	for _, id := range ids {
+		qty := quantities[id]
+		if qty <= 0 {
+			continue
+		}
+		var res sql.Result
+		res, err = tx.ExecContext(ctx, `
+			UPDATE productcatalog_variant SET stock = stock - $2
+			WHERE id = $1 AND stock >= $2
+		`, id, qty)
+		if err != nil {
+			return fmt.Errorf("reserve %s: %w", id, err)
+		}
+		n, _ := res.RowsAffected()
+		if n != 1 {
+			err = domain.ErrInsufficientStock
+			return err
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit reservation: %w", err)
+	}
+	return nil
+}
+
+// Release returns previously-reserved stock (best-effort, e.g. when a payment
+// fails after the reservation succeeded).
+func (db postgres) Release(ctx context.Context, quantities map[string]int) error {
+	for id, qty := range quantities {
+		if qty <= 0 {
+			continue
+		}
+		if _, err := db.db.ExecContext(ctx, `UPDATE productcatalog_variant SET stock = stock + $2 WHERE id = $1`, id, qty); err != nil {
+			return fmt.Errorf("release %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+// Categories returns every catalog category in display order.
+func (db postgres) Categories(ctx context.Context) ([]domain.Category, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, name, slug, position FROM productcatalog_category ORDER BY position, name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query categories: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.Category
+	for rows.Next() {
+		var id, name, slug string
+		var position int
+		if err := rows.Scan(&id, &name, &slug, &position); err != nil {
+			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		out = append(out, domain.RebuildCategory(id, name, slug, position))
+	}
+	return out, rows.Err()
+}
+
+// ListProducts returns the products matching the query. The WHERE clause is
+// built dynamically with parameterised placeholders only (never interpolating
+// user values), then each matching id is hydrated through the existing Find
+// path so the products carry their full catalog/classification.
+func (db postgres) ListProducts(ctx context.Context, q app.ProductQuery) ([]domain.Product, error) {
+	query := `SELECT p.id FROM productcatalog_product p WHERE 1 = 1`
+	var args []any
+	next := func() string {
+		args = append(args, nil)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	set := func(v any) string {
+		ph := next()
+		args[len(args)-1] = v
+		return ph
+	}
+
+	if q.CategorySlug != "" {
+		query += fmt.Sprintf(` AND EXISTS (
+			SELECT 1 FROM productcatalog_product_category pc
+			JOIN productcatalog_category c ON c.id = pc.category_id
+			WHERE pc.product_id = p.id AND c.slug = %s)`, set(q.CategorySlug))
+	}
+
+	for _, typeID := range sortedKeys(q.NumericRanges) {
+		r := q.NumericRanges[typeID]
+		clause := fmt.Sprintf(`SELECT 1 FROM productcatalog_product_attribute pa
+			WHERE pa.product_id = p.id AND pa.attribute_type_id = %s`, set(typeID))
+		if r.Min != nil {
+			clause += fmt.Sprintf(` AND pa.num_value >= %s`, set(*r.Min))
+		}
+		if r.Max != nil {
+			clause += fmt.Sprintf(` AND pa.num_value <= %s`, set(*r.Max))
+		}
+		query += fmt.Sprintf(` AND EXISTS (%s)`, clause)
+	}
+
+	for _, typeID := range sortedEnumKeys(q.EnumSelections) {
+		values := q.EnumSelections[typeID]
+		if len(values) == 0 {
+			continue
+		}
+		idPH := set(typeID)
+		valPH := set(pq.Array(values))
+		query += fmt.Sprintf(` AND EXISTS (
+			SELECT 1 FROM productcatalog_product_attribute pa
+			WHERE pa.product_id = p.id AND pa.attribute_type_id = %s AND pa.text_value = ANY(%s))`, idPH, valPH)
+	}
+
+	query += ` ORDER BY p.id`
+
+	rows, err := db.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list products: %w", err)
+	}
+	var ids []string
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id string
+			if err = rows.Scan(&id); err != nil {
+				return
+			}
+			ids = append(ids, id)
+		}
+	}()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan product ids: %w", err)
+	}
+
+	out := make([]domain.Product, 0, len(ids))
+	for _, id := range ids {
+		p, err := db.Find(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// Facets returns the filterable attribute types and their available options,
+// optionally scoped to the products in a category.
+func (db postgres) Facets(ctx context.Context, categorySlug string) ([]app.Facet, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, name, unit, kind, filterable, position
+		FROM productcatalog_attribute_type
+		WHERE filterable = true
+		ORDER BY position, name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query filterable attribute types: %w", err)
+	}
+	var types []domain.AttributeType
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id, name, unit, kind string
+			var filterable bool
+			var position int
+			if err = rows.Scan(&id, &name, &unit, &kind, &filterable, &position); err != nil {
+				return
+			}
+			types = append(types, domain.RebuildAttributeType(id, name, unit, domain.AttributeKind(kind), filterable, position))
+		}
+	}()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan attribute types: %w", err)
+	}
+
+	// scope restricts an attribute query to products in the given category.
+	// args are appended in order; the attribute_type_id placeholder is $1.
+	scope := ""
+	if categorySlug != "" {
+		scope = ` AND EXISTS (
+			SELECT 1 FROM productcatalog_product_category pc
+			JOIN productcatalog_category c ON c.id = pc.category_id
+			WHERE pc.product_id = pa.product_id AND c.slug = $2)`
+	}
+
+	var facets []app.Facet
+	for _, t := range types {
+		if t.IsNumeric() {
+			var min, max sql.NullFloat64
+			q := `SELECT min(num_value), max(num_value) FROM productcatalog_product_attribute pa
+				WHERE pa.attribute_type_id = $1` + scope
+			args := []any{t.ID()}
+			if categorySlug != "" {
+				args = append(args, categorySlug)
+			}
+			if err := db.db.QueryRowContext(ctx, q, args...).Scan(&min, &max); err != nil {
+				return nil, fmt.Errorf("facet numeric %s: %w", t.ID(), err)
+			}
+			if !min.Valid || !max.Valid {
+				continue
+			}
+			lo, hi := min.Float64, max.Float64
+			facets = append(facets, app.Facet{Type: t, Min: &lo, Max: &hi})
+			continue
+		}
+
+		q := `SELECT DISTINCT text_value FROM productcatalog_product_attribute pa
+			WHERE pa.attribute_type_id = $1 AND pa.text_value IS NOT NULL` + scope + ` ORDER BY text_value`
+		args := []any{t.ID()}
+		if categorySlug != "" {
+			args = append(args, categorySlug)
+		}
+		vrows, err := db.db.QueryContext(ctx, q, args...)
+		if err != nil {
+			return nil, fmt.Errorf("facet enum %s: %w", t.ID(), err)
+		}
+		var values []string
+		func() {
+			defer func() { _ = vrows.Close() }()
+			for vrows.Next() {
+				var v string
+				if err = vrows.Scan(&v); err != nil {
+					return
+				}
+				values = append(values, v)
+			}
+		}()
+		if err = vrows.Err(); err != nil {
+			return nil, fmt.Errorf("scan enum facet %s: %w", t.ID(), err)
+		}
+		if len(values) == 0 {
+			continue
+		}
+		facets = append(facets, app.Facet{Type: t, Values: values})
+	}
+	return facets, nil
+}
+
+// sortedKeys returns the map keys sorted, so generated SQL placeholders are
+// stable and tests are deterministic.
+func sortedKeys(m map[string]app.Range) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedEnumKeys(m map[string][]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}

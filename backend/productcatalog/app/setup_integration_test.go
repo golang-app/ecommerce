@@ -1,13 +1,13 @@
 //go:build integration
 
-package productcatalog_test
+package app_test
 
 import (
 	"database/sql"
 	"fmt"
 	"os"
 
-	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/adapter"
 )
 
 func init() {
@@ -25,7 +25,7 @@ func init() {
 		panic("cannot establish connection to postgres: " + err.Error())
 	}
 
-	storage = productcatalog.NewPostgres(db)
+	storage = adapter.NewPostgres(db)
 }
 
 func getEnv(name, def string) string {
