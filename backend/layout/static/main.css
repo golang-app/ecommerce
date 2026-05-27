@@ -258,6 +258,10 @@ main {
 }
 .variant-form select:focus { border-bottom-color: var(--fg); }
 .variant-box { display: flex; flex-direction: column; gap: var(--space-2); }
+.stock { font-size: 0.85rem; }
+.stock--in { color: var(--fg-muted); }
+.stock--low { color: #B8860B; }
+.stock--out { color: var(--danger); text-transform: lowercase; }
 
 /* ---------- buttons ---------- */
 .btn {

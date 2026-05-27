@@ -79,7 +79,7 @@ func main() {
 	pcBD, catalogService := productcatalog.New(db)
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
 	authBD, authService := auth.New(db)
-	checkoutBD, checkoutSrv := checkout.New(db, cartSrv, cartSrv)
+	checkoutBD, checkoutSrv := checkout.New(db, cartSrv, cartSrv, catalogService)
 	shipSrv := shippinginfo.New(db)
 	app.AddBoundedContext(cartBD)
 
