@@ -242,6 +242,291 @@ func (handler httpHandler) AdminUpdateProductAttributes(w http.ResponseWriter, r
 	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
 }
 
+// parseOptionsSpec parses an "Name=Value, Name2=Value2" string into a map.
+// Empty pairs and pairs without an "=" are skipped; keys/values are trimmed.
+func parseOptionsSpec(s string) map[string]string {
+	out := map[string]string{}
+	for _, pair := range strings.Split(s, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		eq := strings.Index(pair, "=")
+		if eq < 0 {
+			continue
+		}
+		k := strings.TrimSpace(pair[:eq])
+		v := strings.TrimSpace(pair[eq+1:])
+		if k == "" || v == "" {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// AdminNewVariantProductForm renders the create-a-variant-product page.
+func (handler httpHandler) AdminNewVariantProductForm(w http.ResponseWriter, r *http.Request) {
+	email, ok := handler.requireAdmin(w, r)
+	if !ok {
+		return
+	}
+	handler.renderAdminTemplate(w, r, "admin/product_new_variant", map[string]any{
+		"Active": "products",
+		"Email":  email,
+	})
+}
+
+// AdminCreateVariantProduct builds option types and variants from the parallel
+// form arrays and creates a variant product.
+func (handler httpHandler) AdminCreateVariantProduct(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	_ = r.ParseForm()
+	id := strings.TrimSpace(r.FormValue("id"))
+	currency := strings.TrimSpace(r.FormValue("currency"))
+	if currency == "" {
+		currency = "USD"
+	}
+
+	const back = "/admin/products/new-variant"
+
+	// Option types from ot_name[] / ot_values[].
+	otNames := r.Form["ot_name[]"]
+	otValues := r.Form["ot_values[]"]
+	var optionTypes []pcapp.OptionTypeInput
+	declared := map[string]bool{}
+	for i, name := range otNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		var raw string
+		if i < len(otValues) {
+			raw = otValues[i]
+		}
+		var values []string
+		for _, v := range strings.Split(raw, ",") {
+			v = strings.TrimSpace(v)
+			if v != "" {
+				values = append(values, v)
+			}
+		}
+		optionTypes = append(optionTypes, pcapp.OptionTypeInput{Name: name, Values: values})
+		declared[name] = true
+	}
+	if len(optionTypes) == 0 {
+		handler.flash(w, r, "at least one option type is required", "error")
+		http.Redirect(w, r, back, http.StatusSeeOther)
+		return
+	}
+
+	// Variants from the parallel v_*[] arrays.
+	vSKUs := r.Form["v_sku[]"]
+	vPrices := r.Form["v_price[]"]
+	vStocks := r.Form["v_stock[]"]
+	vImages := r.Form["v_image[]"]
+	vOptions := r.Form["v_options[]"]
+	var variants []pcapp.VariantInput
+	for i := range vPrices {
+		sku := ""
+		if i < len(vSKUs) {
+			sku = strings.TrimSpace(vSKUs[i])
+		}
+		image := ""
+		if i < len(vImages) {
+			image = strings.TrimSpace(vImages[i])
+		}
+		optsRaw := ""
+		if i < len(vOptions) {
+			optsRaw = vOptions[i]
+		}
+		options := parseOptionsSpec(optsRaw)
+		// Skip wholly-empty rows.
+		if sku == "" && strings.TrimSpace(vPrices[i]) == "" && len(options) == 0 {
+			continue
+		}
+		price, err := parsePriceMinorUnits(vPrices[i])
+		if err != nil {
+			handler.flash(w, r, err.Error(), "error")
+			http.Redirect(w, r, back, http.StatusSeeOther)
+			return
+		}
+		stock := 0
+		if i < len(vStocks) {
+			if raw := strings.TrimSpace(vStocks[i]); raw != "" {
+				s, convErr := strconv.Atoi(raw)
+				if convErr != nil {
+					handler.flash(w, r, "invalid stock", "error")
+					http.Redirect(w, r, back, http.StatusSeeOther)
+					return
+				}
+				stock = s
+			}
+		}
+		// Validate the variant's option keys match the declared option types.
+		for k := range options {
+			if !declared[k] {
+				handler.flash(w, r, "variant option \""+k+"\" is not a declared option type", "error")
+				http.Redirect(w, r, back, http.StatusSeeOther)
+				return
+			}
+		}
+		variantID := slugifyForID(sku)
+		if variantID == "" {
+			variantID = id + "-" + strconv.Itoa(i)
+		}
+		variants = append(variants, pcapp.VariantInput{
+			ID:      variantID,
+			SKU:     sku,
+			Image:   image,
+			Options: options,
+			Price:   price,
+			Stock:   stock,
+		})
+	}
+	if len(variants) == 0 {
+		handler.flash(w, r, "at least one variant is required", "error")
+		http.Redirect(w, r, back, http.StatusSeeOther)
+		return
+	}
+
+	err := handler.catalogSrv.AddVariantProduct(r.Context(), id, r.FormValue("name"), r.FormValue("description"), currency, r.FormValue("thumbnail"), optionTypes, variants)
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+		http.Redirect(w, r, back, http.StatusSeeOther)
+		return
+	}
+	handler.flash(w, r, "Variant product created", "info")
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
+// slugifyForID lowercases and url-safes a string for use as a variant id. It
+// mirrors the app-layer slug rules (lowercase letters/digits, hyphen-separated).
+func slugifyForID(s string) string {
+	var b strings.Builder
+	lastHyphen := false
+	for _, r := range strings.ToLower(s) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+			lastHyphen = false
+		case r == ' ' || r == '-' || r == '_':
+			if !lastHyphen && b.Len() > 0 {
+				b.WriteByte('-')
+				lastHyphen = true
+			}
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+// AdminAddVariant adds a single variant to an existing product. It reads one
+// opt_<OptionTypeName> value per option type plus sku/price/stock/image.
+func (handler httpHandler) AdminAddVariant(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	product, err := handler.catalogSrv.Find(r.Context(), id)
+	if err != nil {
+		handler.flash(w, r, "Product not found", "error")
+		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	options := map[string]string{}
+	for _, ot := range product.OptionTypes() {
+		options[ot.Name()] = strings.TrimSpace(r.FormValue("opt_" + ot.Name()))
+	}
+	currency := strings.TrimSpace(r.FormValue("currency"))
+	if currency == "" {
+		currency = product.Price().Currency().String()
+	}
+	price, err := parsePriceMinorUnits(r.FormValue("price"))
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+		return
+	}
+	stock := 0
+	if raw := strings.TrimSpace(r.FormValue("stock")); raw != "" {
+		s, convErr := strconv.Atoi(raw)
+		if convErr != nil {
+			handler.flash(w, r, "invalid stock", "error")
+			http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+			return
+		}
+		stock = s
+	}
+	err = handler.catalogSrv.AddVariantToProduct(r.Context(), id, r.FormValue("sku"), r.FormValue("image"), price, currency, stock, options)
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Variant added", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
+// AdminUpdateVariant updates a single variant's sku/price/stock/image.
+func (handler httpHandler) AdminUpdateVariant(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	variantID := mux.Vars(r)["variantID"]
+	product, err := handler.catalogSrv.Find(r.Context(), id)
+	if err != nil {
+		handler.flash(w, r, "Product not found", "error")
+		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
+		return
+	}
+	_ = r.ParseForm()
+	currency := strings.TrimSpace(r.FormValue("currency"))
+	if currency == "" {
+		currency = product.Price().Currency().String()
+	}
+	price, err := parsePriceMinorUnits(r.FormValue("price"))
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+		return
+	}
+	stock := 0
+	if raw := strings.TrimSpace(r.FormValue("stock")); raw != "" {
+		s, convErr := strconv.Atoi(raw)
+		if convErr != nil {
+			handler.flash(w, r, "invalid stock", "error")
+			http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+			return
+		}
+		stock = s
+	}
+	err = handler.catalogSrv.UpdateVariant(r.Context(), variantID, r.FormValue("sku"), r.FormValue("image"), price, currency, stock)
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Variant updated", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
+// AdminDeleteVariant deletes a single variant (refused if it is the last one).
+func (handler httpHandler) AdminDeleteVariant(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	variantID := mux.Vars(r)["variantID"]
+	if err := handler.catalogSrv.DeleteVariant(r.Context(), id, variantID); err != nil {
+		handler.flash(w, r, err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Variant deleted", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
 // AdminDeleteProduct deletes a product (variants/links cascade).
 func (handler httpHandler) AdminDeleteProduct(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {

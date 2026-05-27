@@ -137,6 +137,13 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 
 	r.HandleFunc("/admin/products", observability.HTTPWrap(m.handler.AdminProducts, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/products", observability.HTTPWrap(m.handler.AdminCreateProduct, m.logger)).Methods("POST")
+	// Variant-product routes: literal/longer paths first so they are not
+	// captured by the /admin/products/{id} catch-all below.
+	r.HandleFunc("/admin/products/new-variant", observability.HTTPWrap(m.handler.AdminNewVariantProductForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/products/new-variant", observability.HTTPWrap(m.handler.AdminCreateVariantProduct, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/variants/{variantID}/delete", observability.HTTPWrap(m.handler.AdminDeleteVariant, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/variants/{variantID}", observability.HTTPWrap(m.handler.AdminUpdateVariant, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/variants", observability.HTTPWrap(m.handler.AdminAddVariant, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/edit", observability.HTTPWrap(m.handler.AdminEditProductForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/products/{id}/stock", observability.HTTPWrap(m.handler.AdminUpdateProductStock, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/categories", observability.HTTPWrap(m.handler.AdminUpdateProductCategories, m.logger)).Methods("POST")

@@ -25,6 +25,8 @@ type ProductStorage interface {
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
 	AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error
+	UpdateVariant(ctx context.Context, variantID, sku, image string, priceAmount int64, currency string, stock int) error
+	DeleteVariant(ctx context.Context, variantID string) error
 	Reserve(ctx context.Context, quantities map[string]int) error
 	Release(ctx context.Context, quantities map[string]int) error
 	ListProducts(ctx context.Context, q ProductQuery) ([]domain.Product, error)
@@ -327,4 +329,102 @@ func (ps ProductService) AddVariantProduct(ctx context.Context, id, name, desc, 
 		}
 	}
 	return nil
+}
+
+// AddVariantToProduct adds a single variant to an existing product that has
+// option types. It validates the product exists and that options cover each
+// option type with an allowed value, generates a collision-free variant id and
+// appends the variant at the next position.
+func (ps ProductService) AddVariantToProduct(ctx context.Context, productID, sku, image string, priceMinor int64, currency string, stock int, options map[string]string) error {
+	if priceMinor < 0 {
+		return fmt.Errorf("price cannot be negative")
+	}
+	if stock < 0 {
+		return fmt.Errorf("stock cannot be negative")
+	}
+	product, err := ps.storage.Find(ctx, productID)
+	if err != nil {
+		return err
+	}
+	optionTypes := product.OptionTypes()
+	if len(optionTypes) == 0 {
+		return fmt.Errorf("product %q has no option types; cannot add a variant", productID)
+	}
+
+	// Validate that options cover each option type with an allowed value.
+	for _, ot := range optionTypes {
+		val, ok := options[ot.Name()]
+		if !ok || val == "" {
+			return fmt.Errorf("missing value for option %q", ot.Name())
+		}
+		allowed := false
+		for _, v := range ot.Values() {
+			if v == val {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return fmt.Errorf("value %q is not allowed for option %q", val, ot.Name())
+		}
+	}
+
+	cur, err := domain.NewCurrency(currency)
+	if err != nil {
+		return fmt.Errorf("invalid currency: %w", err)
+	}
+	price, err := domain.NewPrice(priceMinor, cur)
+	if err != nil {
+		return fmt.Errorf("invalid price: %w", err)
+	}
+
+	existing := product.Variants()
+	variantID := ps.uniqueVariantID(productID, sku, existing)
+	position := len(existing)
+	return ps.storage.AddVariant(ctx, productID, position, domain.NewVariant(variantID, sku, image, options, price, stock))
+}
+
+// uniqueVariantID derives a variant id (slug of sku, else productID-<n>) that
+// does not collide with any existing variant id, appending a counter if needed.
+func (ps ProductService) uniqueVariantID(productID, sku string, existing []domain.Variant) string {
+	taken := make(map[string]bool, len(existing))
+	for _, v := range existing {
+		taken[v.ID()] = true
+	}
+	base := slugify(sku)
+	if base == "" {
+		base = fmt.Sprintf("%s-%d", productID, len(existing))
+	}
+	candidate := base
+	for i := 1; taken[candidate]; i++ {
+		candidate = fmt.Sprintf("%s-%d", base, i)
+	}
+	return candidate
+}
+
+// UpdateVariant updates a single variant's sku, image, price and stock.
+func (ps ProductService) UpdateVariant(ctx context.Context, variantID, sku, image string, priceMinor int64, currency string, stock int) error {
+	if priceMinor < 0 {
+		return fmt.Errorf("price cannot be negative: %d", priceMinor)
+	}
+	if stock < 0 {
+		return fmt.Errorf("stock cannot be negative: %d", stock)
+	}
+	if _, err := domain.NewCurrency(currency); err != nil {
+		return fmt.Errorf("invalid currency: %w", err)
+	}
+	return ps.storage.UpdateVariant(ctx, variantID, sku, image, priceMinor, currency, stock)
+}
+
+// DeleteVariant removes a variant from a product, refusing to delete the last
+// remaining variant (a product needs at least one to stay purchasable).
+func (ps ProductService) DeleteVariant(ctx context.Context, productID, variantID string) error {
+	product, err := ps.storage.Find(ctx, productID)
+	if err != nil {
+		return err
+	}
+	if len(product.Variants()) <= 1 {
+		return fmt.Errorf("cannot delete the last variant: a product needs at least one variant")
+	}
+	return ps.storage.DeleteVariant(ctx, variantID)
 }

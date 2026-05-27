@@ -15,26 +15,60 @@
   </section>
 
   <section class="admin-section">
-    <h3 class="admin-section__title">variant stock</h3>
+    <h3 class="admin-section__title">variants</h3>
     {{if .Product.Variants}}
-      <form class="form" method="post" action="/admin/products/{{.Product.ID}}/stock">
-        <table class="admin-table">
-          <thead><tr><th>variant</th><th>sku</th><th>stock</th></tr></thead>
-          <tbody>
-            {{$ots := .Product.OptionTypes}}
-            {{range $v := .Product.Variants}}
-              <tr>
-                <td>{{with $v.Label $ots}}{{.}}{{else}}default{{end}}</td>
-                <td><code>{{$v.SKU}}</code></td>
-                <td><input type="number" name="stock_{{$v.ID}}" value="{{$v.Stock}}" min="0"></td>
-              </tr>
-            {{end}}
-          </tbody>
-        </table>
-        <button type="submit" class="btn">save stock</button>
-      </form>
+      {{$ots := .Product.OptionTypes}}
+      {{$single := eq (len .Product.Variants) 1}}
+      <table class="admin-table variant-table">
+        <thead><tr><th>variant</th><th>sku</th><th>price</th><th>image</th><th>stock</th><th></th></tr></thead>
+        <tbody>
+          {{range $v := .Product.Variants}}
+            <tr>
+              <td>{{with $v.Label $ots}}{{.}}{{else}}default{{end}}</td>
+              <td colspan="4">
+                <form class="form form--inline" method="post" action="/admin/products/{{$.Product.ID}}/variants/{{$v.ID}}">
+                  <input name="sku" value="{{$v.SKU}}" placeholder="sku" aria-label="sku">
+                  <input name="price" value="{{$v.Price.Display}}" placeholder="9.00" aria-label="price">
+                  <input name="image" value="{{$v.Image}}" placeholder="image URL" aria-label="image">
+                  <input name="stock" type="number" min="0" value="{{$v.Stock}}" aria-label="stock">
+                  <button type="submit" class="btn btn--small">save</button>
+                </form>
+              </td>
+              <td class="admin-table__actions">
+                {{if not $single}}
+                  <form method="post" action="/admin/products/{{$.Product.ID}}/variants/{{$v.ID}}/delete"
+                        onsubmit="return confirm('Delete this variant?');">
+                    <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+                  </form>
+                {{else}}
+                  <span class="muted" title="a product needs at least one variant">&mdash;</span>
+                {{end}}
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
     {{else}}
       <p class="muted">no variants.</p>
+    {{end}}
+
+    {{if .Product.HasOptions}}
+      <h4 class="admin-section__subtitle">add a variant</h4>
+      <form class="form" method="post" action="/admin/products/{{.Product.ID}}/variants">
+        {{range $ot := .Product.OptionTypes}}
+          <div class="field">
+            <label for="opt-{{$ot.Name}}">{{$ot.Name}}</label>
+            <select id="opt-{{$ot.Name}}" name="opt_{{$ot.Name}}">
+              {{range $val := $ot.Values}}<option value="{{$val}}">{{$val}}</option>{{end}}
+            </select>
+          </div>
+        {{end}}
+        <div class="field"><label for="nv-sku">sku</label><input id="nv-sku" name="sku"></div>
+        <div class="field"><label for="nv-price">price (major units, e.g. 9.00)</label><input id="nv-price" name="price" required placeholder="9.00"></div>
+        <div class="field"><label for="nv-stock">stock</label><input id="nv-stock" name="stock" type="number" min="0" value="0"></div>
+        <div class="field"><label for="nv-image">image URL</label><input id="nv-image" name="image"></div>
+        <button type="submit" class="btn">add variant</button>
+      </form>
     {{end}}
   </section>
 
