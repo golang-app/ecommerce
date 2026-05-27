@@ -99,6 +99,13 @@ type variantSeed struct {
 	variants    []productcatalog.VariantInput
 }
 
+// Per-colour apron images, shared across that colour's size variants so
+// changing size keeps the image and changing colour swaps it.
+const (
+	natApron  = "https://loremflickr.com/800/800/apron,linen?lock=22"
+	navyApron = "https://loremflickr.com/800/800/apron,navy?lock=222"
+)
+
 // variantSeeds are products with selectable options where each variant has
 // its own price — the mug in two colours and the apron as a Colour×Size
 // matrix.
@@ -113,8 +120,8 @@ var variantSeeds = []variantSeed{
 			{Name: "Color", Values: []string{"Cream", "Charcoal"}},
 		},
 		variants: []productcatalog.VariantInput{
-			{ID: "ceramic-mug-cream", SKU: "MUG-CRM", Options: map[string]string{"Color": "Cream"}, Price: 2400},
-			{ID: "ceramic-mug-charcoal", SKU: "MUG-CHR", Options: map[string]string{"Color": "Charcoal"}, Price: 2600},
+			{ID: "ceramic-mug-cream", SKU: "MUG-CRM", Options: map[string]string{"Color": "Cream"}, Price: 2400, Image: "https://loremflickr.com/800/800/ceramic,mug,cream?lock=11"},
+			{ID: "ceramic-mug-charcoal", SKU: "MUG-CHR", Options: map[string]string{"Color": "Charcoal"}, Price: 2600, Image: "https://loremflickr.com/800/800/ceramic,mug,black?lock=211"},
 		},
 	},
 	{
@@ -128,12 +135,12 @@ var variantSeeds = []variantSeed{
 			{Name: "Size", Values: []string{"S", "M", "L"}},
 		},
 		variants: []productcatalog.VariantInput{
-			{ID: "linen-apron-nat-s", SKU: "APR-NAT-S", Options: map[string]string{"Color": "Natural", "Size": "S"}, Price: 5400},
-			{ID: "linen-apron-nat-m", SKU: "APR-NAT-M", Options: map[string]string{"Color": "Natural", "Size": "M"}, Price: 5800},
-			{ID: "linen-apron-nat-l", SKU: "APR-NAT-L", Options: map[string]string{"Color": "Natural", "Size": "L"}, Price: 6200},
-			{ID: "linen-apron-navy-s", SKU: "APR-NVY-S", Options: map[string]string{"Color": "Navy", "Size": "S"}, Price: 5600},
-			{ID: "linen-apron-navy-m", SKU: "APR-NVY-M", Options: map[string]string{"Color": "Navy", "Size": "M"}, Price: 6000},
-			{ID: "linen-apron-navy-l", SKU: "APR-NVY-L", Options: map[string]string{"Color": "Navy", "Size": "L"}, Price: 6400},
+			{ID: "linen-apron-nat-s", SKU: "APR-NAT-S", Options: map[string]string{"Color": "Natural", "Size": "S"}, Price: 5400, Image: natApron},
+			{ID: "linen-apron-nat-m", SKU: "APR-NAT-M", Options: map[string]string{"Color": "Natural", "Size": "M"}, Price: 5800, Image: natApron},
+			{ID: "linen-apron-nat-l", SKU: "APR-NAT-L", Options: map[string]string{"Color": "Natural", "Size": "L"}, Price: 6200, Image: natApron},
+			{ID: "linen-apron-navy-s", SKU: "APR-NVY-S", Options: map[string]string{"Color": "Navy", "Size": "S"}, Price: 5600, Image: navyApron},
+			{ID: "linen-apron-navy-m", SKU: "APR-NVY-M", Options: map[string]string{"Color": "Navy", "Size": "M"}, Price: 6000, Image: navyApron},
+			{ID: "linen-apron-navy-l", SKU: "APR-NVY-L", Options: map[string]string{"Color": "Navy", "Size": "L"}, Price: 6400, Image: navyApron},
 		},
 	},
 }

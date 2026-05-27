@@ -22,19 +22,21 @@ func (o OptionType) Values() []string { return o.values }
 type Variant struct {
 	id      string
 	sku     string
+	image   string
 	options map[string]string // e.g. {"Color":"Red","Size":"L"}
 	price   Price
 }
 
-func NewVariant(id, sku string, options map[string]string, price Price) Variant {
+func NewVariant(id, sku, image string, options map[string]string, price Price) Variant {
 	if options == nil {
 		options = map[string]string{}
 	}
-	return Variant{id: id, sku: sku, options: options, price: price}
+	return Variant{id: id, sku: sku, image: image, options: options, price: price}
 }
 
 func (v Variant) ID() string                 { return v.id }
 func (v Variant) SKU() string                { return v.sku }
+func (v Variant) Image() string              { return v.image }
 func (v Variant) Options() map[string]string { return v.options }
 func (v Variant) Price() Price               { return v.price }
 func (v Variant) IsZero() bool               { return v.id == "" }

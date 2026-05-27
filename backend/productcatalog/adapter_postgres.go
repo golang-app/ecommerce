@@ -54,9 +54,9 @@ func (db postgres) AddVariant(ctx context.Context, productID string, position in
 		return fmt.Errorf("marshal variant options: %w", err)
 	}
 	_, err = db.db.ExecContext(ctx, `
-		INSERT INTO productcatalog_variant (id, product_id, sku, price_amount, price_currency, position, options)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-	`, v.ID(), productID, v.SKU(), v.Price().Amount(), string(v.Price().Currency()), position, options)
+		INSERT INTO productcatalog_variant (id, product_id, sku, image_url, price_amount, price_currency, position, options)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`, v.ID(), productID, v.SKU(), v.Image(), v.Price().Amount(), string(v.Price().Currency()), position, options)
 	if err != nil {
 		return fmt.Errorf("add variant: %w", err)
 	}
@@ -91,7 +91,7 @@ func (db postgres) optionTypes(ctx context.Context, productID string) ([]OptionT
 
 func (db postgres) variants(ctx context.Context, productID string) ([]Variant, error) {
 	rows, err := db.db.QueryContext(ctx, `
-		SELECT id, sku, price_amount, price_currency, options FROM productcatalog_variant
+		SELECT id, sku, image_url, price_amount, price_currency, options FROM productcatalog_variant
 		WHERE product_id = $1 ORDER BY position
 	`, productID)
 	if err != nil {
@@ -215,10 +215,10 @@ func scanProduct(s rowScanner) (Product, error) {
 }
 
 func scanVariant(s rowScanner) (Variant, error) {
-	var id, sku, currency string
+	var id, sku, image, currency string
 	var amount int64
 	var optionsRaw []byte
-	if err := s.Scan(&id, &sku, &amount, &currency, &optionsRaw); err != nil {
+	if err := s.Scan(&id, &sku, &image, &amount, &currency, &optionsRaw); err != nil {
 		return Variant{}, err
 	}
 	cur, err := NewCurrency(currency)
@@ -233,5 +233,5 @@ func scanVariant(s rowScanner) (Variant, error) {
 	if err := json.Unmarshal(optionsRaw, &options); err != nil {
 		return Variant{}, fmt.Errorf("unmarshal variant options: %w", err)
 	}
-	return NewVariant(id, sku, options, price), nil
+	return NewVariant(id, sku, image, options, price), nil
 }

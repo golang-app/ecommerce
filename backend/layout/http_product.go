@@ -101,8 +101,11 @@ func (handler httpHandler) ProductVariant(w http.ResponseWriter, r *http.Request
 	}
 	variant, _ := product.ResolveVariant(selected)
 
-	ts := template.Must(template.New("").ParseFiles("./layout/tmpl/partials/variant-box.gohtml"))
-	if err := ts.ExecuteTemplate(w, "variant-box", map[string]any{"Variant": variant}); err != nil {
+	ts := template.Must(template.New("").ParseGlob("./layout/tmpl/partials/*.gohtml"))
+	if err := ts.ExecuteTemplate(w, "variant-response", map[string]any{
+		"Variant":     variant,
+		"ProductName": product.Name(),
+	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
