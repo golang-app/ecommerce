@@ -8,6 +8,8 @@ import (
 
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
 )
 
 // CartReader returns the current cart for a session. It deliberately mirrors
@@ -17,9 +19,11 @@ type CartReader interface {
 	Get(ctx context.Context, sessID string) (*cartDomain.Cart, error)
 }
 
-// CartClearer empties the cart for a session after a successful order.
-type CartClearer interface {
-	Clear(ctx context.Context, sessID string) error
+// EventPublisher publishes integration events for other bounded contexts.
+// Checkout uses it instead of calling other contexts directly — e.g. it
+// announces that an order was paid rather than reaching into the cart.
+type EventPublisher interface {
+	Publish(ctx context.Context, e eventbus.Event)
 }
 
 type OrderStorage interface {
@@ -52,28 +56,28 @@ type IDGenerator func() string
 
 type CheckoutService struct {
 	cart    CartReader
-	cartClr CartClearer
 	storage OrderStorage
 	payment PaymentProcessor
 	stock   StockReserver
+	events  EventPublisher
 	newID   IDGenerator
 	now     func() time.Time
 }
 
 func NewCheckoutService(
 	cart CartReader,
-	cartClr CartClearer,
 	storage OrderStorage,
 	payment PaymentProcessor,
 	stock StockReserver,
+	events EventPublisher,
 	newID IDGenerator,
 ) CheckoutService {
 	return CheckoutService{
 		cart:    cart,
-		cartClr: cartClr,
 		storage: storage,
 		payment: payment,
 		stock:   stock,
+		events:  events,
 		newID:   newID,
 		now:     func() time.Time { return time.Now().UTC() },
 	}
@@ -143,9 +147,14 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		return domain.Order{}, fmt.Errorf("save order: %w", err)
 	}
 
-	// Cart clear failure is non-fatal — the order is already placed and the
-	// customer should see the confirmation page.
-	_ = s.cartClr.Clear(ctx, sessID)
+	// Announce the paid order. Subscribers (e.g. the cart context emptying the
+	// basket) react best-effort; their failures never block the confirmation.
+	s.events.Publish(ctx, integration.OrderPaid{
+		OrderID:    order.ID(),
+		SessionID:  sessID,
+		CustomerID: customerID,
+		At:         s.now(),
+	})
 
 	return *order, nil
 }
