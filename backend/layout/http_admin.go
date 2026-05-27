@@ -56,11 +56,16 @@ func (handler httpHandler) AdminDashboard(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		categories = nil
 	}
+	orders, err := handler.checkoutQry.ListAll(r.Context())
+	if err != nil {
+		orders = nil
+	}
 
 	handler.renderTemplate(w, r, "admin/dashboard", map[string]any{
 		"Active":        "dashboard",
 		"Email":         email,
 		"ProductCount":  len(products),
 		"CategoryCount": len(categories),
+		"OrderCount":    len(orders),
 	})
 }

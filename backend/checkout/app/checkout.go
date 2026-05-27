@@ -174,7 +174,25 @@ func (s CheckoutService) Cancel(ctx context.Context, orderID, customerID string)
 		return domain.ErrOrderNotFound
 	}
 
-	if err := order.Cancel("cancelled by customer", s.now()); err != nil {
+	return s.cancel(ctx, order, "cancelled by customer")
+}
+
+// AdminCancel cancels any paid order on behalf of an administrator, without an
+// ownership check. It rehydrates the aggregate, applies Cancel (returning
+// ErrOrderNotCancellable for non-paid orders), persists the OrderCancelled
+// event, and returns the reserved stock to the catalogue.
+func (s CheckoutService) AdminCancel(ctx context.Context, orderID string) error {
+	order, err := s.storage.Load(ctx, orderID)
+	if err != nil {
+		return err
+	}
+	return s.cancel(ctx, order, "cancelled by admin")
+}
+
+// cancel applies the Cancel command, persists it, and releases reserved stock
+// (best-effort). Shared by the customer and admin cancellation flows.
+func (s CheckoutService) cancel(ctx context.Context, order *domain.Order, reason string) error {
+	if err := order.Cancel(reason, s.now()); err != nil {
 		return err
 	}
 	if err := s.storage.Save(ctx, order); err != nil {

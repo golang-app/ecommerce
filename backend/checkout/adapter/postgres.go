@@ -152,7 +152,43 @@ func (p Postgres) ListByCustomer(ctx context.Context, customerID string) ([]quer
 		if err := rows.Scan(&id, &status, &placedAt, &total, &currency, &itemCount); err != nil {
 			return nil, fmt.Errorf("scan order: %w", err)
 		}
-		summaries = append(summaries, query.NewOrderSummary(id, domain.Status(status), placedAt, itemCount, total, currency))
+		summaries = append(summaries, query.NewOrderSummary(customerID, id, domain.Status(status), placedAt, itemCount, total, currency))
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return summaries, nil
+}
+
+// ListAll returns every order newest-first as list summaries, regardless of
+// customer (including anonymous orders with a NULL customer_id). It powers the
+// admin order list and uses the same grouped query as ListByCustomer without
+// the customer filter.
+func (p Postgres) ListAll(ctx context.Context) ([]query.OrderSummary, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT o.id, o.customer_id, o.status, o.placed_at, o.total_amount, o.total_currency,
+		       COUNT(i.id) AS item_count
+		FROM checkout_order o
+		LEFT JOIN checkout_order_item i ON i.order_id = o.id
+		GROUP BY o.id, o.customer_id, o.status, o.placed_at, o.total_amount, o.total_currency
+		ORDER BY o.placed_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query orders: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var summaries []query.OrderSummary
+	for rows.Next() {
+		var id, status, currency string
+		var customerID sql.NullString
+		var placedAt time.Time
+		var total int64
+		var itemCount int
+		if err := rows.Scan(&id, &customerID, &status, &placedAt, &total, &currency, &itemCount); err != nil {
+			return nil, fmt.Errorf("scan order: %w", err)
+		}
+		summaries = append(summaries, query.NewOrderSummary(customerID.String, id, domain.Status(status), placedAt, itemCount, total, currency))
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows: %w", err)

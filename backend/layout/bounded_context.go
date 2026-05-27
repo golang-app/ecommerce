@@ -67,6 +67,7 @@ type shippingService interface {
 type checkoutCommands interface {
 	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod) (checkoutDomain.Order, error)
 	Cancel(ctx context.Context, orderID, customerID string) error
+	AdminCancel(ctx context.Context, orderID string) error
 }
 
 // checkoutQueries is the read side of the checkout context (CQRS); it returns
@@ -74,6 +75,7 @@ type checkoutCommands interface {
 type checkoutQueries interface {
 	Find(ctx context.Context, id string) (checkoutQuery.OrderView, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]checkoutQuery.OrderSummary, error)
+	ListAll(ctx context.Context) ([]checkoutQuery.OrderSummary, error)
 }
 
 func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService) application.BoundedContext {

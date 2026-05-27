@@ -1,0 +1,31 @@
+{{define "main"}}
+  <h1 class="page-title">admin</h1>
+  <div class="admin">
+    <aside class="admin__side">{{template "admin-nav" .}}</aside>
+    <div class="admin__content">
+      <h2 class="account-card__title">orders</h2>
+
+      {{if .Orders}}
+        <table class="admin-table">
+          <thead>
+            <tr><th>order</th><th>customer</th><th>status</th><th>placed</th><th>items</th><th>total</th></tr>
+          </thead>
+          <tbody>
+            {{range $o := .Orders}}
+              <tr>
+                <td><a href="/admin/orders/{{$o.ID}}"><code>{{$o.ID}}</code></a></td>
+                <td>{{if $o.CustomerID}}{{$o.CustomerID}}{{else}}<span class="muted">guest</span>{{end}}</td>
+                <td><span class="order-status order-status--{{$o.Status}}">{{$o.Status}}</span></td>
+                <td>{{$o.PlacedAt.Format "Jan 2, 2006 15:04 MST"}}</td>
+                <td>{{$o.ItemCount}}</td>
+                <td>{{$o.TotalDisplay}} {{$o.TotalCurrency}}</td>
+              </tr>
+            {{end}}
+          </tbody>
+        </table>
+      {{else}}
+        <p class="muted">no orders yet.</p>
+      {{end}}
+    </div>
+  </div>
+{{end}}

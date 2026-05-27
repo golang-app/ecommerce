@@ -140,6 +140,10 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/attributes/{id}/edit", observability.HTTPWrap(m.handler.AdminEditAttributeForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/attributes/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteAttribute, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/attributes/{id}", observability.HTTPWrap(m.handler.AdminUpdateAttribute, m.logger)).Methods("POST")
+
+	r.HandleFunc("/admin/orders", observability.HTTPWrap(m.handler.AdminOrders, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/orders/{orderID}/cancel", observability.HTTPWrap(m.handler.AdminCancelOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}", observability.HTTPWrap(m.handler.AdminOrderDetail, m.logger)).Methods("GET")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
