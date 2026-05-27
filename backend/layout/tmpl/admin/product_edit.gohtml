@@ -15,6 +15,47 @@
   </section>
 
   <section class="admin-section">
+    <h3 class="admin-section__title">option types</h3>
+    {{if .Product.OptionTypes}}
+      <table class="admin-table">
+        <thead><tr><th>name</th><th>values (comma-separated)</th><th></th></tr></thead>
+        <tbody>
+          {{range $ot := .Product.OptionTypes}}
+            <tr>
+              <td colspan="2">
+                <form class="form form--inline" method="post" action="/admin/products/{{$.Product.ID}}/options/update">
+                  <input type="hidden" name="current_name" value="{{$ot.Name}}">
+                  <input name="new_name" value="{{$ot.Name}}" placeholder="name" aria-label="name" required>
+                  <input name="values" value="{{join ", " $ot.Values}}" placeholder="Red, Blue" aria-label="values" required>
+                  <button type="submit" class="btn btn--small">save</button>
+                </form>
+              </td>
+              <td class="admin-table__actions">
+                <form method="post" action="/admin/products/{{$.Product.ID}}/options/delete"
+                      onsubmit="return confirm('Delete this option type? It will be removed from every variant.');">
+                  <input type="hidden" name="name" value="{{$ot.Name}}">
+                  <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    {{else}}
+      <p class="muted">no option types.</p>
+    {{end}}
+
+    <h4 class="admin-section__subtitle">add an option type</h4>
+    <form class="form" method="post" action="/admin/products/{{.Product.ID}}/options">
+      <div class="field"><label for="ot-name">name</label><input id="ot-name" name="name" required placeholder="Color"></div>
+      <div class="field"><label for="ot-values">values (comma-separated)</label><input id="ot-values" name="values" required placeholder="Red, Blue"></div>
+      <div class="field"><label for="ot-default">default value</label><input id="ot-default" name="default" required placeholder="Red"></div>
+      <button type="submit" class="btn">add option type</button>
+      <p class="form__aside muted">the default value is applied to every existing variant (and must be one of the values above) so they stay resolvable.</p>
+    </form>
+  </section>
+
+  <section class="admin-section">
     <h3 class="admin-section__title">variants</h3>
     {{if .Product.Variants}}
       {{$ots := .Product.OptionTypes}}

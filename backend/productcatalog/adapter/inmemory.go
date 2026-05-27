@@ -40,6 +40,72 @@ func (im *inMemory) AddOptionType(ctx context.Context, productID string, positio
 	return nil
 }
 
+// AddProductOptionType appends a new option type and seeds the chosen default
+// value onto every existing variant's options map (keyed by name), mirroring
+// the postgres transactional cascade.
+func (im *inMemory) AddProductOptionType(ctx context.Context, productID, optionTypeID, name string, position int, values []string, variantDefault string) error {
+	im.optionTypes[productID] = append(im.optionTypes[productID], domain.NewOptionType(name, values))
+	for i, v := range im.variants[productID] {
+		opts := cloneOptions(v.Options())
+		opts[name] = variantDefault
+		im.variants[productID][i] = domain.NewVariant(v.ID(), v.SKU(), v.Image(), opts, v.Price(), v.Stock())
+	}
+	return nil
+}
+
+// UpdateProductOptionType renames/re-values an option type and rekeys the
+// option in every variant's options map when the name changes.
+func (im *inMemory) UpdateProductOptionType(ctx context.Context, productID, currentName, newName string, values []string) error {
+	ots := im.optionTypes[productID]
+	for i, ot := range ots {
+		if ot.Name() == currentName {
+			ots[i] = domain.NewOptionType(newName, values)
+			break
+		}
+	}
+	if newName != currentName {
+		for i, v := range im.variants[productID] {
+			opts := cloneOptions(v.Options())
+			if val, ok := opts[currentName]; ok {
+				delete(opts, currentName)
+				opts[newName] = val
+				im.variants[productID][i] = domain.NewVariant(v.ID(), v.SKU(), v.Image(), opts, v.Price(), v.Stock())
+			}
+		}
+	}
+	return nil
+}
+
+// DeleteProductOptionType removes an option type and strips its key from every
+// variant's options map.
+func (im *inMemory) DeleteProductOptionType(ctx context.Context, productID, name string) error {
+	ots := im.optionTypes[productID]
+	for i, ot := range ots {
+		if ot.Name() == name {
+			im.optionTypes[productID] = append(ots[:i], ots[i+1:]...)
+			break
+		}
+	}
+	for i, v := range im.variants[productID] {
+		if _, ok := v.Options()[name]; ok {
+			opts := cloneOptions(v.Options())
+			delete(opts, name)
+			im.variants[productID][i] = domain.NewVariant(v.ID(), v.SKU(), v.Image(), opts, v.Price(), v.Stock())
+		}
+	}
+	return nil
+}
+
+// cloneOptions returns a shallow copy of a variant's options map so mutations
+// don't alias the original.
+func cloneOptions(in map[string]string) map[string]string {
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
 func (im *inMemory) AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error {
 	im.variants[productID] = append(im.variants[productID], v)
 	return nil

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/gorilla/mux"
@@ -144,6 +145,9 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/products/{id}/variants/{variantID}/delete", observability.HTTPWrap(m.handler.AdminDeleteVariant, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/variants/{variantID}", observability.HTTPWrap(m.handler.AdminUpdateVariant, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/variants", observability.HTTPWrap(m.handler.AdminAddVariant, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/options/update", observability.HTTPWrap(m.handler.AdminUpdateOptionType, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/options/delete", observability.HTTPWrap(m.handler.AdminDeleteOptionType, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/options", observability.HTTPWrap(m.handler.AdminAddOptionType, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/edit", observability.HTTPWrap(m.handler.AdminEditProductForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/products/{id}/stock", observability.HTTPWrap(m.handler.AdminUpdateProductStock, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/categories", observability.HTTPWrap(m.handler.AdminUpdateProductCategories, m.logger)).Methods("POST")
@@ -236,7 +240,8 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
 		},
-		"add": func(a, b int) int { return a + b },
+		"add":  func(a, b int) int { return a + b },
+		"join": func(sep string, items []string) string { return strings.Join(items, sep) },
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
