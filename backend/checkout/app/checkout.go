@@ -26,6 +26,8 @@ type OrderStorage interface {
 	// Save persists the aggregate's pending events and projects them to the
 	// read model.
 	Save(ctx context.Context, order *domain.Order) error
+	// Load rebuilds the order aggregate from its event history (write side).
+	Load(ctx context.Context, id string) (*domain.Order, error)
 	Find(ctx context.Context, id string) (domain.Order, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]domain.Order, error)
 }
@@ -148,6 +150,38 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	_ = s.cartClr.Clear(ctx, sessID)
 
 	return *order, nil
+}
+
+// Cancel cancels a customer's paid order: it rehydrates the aggregate from its
+// events, applies the Cancel command, persists the resulting OrderCancelled
+// event, and returns the reserved stock to the catalogue.
+//
+// Only the order's owner may cancel it; for any other customer the order is
+// reported as not found so its existence isn't leaked.
+func (s CheckoutService) Cancel(ctx context.Context, orderID, customerID string) error {
+	order, err := s.storage.Load(ctx, orderID)
+	if err != nil {
+		return err
+	}
+	if customerID == "" || order.CustomerID() != customerID {
+		return domain.ErrOrderNotFound
+	}
+
+	if err := order.Cancel("cancelled by customer", s.now()); err != nil {
+		return err
+	}
+	if err := s.storage.Save(ctx, order); err != nil {
+		return fmt.Errorf("save cancellation: %w", err)
+	}
+
+	// Return the reserved stock to the catalogue (best-effort).
+	quantities := map[string]int{}
+	for _, ln := range order.Items() {
+		quantities[ln.ProductID()] += ln.Quantity()
+	}
+	_ = s.stock.Release(ctx, quantities)
+
+	return nil
 }
 
 func (s CheckoutService) Find(ctx context.Context, id string) (domain.Order, error) {

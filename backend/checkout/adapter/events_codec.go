@@ -63,6 +63,12 @@ type paymentFailedDTO struct {
 	At      time.Time `json:"at"`
 }
 
+type orderCancelledDTO struct {
+	OrderID string    `json:"order_id"`
+	Reason  string    `json:"reason"`
+	At      time.Time `json:"at"`
+}
+
 // marshalEvent returns the stored type name and JSON payload for a domain event.
 func marshalEvent(e domain.Event) (string, []byte, error) {
 	var payload any
@@ -92,6 +98,8 @@ func marshalEvent(e domain.Event) (string, []byte, error) {
 		payload = paymentSucceededDTO{OrderID: ev.OrderID, At: ev.At}
 	case domain.PaymentFailed:
 		payload = paymentFailedDTO{OrderID: ev.OrderID, Reason: ev.Reason, At: ev.At}
+	case domain.OrderCancelled:
+		payload = orderCancelledDTO{OrderID: ev.OrderID, Reason: ev.Reason, At: ev.At}
 	default:
 		return "", nil, fmt.Errorf("no codec for event %s", e.EventType())
 	}
@@ -137,6 +145,12 @@ func unmarshalEvent(eventType string, payload []byte) (domain.Event, error) {
 			return nil, fmt.Errorf("unmarshal PaymentFailed: %w", err)
 		}
 		return domain.PaymentFailed{OrderID: dto.OrderID, Reason: dto.Reason, At: dto.At}, nil
+	case "OrderCancelled":
+		var dto orderCancelledDTO
+		if err := json.Unmarshal(payload, &dto); err != nil {
+			return nil, fmt.Errorf("unmarshal OrderCancelled: %w", err)
+		}
+		return domain.OrderCancelled{OrderID: dto.OrderID, Reason: dto.Reason, At: dto.At}, nil
 	default:
 		return nil, fmt.Errorf("unknown event type %q", eventType)
 	}

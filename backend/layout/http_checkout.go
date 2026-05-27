@@ -172,7 +172,36 @@ func (handler httpHandler) Order(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The owner may cancel a paid order.
+	customerID := handler.currentCustomerID(r)
+	canCancel := order.Status() == checkoutDomain.StatusPaid &&
+		customerID != "" && order.CustomerID() == customerID
+
 	handler.renderTemplate(w, r, "order/show", map[string]any{
-		"Order": order,
+		"Order":     order,
+		"CanCancel": canCancel,
 	})
+}
+
+func (handler httpHandler) CancelOrder(w http.ResponseWriter, r *http.Request) {
+	customerID, ok := handler.requireLogin(w, r)
+	if !ok {
+		return
+	}
+	orderID := mux.Vars(r)["orderID"]
+
+	err := handler.checkoutSrv.Cancel(r.Context(), orderID, customerID)
+	switch {
+	case errors.Is(err, checkoutDomain.ErrOrderNotFound):
+		http.NotFound(w, r)
+		return
+	case errors.Is(err, checkoutDomain.ErrOrderNotCancellable):
+		handler.flash(w, r, "This order can no longer be cancelled.", "error")
+	case err != nil:
+		https.InternalError(w, "internal-error", err.Error())
+		return
+	default:
+		handler.flash(w, r, "Your order has been cancelled.", "info")
+	}
+	http.Redirect(w, r, "/order/"+orderID, http.StatusSeeOther)
 }

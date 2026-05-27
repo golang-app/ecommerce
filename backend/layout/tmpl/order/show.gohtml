@@ -3,10 +3,14 @@
 
   <article class="order">
     <header class="order__header">
-      <h1 class="order__title">thank you.</h1>
+      {{if eq .Order.Status "cancelled"}}
+        <h1 class="order__title">order cancelled.</h1>
+      {{else}}
+        <h1 class="order__title">thank you.</h1>
+      {{end}}
       <p class="order__subtitle muted">
         order <span class="order__id">{{.Order.ID}}</span> &middot;
-        {{.Order.Status}} &middot;
+        <span class="order-status order-status--{{.Order.Status}}">{{.Order.Status}}</span> &middot;
         placed {{.Order.PlacedAt.Format "Jan 2, 2006 15:04 MST"}}
       </p>
     </header>
@@ -75,6 +79,14 @@
 
     <p class="order__hint muted">a confirmation email would normally be on its way. this is a demo, so nothing was actually charged or sent.</p>
 
-    <a href="/" class="btn btn--ghost">continue shopping</a>
+    <div class="order__actions">
+      <a href="/" class="btn btn--ghost">continue shopping</a>
+      {{if .CanCancel}}
+        <form method="post" action="/order/{{.Order.ID}}/cancel"
+              onsubmit="return confirm('Cancel this order? Reserved stock will be released.');">
+          <button type="submit" class="linkbtn linkbtn--danger">cancel order</button>
+        </form>
+      {{end}}
+    </div>
   </article>
 {{end}}
