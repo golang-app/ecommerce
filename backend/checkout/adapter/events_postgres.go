@@ -3,7 +3,6 @@ package adapter
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
@@ -17,14 +16,14 @@ func appendEventsTx(ctx context.Context, tx *sql.Tx, aggregateID string, expecte
 	seq := expectedVersion
 	for _, e := range events {
 		seq++
-		payload, err := json.Marshal(e)
+		eventType, payload, err := marshalEvent(e)
 		if err != nil {
-			return fmt.Errorf("marshal %s: %w", e.EventType(), err)
+			return err
 		}
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO checkout_events (aggregate_id, sequence, event_type, payload, occurred_at)
 			VALUES ($1, $2, $3, $4, $5)
-		`, aggregateID, seq, e.EventType(), payload, e.OccurredAt())
+		`, aggregateID, seq, eventType, payload, e.OccurredAt())
 		if err != nil {
 			return fmt.Errorf("append %s#%d: %w", e.EventType(), seq, err)
 		}
@@ -52,7 +51,7 @@ func (p Postgres) LoadEvents(ctx context.Context, aggregateID string) ([]domain.
 		if err := rows.Scan(&typ, &payload); err != nil {
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
-		e, err := domain.UnmarshalEvent(typ, payload)
+		e, err := unmarshalEvent(typ, payload)
 		if err != nil {
 			return nil, err
 		}
