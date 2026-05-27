@@ -42,9 +42,16 @@ type catalogService interface {
 	DeleteCategory(ctx context.Context, id string) error
 
 	AttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)
+	AllAttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)
 	CreateAttributeType(ctx context.Context, name, unit string, kind pcdomain.AttributeKind, filterable bool) error
 	UpdateAttributeType(ctx context.Context, id, name, unit string, kind pcdomain.AttributeKind, filterable bool, position int) error
 	DeleteAttributeType(ctx context.Context, id string) error
+
+	AttributeSets(ctx context.Context) ([]pcdomain.AttributeSet, error)
+	FindAttributeSet(ctx context.Context, id string) (pcdomain.AttributeSet, error)
+	CreateAttributeSet(ctx context.Context, name string, attributeTypeIDs []string) error
+	UpdateAttributeSet(ctx context.Context, id, name string, attributeTypeIDs []string) error
+	DeleteAttributeSet(ctx context.Context, id string) error
 }
 
 type cartService interface {

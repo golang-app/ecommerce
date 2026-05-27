@@ -45,6 +45,13 @@ type ProductStorage interface {
 	CreateAttributeType(ctx context.Context, t domain.AttributeType) error
 	UpdateAttributeType(ctx context.Context, t domain.AttributeType) error
 	DeleteAttributeType(ctx context.Context, id string) error
+
+	AllAttributeSets(ctx context.Context) ([]domain.AttributeSet, error)
+	FindAttributeSet(ctx context.Context, id string) (domain.AttributeSet, error)
+	CreateAttributeSet(ctx context.Context, s domain.AttributeSet) error
+	UpdateAttributeSet(ctx context.Context, s domain.AttributeSet) error
+	DeleteAttributeSet(ctx context.Context, id string) error
+	SetAttributeSetItems(ctx context.Context, setID string, attributeTypeIDs []string) error
 }
 
 func NewProductService(s ProductStorage) ProductService {
@@ -136,6 +143,13 @@ func (ps ProductService) AttributeTypes(ctx context.Context) ([]domain.Attribute
 	return ps.storage.AllAttributeTypes(ctx)
 }
 
+// AllAttributeTypes returns every attribute type in display order. It is an
+// alias of AttributeTypes exposed for callers (e.g. the attribute-set editor)
+// that need the full list of types to choose from.
+func (ps ProductService) AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
+	return ps.storage.AllAttributeTypes(ctx)
+}
+
 // CreateAttributeType validates and persists a new attribute type. The id is a
 // slug derived from the name and the position is appended after existing types.
 func (ps ProductService) CreateAttributeType(ctx context.Context, name, unit string, kind domain.AttributeKind, filterable bool) error {
@@ -163,6 +177,92 @@ func (ps ProductService) UpdateAttributeType(ctx context.Context, id, name, unit
 // DeleteAttributeType removes an attribute type (its product links cascade).
 func (ps ProductService) DeleteAttributeType(ctx context.Context, id string) error {
 	return ps.storage.DeleteAttributeType(ctx, id)
+}
+
+// AttributeSets returns every attribute set in display order, each hydrated
+// with its ordered members.
+func (ps ProductService) AttributeSets(ctx context.Context) ([]domain.AttributeSet, error) {
+	return ps.storage.AllAttributeSets(ctx)
+}
+
+// FindAttributeSet returns a single attribute set (with its members) by id.
+func (ps ProductService) FindAttributeSet(ctx context.Context, id string) (domain.AttributeSet, error) {
+	return ps.storage.FindAttributeSet(ctx, id)
+}
+
+// CreateAttributeSet validates and persists a new attribute set. The id is a
+// slug derived from the name, the position is appended after existing sets, and
+// the given attribute type ids become its ordered members (order = slice
+// order). Unknown attribute type ids are rejected.
+func (ps ProductService) CreateAttributeSet(ctx context.Context, name string, attributeTypeIDs []string) error {
+	existing, err := ps.storage.AllAttributeSets(ctx)
+	if err != nil {
+		return err
+	}
+	id := slugify(name)
+	if id == "" {
+		return fmt.Errorf("%w: name must contain letters or digits", domain.ErrInvalidAttributeSet)
+	}
+	ids, err := ps.validateAttributeTypeIDs(ctx, attributeTypeIDs)
+	if err != nil {
+		return err
+	}
+	set, err := domain.NewAttributeSet(id, name, len(existing)+1)
+	if err != nil {
+		return err
+	}
+	if err = ps.storage.CreateAttributeSet(ctx, set); err != nil {
+		return err
+	}
+	return ps.storage.SetAttributeSetItems(ctx, id, ids)
+}
+
+// UpdateAttributeSet renames an existing set and replaces its members with the
+// given ordered attribute type ids (order = slice order). Unknown attribute
+// type ids are rejected.
+func (ps ProductService) UpdateAttributeSet(ctx context.Context, id, name string, attributeTypeIDs []string) error {
+	current, err := ps.storage.FindAttributeSet(ctx, id)
+	if err != nil {
+		return err
+	}
+	ids, err := ps.validateAttributeTypeIDs(ctx, attributeTypeIDs)
+	if err != nil {
+		return err
+	}
+	set, err := domain.NewAttributeSet(id, name, current.Position())
+	if err != nil {
+		return err
+	}
+	if err = ps.storage.UpdateAttributeSet(ctx, set); err != nil {
+		return err
+	}
+	return ps.storage.SetAttributeSetItems(ctx, id, ids)
+}
+
+// DeleteAttributeSet removes an attribute set (its member items cascade).
+func (ps ProductService) DeleteAttributeSet(ctx context.Context, id string) error {
+	return ps.storage.DeleteAttributeSet(ctx, id)
+}
+
+// validateAttributeTypeIDs checks every given id exists among the known
+// attribute types (rejecting unknown ids) while preserving the input order.
+func (ps ProductService) validateAttributeTypeIDs(ctx context.Context, attributeTypeIDs []string) ([]string, error) {
+	types, err := ps.storage.AllAttributeTypes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	known := make(map[string]bool, len(types))
+	for _, t := range types {
+		known[t.ID()] = true
+	}
+	out := make([]string, 0, len(attributeTypeIDs))
+	for _, id := range attributeTypeIDs {
+		if !known[id] {
+			return nil, fmt.Errorf("unknown attribute type %q", id)
+		}
+		out = append(out, id)
+	}
+	return out, nil
 }
 
 // slugify turns a display name into a url-safe id: lowercase, spaces to

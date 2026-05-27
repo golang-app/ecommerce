@@ -41,6 +41,12 @@ type productStorage interface {
 	CreateAttributeType(ctx context.Context, t domain.AttributeType) error
 	UpdateAttributeType(ctx context.Context, t domain.AttributeType) error
 	DeleteAttributeType(ctx context.Context, id string) error
+	AllAttributeSets(ctx context.Context) ([]domain.AttributeSet, error)
+	FindAttributeSet(ctx context.Context, id string) (domain.AttributeSet, error)
+	CreateAttributeSet(ctx context.Context, s domain.AttributeSet) error
+	UpdateAttributeSet(ctx context.Context, s domain.AttributeSet) error
+	DeleteAttributeSet(ctx context.Context, id string) error
+	SetAttributeSetItems(ctx context.Context, setID string, attributeTypeIDs []string) error
 }
 
 var storage productStorage

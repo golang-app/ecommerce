@@ -17,16 +17,28 @@ type inMemory struct {
 	categories map[string]domain.Category
 	prodAttrs  map[string][]domain.AttributeValue
 	prodCats   map[string][]domain.Category
+	// attribute sets: the set row plus its ordered member attribute type ids.
+	attrSets     map[string]attrSetRow
+	attrSetItems map[string][]string
+}
+
+// attrSetRow holds an attribute set's own fields (members are tracked
+// separately in attrSetItems, mirroring the postgres join table).
+type attrSetRow struct {
+	name     string
+	position int
 }
 
 func NewInMemory() *inMemory {
 	return &inMemory{
-		optionTypes: map[string][]domain.OptionType{},
-		variants:    map[string][]domain.Variant{},
-		attrTypes:   map[string]domain.AttributeType{},
-		categories:  map[string]domain.Category{},
-		prodAttrs:   map[string][]domain.AttributeValue{},
-		prodCats:    map[string][]domain.Category{},
+		optionTypes:  map[string][]domain.OptionType{},
+		variants:     map[string][]domain.Variant{},
+		attrTypes:    map[string]domain.AttributeType{},
+		categories:   map[string]domain.Category{},
+		prodAttrs:    map[string][]domain.AttributeValue{},
+		prodCats:     map[string][]domain.Category{},
+		attrSets:     map[string]attrSetRow{},
+		attrSetItems: map[string][]string{},
 	}
 }
 
@@ -369,6 +381,65 @@ func (im *inMemory) UpdateAttributeType(ctx context.Context, t domain.AttributeT
 
 func (im *inMemory) DeleteAttributeType(ctx context.Context, id string) error {
 	delete(im.attrTypes, id)
+	return nil
+}
+
+// attributeSetMembers resolves a set's member ids to their attribute types in
+// the stored order, skipping any that no longer exist.
+func (im *inMemory) attributeSetMembers(setID string) []domain.AttributeType {
+	ids := im.attrSetItems[setID]
+	out := make([]domain.AttributeType, 0, len(ids))
+	for _, id := range ids {
+		if t, ok := im.attrTypes[id]; ok {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func (im *inMemory) AllAttributeSets(ctx context.Context) ([]domain.AttributeSet, error) {
+	out := make([]domain.AttributeSet, 0, len(im.attrSets))
+	for id, row := range im.attrSets {
+		out = append(out, domain.RebuildAttributeSet(id, row.name, row.position, im.attributeSetMembers(id)))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Position() != out[j].Position() {
+			return out[i].Position() < out[j].Position()
+		}
+		return out[i].Name() < out[j].Name()
+	})
+	return out, nil
+}
+
+func (im *inMemory) FindAttributeSet(ctx context.Context, id string) (domain.AttributeSet, error) {
+	row, ok := im.attrSets[id]
+	if !ok {
+		return domain.AttributeSet{}, domain.ErrAttributeSetNotFound
+	}
+	return domain.RebuildAttributeSet(id, row.name, row.position, im.attributeSetMembers(id)), nil
+}
+
+func (im *inMemory) CreateAttributeSet(ctx context.Context, s domain.AttributeSet) error {
+	im.attrSets[s.ID()] = attrSetRow{name: s.Name(), position: s.Position()}
+	return nil
+}
+
+func (im *inMemory) UpdateAttributeSet(ctx context.Context, s domain.AttributeSet) error {
+	im.attrSets[s.ID()] = attrSetRow{name: s.Name(), position: s.Position()}
+	return nil
+}
+
+func (im *inMemory) DeleteAttributeSet(ctx context.Context, id string) error {
+	delete(im.attrSets, id)
+	delete(im.attrSetItems, id)
+	return nil
+}
+
+// SetAttributeSetItems replaces a set's member ids, preserving the given order.
+func (im *inMemory) SetAttributeSetItems(ctx context.Context, setID string, attributeTypeIDs []string) error {
+	items := make([]string, len(attributeTypeIDs))
+	copy(items, attributeTypeIDs)
+	im.attrSetItems[setID] = items
 	return nil
 }
 
