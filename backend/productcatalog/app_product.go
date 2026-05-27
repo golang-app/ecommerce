@@ -16,6 +16,7 @@ type ProductStorage interface {
 	FindVariant(ctx context.Context, variantID string) (Product, Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot OptionType) error
 	AddVariant(ctx context.Context, productID string, position int, v Variant) error
+	ReduceStock(ctx context.Context, variantID string, qty int) error
 }
 
 func NewProductService(s ProductStorage) ProductService {
@@ -34,6 +35,14 @@ func (ps ProductService) Find(ctx context.Context, id string) (Product, error) {
 func (ps ProductService) FindVariant(ctx context.Context, variantID string) (Product, Variant, error) {
 	return ps.storage.FindVariant(ctx, variantID)
 }
+
+// ReduceStock decrements a variant's stock (called when an order is placed).
+func (ps ProductService) ReduceStock(ctx context.Context, variantID string, qty int) error {
+	return ps.storage.ReduceStock(ctx, variantID, qty)
+}
+
+// defaultStock is given to a simple product's auto-created default variant.
+const defaultStock = 100
 
 func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error {
 	pId, err := NewProductId(id)
@@ -62,7 +71,7 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMi
 
 	// A simple product is purchasable through a single default variant
 	// carrying its price (no options) and the product image.
-	defaultVariant := NewVariant("var-"+id, id, thumbnail, nil, priceVO)
+	defaultVariant := NewVariant("var-"+id, id, thumbnail, nil, priceVO, defaultStock)
 	return ps.storage.AddVariant(ctx, id, 0, defaultVariant)
 }
 
@@ -79,6 +88,7 @@ type VariantInput struct {
 	Image   string
 	Options map[string]string
 	Price   int64
+	Stock   int
 }
 
 // AddVariantProduct creates a product with explicit option types and variants
@@ -126,7 +136,7 @@ func (ps ProductService) AddVariantProduct(ctx context.Context, id, name, desc, 
 		if err != nil {
 			return fmt.Errorf("invalid variant price: %w", err)
 		}
-		if err = ps.storage.AddVariant(ctx, id, i, NewVariant(v.ID, v.SKU, v.Image, v.Options, price)); err != nil {
+		if err = ps.storage.AddVariant(ctx, id, i, NewVariant(v.ID, v.SKU, v.Image, v.Options, price, v.Stock)); err != nil {
 			return err
 		}
 	}

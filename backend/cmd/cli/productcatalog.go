@@ -50,8 +50,8 @@ Product with variants (each variant priced independently):
     --variant "Color=Charcoal;2600;MUG-CHR;IMG_URL"
 
 --option grammar:  "<Name>:<v1>,<v2>,..."
---variant grammar: "<opt1>=<val1>,<opt2>=<val2>;<priceMinorUnits>[;<sku>[;<imageURL>]]"
-  (leave the options part empty for a single default variant)`,
+--variant grammar: "<opt1>=<val1>,<opt2>=<val2>;<priceMinorUnits>[;<sku>[;<imageURL>[;<stock>]]]"
+  (leave the options part empty for a single default variant; stock defaults to 100)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
@@ -130,11 +130,19 @@ func parseVariants(flags []string, productID string) ([]productcatalog.VariantIn
 		}
 
 		var sku, image string
+		stock := 100
 		if len(parts) >= 3 {
 			sku = strings.TrimSpace(parts[2])
 		}
 		if len(parts) >= 4 {
 			image = strings.TrimSpace(parts[3])
+		}
+		if len(parts) >= 5 {
+			s, err := strconv.Atoi(strings.TrimSpace(parts[4]))
+			if err != nil {
+				return nil, fmt.Errorf("--variant %q: stock must be an integer: %w", f, err)
+			}
+			stock = s
 		}
 
 		options := map[string]string{}
@@ -152,7 +160,7 @@ func parseVariants(flags []string, productID string) ([]productcatalog.VariantIn
 		if sku != "" {
 			vid = productID + "-" + strings.ToLower(sku)
 		}
-		out = append(out, productcatalog.VariantInput{ID: vid, SKU: sku, Image: image, Options: options, Price: price})
+		out = append(out, productcatalog.VariantInput{ID: vid, SKU: sku, Image: image, Options: options, Price: price, Stock: stock})
 	}
 	return out, nil
 }

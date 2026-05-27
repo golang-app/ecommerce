@@ -7,8 +7,9 @@ import (
 )
 
 var (
-	ErrProductNotFound   = errors.New("product not found")
-	ErrCurrencyMismatch  = errors.New("currency mismatch")
+	ErrProductNotFound  = errors.New("product not found")
+	ErrCurrencyMismatch = errors.New("currency mismatch")
+	ErrOutOfStock       = errors.New("variant is out of stock")
 )
 
 // Currency is an ISO 4217 three-letter currency code.

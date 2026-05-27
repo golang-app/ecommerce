@@ -53,6 +53,22 @@ func (im *inMemory) Find(ctx context.Context, id string) (Product, error) {
 	return Product{}, ErrProductNotFound
 }
 
+func (im *inMemory) ReduceStock(ctx context.Context, variantID string, qty int) error {
+	for pid, vs := range im.variants {
+		for i, v := range vs {
+			if v.ID() == variantID {
+				newStock := v.Stock() - qty
+				if newStock < 0 {
+					newStock = 0
+				}
+				im.variants[pid][i] = NewVariant(v.ID(), v.SKU(), v.Image(), v.Options(), v.Price(), newStock)
+				return nil
+			}
+		}
+	}
+	return ErrProductNotFound
+}
+
 func (im *inMemory) FindVariant(ctx context.Context, variantID string) (Product, Variant, error) {
 	for _, p := range im.products {
 		full := im.hydrate(p)

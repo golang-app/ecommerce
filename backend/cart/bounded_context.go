@@ -49,6 +49,10 @@ func (tpc transformProductCatalog) Find(ctx context.Context, variantID string) (
 		return domain.Product{}, err
 	}
 
+	if !v.InStock() {
+		return domain.Product{}, domain.ErrOutOfStock
+	}
+
 	cur, err := domain.NewCurrency(string(v.Price().Currency()))
 	if err != nil {
 		return domain.Product{}, fmt.Errorf("cart: invalid currency from product catalog: %w", err)

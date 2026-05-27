@@ -25,6 +25,11 @@ func (handler httpHandler) AddToCart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if errors.Is(err, domain.ErrOutOfStock) {
+		http.Error(w, "this item is out of stock", http.StatusConflict)
+		return
+	}
+
 	if err != nil {
 		https.InternalError(w, "internal-error", err.Error())
 		log.Print(err)

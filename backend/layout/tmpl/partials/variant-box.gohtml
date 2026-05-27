@@ -4,12 +4,21 @@
     <p class="product__price muted">that combination isn't available</p>
   {{else}}
     <p class="product__price">{{.Variant.Price.Display}} {{.Variant.Price.Currency}}</p>
-    <button class="btn"
-            hx-post="/cart/{{.Variant.ID}}"
-            hx-swap="none">
-      add to cart
-      <span class="loading htmx-indicator" aria-hidden="true"></span>
-    </button>
+    {{if .Variant.InStock}}
+      {{if .Variant.LowStock}}
+        <p class="stock stock--low">only {{.Variant.Stock}} left</p>
+      {{else}}
+        <p class="stock stock--in">in stock</p>
+      {{end}}
+      <button class="btn"
+              hx-post="/cart/{{.Variant.ID}}"
+              hx-swap="none">
+        add to cart
+        <span class="loading htmx-indicator" aria-hidden="true"></span>
+      </button>
+    {{else}}
+      <p class="stock stock--out">out of stock</p>
+    {{end}}
   {{end}}
 </div>
 {{end}}
