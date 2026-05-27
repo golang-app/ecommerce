@@ -1,6 +1,13 @@
 package productcatalog
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
+
+// ErrInsufficientStock is returned by Reserve when one or more variants don't
+// have enough stock to satisfy the request.
+var ErrInsufficientStock = errors.New("insufficient stock")
 
 // OptionType is a product attribute the customer chooses, e.g. "Color" with
 // values ["Red", "Blue"]. The order of values is the display order.

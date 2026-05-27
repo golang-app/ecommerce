@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 
 	_ "github.com/lib/pq"
 )
@@ -237,13 +238,67 @@ func scanVariant(s rowScanner) (Variant, error) {
 	return NewVariant(id, sku, image, options, price, stock), nil
 }
 
-// ReduceStock decrements a variant's stock by qty, clamped at zero.
-func (db postgres) ReduceStock(ctx context.Context, variantID string, qty int) error {
-	_, err := db.db.ExecContext(ctx, `
-		UPDATE productcatalog_variant SET stock = GREATEST(0, stock - $2) WHERE id = $1
-	`, variantID, qty)
+// Reserve atomically decrements stock for every variant in quantities. It is
+// all-or-nothing: if any variant lacks sufficient stock the whole change is
+// rolled back and ErrInsufficientStock is returned. Variants are locked in a
+// stable (sorted) order to avoid deadlocks between concurrent reservations.
+func (db postgres) Reserve(ctx context.Context, quantities map[string]int) error {
+	if len(quantities) == 0 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(quantities))
+	for id := range quantities {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	tx, err := db.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("reduce stock: %w", err)
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	for _, id := range ids {
+		qty := quantities[id]
+		if qty <= 0 {
+			continue
+		}
+		var res sql.Result
+		res, err = tx.ExecContext(ctx, `
+			UPDATE productcatalog_variant SET stock = stock - $2
+			WHERE id = $1 AND stock >= $2
+		`, id, qty)
+		if err != nil {
+			return fmt.Errorf("reserve %s: %w", id, err)
+		}
+		n, _ := res.RowsAffected()
+		if n != 1 {
+			err = ErrInsufficientStock
+			return err
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit reservation: %w", err)
+	}
+	return nil
+}
+
+// Release returns previously-reserved stock (best-effort, e.g. when a payment
+// fails after the reservation succeeded).
+func (db postgres) Release(ctx context.Context, quantities map[string]int) error {
+	for id, qty := range quantities {
+		if qty <= 0 {
+			continue
+		}
+		if _, err := db.db.ExecContext(ctx, `UPDATE productcatalog_variant SET stock = stock + $2 WHERE id = $1`, id, qty); err != nil {
+			return fmt.Errorf("release %s: %w", id, err)
+		}
 	}
 	return nil
 }

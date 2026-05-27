@@ -23,13 +23,14 @@ type CartClearer interface {
 	Clear(ctx context.Context, sessID string) error
 }
 
-// StockReducer is implemented by the product catalogue; checkout calls it to
-// decrement variant stock once an order is paid.
-type StockReducer interface {
-	ReduceStock(ctx context.Context, variantID string, qty int) error
+// StockReserver is implemented by the product catalogue; checkout reserves
+// stock atomically before placing an order.
+type StockReserver interface {
+	Reserve(ctx context.Context, quantities map[string]int) error
+	Release(ctx context.Context, quantities map[string]int) error
 }
 
-func New(db *sql.DB, cart CartReader, cartClr CartClearer, stock StockReducer) (application.BoundedContext, app.CheckoutService) {
+func New(db *sql.DB, cart CartReader, cartClr CartClearer, stock StockReserver) (application.BoundedContext, app.CheckoutService) {
 	storage := adapter.NewPostgres(db)
 	payment := adapter.NewFakePayment()
 	srv := app.NewCheckoutService(cart, cartClr, storage, payment, stock, newOrderID)

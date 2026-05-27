@@ -8,6 +8,7 @@ import (
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/gorilla/mux"
 )
 
@@ -120,6 +121,11 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 
 	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber, shipTo, method, payMethod)
 	if errors.Is(err, checkoutDomain.ErrCartEmpty) {
+		http.Redirect(w, r, "/cart", http.StatusSeeOther)
+		return
+	}
+	if errors.Is(err, productcatalog.ErrInsufficientStock) {
+		handler.flash(w, r, "Sorry — an item in your cart just went out of stock. Please review your cart.", "error")
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return
 	}

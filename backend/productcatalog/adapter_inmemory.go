@@ -53,20 +53,42 @@ func (im *inMemory) Find(ctx context.Context, id string) (Product, error) {
 	return Product{}, ErrProductNotFound
 }
 
-func (im *inMemory) ReduceStock(ctx context.Context, variantID string, qty int) error {
+func (im *inMemory) find(variantID string) (string, int, bool) {
 	for pid, vs := range im.variants {
 		for i, v := range vs {
 			if v.ID() == variantID {
-				newStock := v.Stock() - qty
-				if newStock < 0 {
-					newStock = 0
-				}
-				im.variants[pid][i] = NewVariant(v.ID(), v.SKU(), v.Image(), v.Options(), v.Price(), newStock)
-				return nil
+				return pid, i, true
 			}
 		}
 	}
-	return ErrProductNotFound
+	return "", 0, false
+}
+
+// Reserve checks availability for all variants first, then decrements — so an
+// insufficient item leaves everything untouched.
+func (im *inMemory) Reserve(ctx context.Context, quantities map[string]int) error {
+	for id, qty := range quantities {
+		pid, i, ok := im.find(id)
+		if !ok || im.variants[pid][i].Stock() < qty {
+			return ErrInsufficientStock
+		}
+	}
+	for id, qty := range quantities {
+		pid, i, _ := im.find(id)
+		v := im.variants[pid][i]
+		im.variants[pid][i] = NewVariant(v.ID(), v.SKU(), v.Image(), v.Options(), v.Price(), v.Stock()-qty)
+	}
+	return nil
+}
+
+func (im *inMemory) Release(ctx context.Context, quantities map[string]int) error {
+	for id, qty := range quantities {
+		if pid, i, ok := im.find(id); ok {
+			v := im.variants[pid][i]
+			im.variants[pid][i] = NewVariant(v.ID(), v.SKU(), v.Image(), v.Options(), v.Price(), v.Stock()+qty)
+		}
+	}
+	return nil
 }
 
 func (im *inMemory) FindVariant(ctx context.Context, variantID string) (Product, Variant, error) {
