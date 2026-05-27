@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
@@ -154,6 +155,214 @@ const wipeTables = `TRUNCATE TABLE
 	cart_cart
 RESTART IDENTITY CASCADE`
 
+// attributeTypeSeed describes a predefined product attribute type. numeric
+// attributes store their value in product_attribute.num_value; enum
+// attributes store it in text_value.
+type attributeTypeSeed struct {
+	id         string
+	name       string
+	unit       string
+	kind       string // "numeric" or "enum"
+	filterable bool
+	position   int
+}
+
+// attributeTypeSeeds are the predefined attribute types. origin is the
+// non-filterable example so the UI can prove that non-filterable attributes
+// display but are excluded from facet filtering.
+var attributeTypeSeeds = []attributeTypeSeed{
+	{id: "weight", name: "Weight", unit: "kg", kind: "numeric", filterable: true, position: 1},
+	{id: "width", name: "Width", unit: "cm", kind: "numeric", filterable: true, position: 2},
+	{id: "material", name: "Material", unit: "", kind: "enum", filterable: true, position: 3},
+	{id: "origin", name: "Country of origin", unit: "", kind: "enum", filterable: false, position: 4},
+}
+
+// categorySeed describes a predefined product category. slug equals id.
+type categorySeed struct {
+	id       string
+	name     string
+	position int
+}
+
+var categorySeeds = []categorySeed{
+	{id: "kitchen", name: "Kitchen", position: 1},
+	{id: "office", name: "Office", position: 2},
+	{id: "outdoor", name: "Outdoor", position: 3},
+	{id: "living", name: "Living", position: 4},
+}
+
+// productCategorySeeds assigns each seeded product (simple + variant) to one
+// or more categories. The model is many-to-many; a few products
+// intentionally appear in two categories.
+var productCategorySeeds = []struct {
+	productID   string
+	categoryIDs []string
+}{
+	{"brass-paperclips", []string{"office"}},
+	{"walnut-serving-spoon", []string{"kitchen"}},
+	{"wool-throw-charcoal", []string{"living"}},
+	{"glass-carafe-1l", []string{"kitchen", "living"}}, // multi-category
+	{"leather-notebook-a5", []string{"office"}},
+	{"cast-iron-skillet-10in", []string{"kitchen", "outdoor"}}, // multi-category
+	{"stoneware-vase-grey", []string{"living"}},
+	{"cotton-tea-towels-set", []string{"kitchen"}},
+	{"ceramic-mug", []string{"kitchen", "office"}}, // multi-category
+	{"linen-apron", []string{"kitchen"}},
+}
+
+// productAttributeSeed assigns one attribute value to a product. Exactly one
+// of num / text is meaningful depending on the attribute type's kind: numeric
+// types use num (text empty), enum types use text (num ignored).
+type productAttributeSeed struct {
+	productID       string
+	attributeTypeID string
+	num             float64
+	text            string
+}
+
+// productAttributeSeeds gives every product a sensible set of attribute
+// values. Most have weight + material; a few also carry width. origin
+// (non-filterable) is set on a handful of products only.
+var productAttributeSeeds = []productAttributeSeed{
+	// brass-paperclips
+	{productID: "brass-paperclips", attributeTypeID: "weight", num: 0.05},
+	{productID: "brass-paperclips", attributeTypeID: "material", text: "brass"},
+	// walnut-serving-spoon
+	{productID: "walnut-serving-spoon", attributeTypeID: "weight", num: 0.08},
+	{productID: "walnut-serving-spoon", attributeTypeID: "material", text: "walnut"},
+	{productID: "walnut-serving-spoon", attributeTypeID: "origin", text: "USA"},
+	// wool-throw-charcoal
+	{productID: "wool-throw-charcoal", attributeTypeID: "weight", num: 1.2},
+	{productID: "wool-throw-charcoal", attributeTypeID: "material", text: "wool"},
+	{productID: "wool-throw-charcoal", attributeTypeID: "origin", text: "New Zealand"},
+	// glass-carafe-1l
+	{productID: "glass-carafe-1l", attributeTypeID: "weight", num: 0.6},
+	{productID: "glass-carafe-1l", attributeTypeID: "material", text: "borosilicate glass"},
+	// leather-notebook-a5
+	{productID: "leather-notebook-a5", attributeTypeID: "weight", num: 0.4},
+	{productID: "leather-notebook-a5", attributeTypeID: "width", num: 15},
+	{productID: "leather-notebook-a5", attributeTypeID: "material", text: "leather"},
+	// cast-iron-skillet-10in
+	{productID: "cast-iron-skillet-10in", attributeTypeID: "weight", num: 2.5},
+	{productID: "cast-iron-skillet-10in", attributeTypeID: "width", num: 26},
+	{productID: "cast-iron-skillet-10in", attributeTypeID: "material", text: "cast iron"},
+	{productID: "cast-iron-skillet-10in", attributeTypeID: "origin", text: "USA"},
+	// stoneware-vase-grey
+	{productID: "stoneware-vase-grey", attributeTypeID: "weight", num: 0.9},
+	{productID: "stoneware-vase-grey", attributeTypeID: "material", text: "stoneware"},
+	// cotton-tea-towels-set
+	{productID: "cotton-tea-towels-set", attributeTypeID: "weight", num: 0.3},
+	{productID: "cotton-tea-towels-set", attributeTypeID: "material", text: "cotton"},
+	// ceramic-mug
+	{productID: "ceramic-mug", attributeTypeID: "weight", num: 0.35},
+	{productID: "ceramic-mug", attributeTypeID: "material", text: "stoneware"},
+	{productID: "ceramic-mug", attributeTypeID: "origin", text: "Japan"},
+	// linen-apron
+	{productID: "linen-apron", attributeTypeID: "weight", num: 0.45},
+	{productID: "linen-apron", attributeTypeID: "width", num: 70},
+	{productID: "linen-apron", attributeTypeID: "material", text: "linen"},
+}
+
+const (
+	insertAttributeType = `INSERT INTO productcatalog_attribute_type
+		(id, name, unit, kind, filterable, position)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET
+			name = EXCLUDED.name,
+			unit = EXCLUDED.unit,
+			kind = EXCLUDED.kind,
+			filterable = EXCLUDED.filterable,
+			position = EXCLUDED.position`
+
+	insertCategory = `INSERT INTO productcatalog_category
+		(id, name, slug, position)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (id) DO UPDATE SET
+			name = EXCLUDED.name,
+			slug = EXCLUDED.slug,
+			position = EXCLUDED.position`
+
+	insertProductCategory = `INSERT INTO productcatalog_product_category
+		(product_id, category_id)
+		VALUES ($1, $2)
+		ON CONFLICT (product_id, category_id) DO NOTHING`
+
+	insertProductAttributeNumeric = `INSERT INTO productcatalog_product_attribute
+		(product_id, attribute_type_id, num_value, text_value)
+		VALUES ($1, $2, $3, NULL)
+		ON CONFLICT (product_id, attribute_type_id) DO UPDATE SET
+			num_value = EXCLUDED.num_value,
+			text_value = EXCLUDED.text_value`
+
+	insertProductAttributeEnum = `INSERT INTO productcatalog_product_attribute
+		(product_id, attribute_type_id, num_value, text_value)
+		VALUES ($1, $2, NULL, $3)
+		ON CONFLICT (product_id, attribute_type_id) DO UPDATE SET
+			num_value = EXCLUDED.num_value,
+			text_value = EXCLUDED.text_value`
+)
+
+// countCategoryAssignments returns the total number of (product, category)
+// pairs across all products — a product in two categories counts twice.
+func countCategoryAssignments() int {
+	n := 0
+	for _, pc := range productCategorySeeds {
+		n += len(pc.categoryIDs)
+	}
+	return n
+}
+
+// seedReferenceData idempotently inserts attribute types, categories, and the
+// per-product category/attribute assignments. It must run AFTER the products
+// exist because product_category/product_attribute reference
+// productcatalog_product.
+func seedReferenceData(ctx context.Context, db *sql.DB) error {
+	for _, at := range attributeTypeSeeds {
+		if _, err := db.ExecContext(ctx, insertAttributeType,
+			at.id, at.name, at.unit, at.kind, at.filterable, at.position); err != nil {
+			return fmt.Errorf("seed attribute type %s: %w", at.id, err)
+		}
+	}
+
+	for _, c := range categorySeeds {
+		if _, err := db.ExecContext(ctx, insertCategory,
+			c.id, c.name, c.id, c.position); err != nil {
+			return fmt.Errorf("seed category %s: %w", c.id, err)
+		}
+	}
+
+	for _, pc := range productCategorySeeds {
+		for _, catID := range pc.categoryIDs {
+			if _, err := db.ExecContext(ctx, insertProductCategory,
+				pc.productID, catID); err != nil {
+				return fmt.Errorf("seed product-category %s/%s: %w", pc.productID, catID, err)
+			}
+		}
+	}
+
+	kindByType := make(map[string]string, len(attributeTypeSeeds))
+	for _, at := range attributeTypeSeeds {
+		kindByType[at.id] = at.kind
+	}
+
+	for _, pa := range productAttributeSeeds {
+		switch kindByType[pa.attributeTypeID] {
+		case "numeric":
+			if _, err := db.ExecContext(ctx, insertProductAttributeNumeric,
+				pa.productID, pa.attributeTypeID, pa.num); err != nil {
+				return fmt.Errorf("seed product-attribute %s/%s: %w", pa.productID, pa.attributeTypeID, err)
+			}
+		default: // enum
+			if _, err := db.ExecContext(ctx, insertProductAttributeEnum,
+				pa.productID, pa.attributeTypeID, pa.text); err != nil {
+				return fmt.Errorf("seed product-attribute %s/%s: %w", pa.productID, pa.attributeTypeID, err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "seeds",
@@ -177,7 +386,13 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				}
 			}
 
-			fmt.Printf("seeded %d simple + %d variant products\n", len(seedProducts), len(variantSeeds))
+			if err := seedReferenceData(ctx, db); err != nil {
+				return err
+			}
+
+			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values\n",
+				len(seedProducts), len(variantSeeds), len(attributeTypeSeeds), len(categorySeeds),
+				countCategoryAssignments(), len(productAttributeSeeds))
 			return nil
 		},
 	}
