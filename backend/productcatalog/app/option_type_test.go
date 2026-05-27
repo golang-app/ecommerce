@@ -14,7 +14,15 @@ func seedVariantProduct(ctx context.Context, t *testing.T, optionTypes []app.Opt
 	t.Helper()
 	srv := app.NewProductService(storage)
 	id := randomID()
-	err := srv.AddVariantProduct(ctx, id, "Tee", "a tee", "USD", "http://img", optionTypes, variants)
+	// Variant ids are a global primary key; namespace them under the random
+	// product id so fixtures from different tests don't collide on the shared
+	// integration database.
+	scoped := make([]app.VariantInput, len(variants))
+	for i, v := range variants {
+		v.ID = id + "-" + v.ID
+		scoped[i] = v
+	}
+	err := srv.AddVariantProduct(ctx, id, "Tee", "a tee", "USD", "http://img", optionTypes, scoped)
 	if err != nil {
 		t.Fatalf("seed variant product: %s", err)
 	}
@@ -45,7 +53,7 @@ func TestAddOptionTypeSeedsExistingVariants(t *testing.T) {
 	}
 	v, ok := p.ResolveVariant(map[string]string{"Color": "Red", "Size": "S"})
 	is.True(ok)
-	is.Equal(v.ID(), "v1")
+	is.Equal(v.SKU(), "red")
 }
 
 func TestAddOptionTypeRejectsDuplicateAndBadDefault(t *testing.T) {
@@ -83,7 +91,7 @@ func TestUpdateOptionTypeRenameRekeysVariants(t *testing.T) {
 	is.Equal(p.OptionTypes()[0].Name(), "Colour")
 	v, ok := p.ResolveVariant(map[string]string{"Colour": "Red"})
 	is.True(ok)
-	is.Equal(v.ID(), "v1")
+	is.Equal(v.SKU(), "red")
 }
 
 func TestUpdateOptionTypeGuardsValueInUse(t *testing.T) {
