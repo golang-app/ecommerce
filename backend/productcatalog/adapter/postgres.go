@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 )
 
 type postgres struct {
@@ -121,7 +122,73 @@ func (db postgres) withCatalog(ctx context.Context, p domain.Product) (domain.Pr
 	if err != nil {
 		return domain.Product{}, err
 	}
-	return p.WithCatalog(ots, vs), nil
+	cats, err := db.productCategories(ctx, string(p.ID()))
+	if err != nil {
+		return domain.Product{}, err
+	}
+	attrs, err := db.productAttributes(ctx, string(p.ID()))
+	if err != nil {
+		return domain.Product{}, err
+	}
+	return p.WithCatalog(ots, vs).WithClassification(cats, attrs), nil
+}
+
+func (db postgres) productCategories(ctx context.Context, productID string) ([]domain.Category, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT c.id, c.name, c.slug, c.position
+		FROM productcatalog_category c
+		JOIN productcatalog_product_category pc ON pc.category_id = c.id
+		WHERE pc.product_id = $1
+		ORDER BY c.position, c.name
+	`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("query product categories: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.Category
+	for rows.Next() {
+		var id, name, slug string
+		var position int
+		if err := rows.Scan(&id, &name, &slug, &position); err != nil {
+			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		out = append(out, domain.RebuildCategory(id, name, slug, position))
+	}
+	return out, rows.Err()
+}
+
+func (db postgres) productAttributes(ctx context.Context, productID string) ([]domain.AttributeValue, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT t.id, t.name, t.unit, t.kind, t.filterable, t.position, pa.num_value, pa.text_value
+		FROM productcatalog_product_attribute pa
+		JOIN productcatalog_attribute_type t ON t.id = pa.attribute_type_id
+		WHERE pa.product_id = $1
+		ORDER BY t.position, t.name
+	`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("query product attributes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.AttributeValue
+	for rows.Next() {
+		var id, name, unit, kind string
+		var filterable bool
+		var position int
+		var num sql.NullFloat64
+		var text sql.NullString
+		if err := rows.Scan(&id, &name, &unit, &kind, &filterable, &position, &num, &text); err != nil {
+			return nil, fmt.Errorf("scan attribute: %w", err)
+		}
+		t := domain.RebuildAttributeType(id, name, unit, domain.AttributeKind(kind), filterable, position)
+		if t.IsNumeric() {
+			out = append(out, domain.NewNumericValue(t, num.Float64))
+		} else {
+			out = append(out, domain.NewEnumValue(t, text.String))
+		}
+	}
+	return out, rows.Err()
 }
 
 func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
@@ -302,4 +369,219 @@ func (db postgres) Release(ctx context.Context, quantities map[string]int) error
 		}
 	}
 	return nil
+}
+
+// Categories returns every catalog category in display order.
+func (db postgres) Categories(ctx context.Context) ([]domain.Category, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, name, slug, position FROM productcatalog_category ORDER BY position, name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query categories: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.Category
+	for rows.Next() {
+		var id, name, slug string
+		var position int
+		if err := rows.Scan(&id, &name, &slug, &position); err != nil {
+			return nil, fmt.Errorf("scan category: %w", err)
+		}
+		out = append(out, domain.RebuildCategory(id, name, slug, position))
+	}
+	return out, rows.Err()
+}
+
+// ListProducts returns the products matching the query. The WHERE clause is
+// built dynamically with parameterised placeholders only (never interpolating
+// user values), then each matching id is hydrated through the existing Find
+// path so the products carry their full catalog/classification.
+func (db postgres) ListProducts(ctx context.Context, q app.ProductQuery) ([]domain.Product, error) {
+	query := `SELECT p.id FROM productcatalog_product p WHERE 1 = 1`
+	var args []any
+	next := func() string {
+		args = append(args, nil)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	set := func(v any) string {
+		ph := next()
+		args[len(args)-1] = v
+		return ph
+	}
+
+	if q.CategorySlug != "" {
+		query += fmt.Sprintf(` AND EXISTS (
+			SELECT 1 FROM productcatalog_product_category pc
+			JOIN productcatalog_category c ON c.id = pc.category_id
+			WHERE pc.product_id = p.id AND c.slug = %s)`, set(q.CategorySlug))
+	}
+
+	for _, typeID := range sortedKeys(q.NumericRanges) {
+		r := q.NumericRanges[typeID]
+		clause := fmt.Sprintf(`SELECT 1 FROM productcatalog_product_attribute pa
+			WHERE pa.product_id = p.id AND pa.attribute_type_id = %s`, set(typeID))
+		if r.Min != nil {
+			clause += fmt.Sprintf(` AND pa.num_value >= %s`, set(*r.Min))
+		}
+		if r.Max != nil {
+			clause += fmt.Sprintf(` AND pa.num_value <= %s`, set(*r.Max))
+		}
+		query += fmt.Sprintf(` AND EXISTS (%s)`, clause)
+	}
+
+	for _, typeID := range sortedEnumKeys(q.EnumSelections) {
+		values := q.EnumSelections[typeID]
+		if len(values) == 0 {
+			continue
+		}
+		idPH := set(typeID)
+		valPH := set(pq.Array(values))
+		query += fmt.Sprintf(` AND EXISTS (
+			SELECT 1 FROM productcatalog_product_attribute pa
+			WHERE pa.product_id = p.id AND pa.attribute_type_id = %s AND pa.text_value = ANY(%s))`, idPH, valPH)
+	}
+
+	query += ` ORDER BY p.id`
+
+	rows, err := db.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list products: %w", err)
+	}
+	var ids []string
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id string
+			if err = rows.Scan(&id); err != nil {
+				return
+			}
+			ids = append(ids, id)
+		}
+	}()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan product ids: %w", err)
+	}
+
+	out := make([]domain.Product, 0, len(ids))
+	for _, id := range ids {
+		p, err := db.Find(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// Facets returns the filterable attribute types and their available options,
+// optionally scoped to the products in a category.
+func (db postgres) Facets(ctx context.Context, categorySlug string) ([]app.Facet, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, name, unit, kind, filterable, position
+		FROM productcatalog_attribute_type
+		WHERE filterable = true
+		ORDER BY position, name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query filterable attribute types: %w", err)
+	}
+	var types []domain.AttributeType
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var id, name, unit, kind string
+			var filterable bool
+			var position int
+			if err = rows.Scan(&id, &name, &unit, &kind, &filterable, &position); err != nil {
+				return
+			}
+			types = append(types, domain.RebuildAttributeType(id, name, unit, domain.AttributeKind(kind), filterable, position))
+		}
+	}()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan attribute types: %w", err)
+	}
+
+	// scope restricts an attribute query to products in the given category.
+	// args are appended in order; the attribute_type_id placeholder is $1.
+	scope := ""
+	if categorySlug != "" {
+		scope = ` AND EXISTS (
+			SELECT 1 FROM productcatalog_product_category pc
+			JOIN productcatalog_category c ON c.id = pc.category_id
+			WHERE pc.product_id = pa.product_id AND c.slug = $2)`
+	}
+
+	var facets []app.Facet
+	for _, t := range types {
+		if t.IsNumeric() {
+			var min, max sql.NullFloat64
+			q := `SELECT min(num_value), max(num_value) FROM productcatalog_product_attribute pa
+				WHERE pa.attribute_type_id = $1` + scope
+			args := []any{t.ID()}
+			if categorySlug != "" {
+				args = append(args, categorySlug)
+			}
+			if err := db.db.QueryRowContext(ctx, q, args...).Scan(&min, &max); err != nil {
+				return nil, fmt.Errorf("facet numeric %s: %w", t.ID(), err)
+			}
+			if !min.Valid || !max.Valid {
+				continue
+			}
+			lo, hi := min.Float64, max.Float64
+			facets = append(facets, app.Facet{Type: t, Min: &lo, Max: &hi})
+			continue
+		}
+
+		q := `SELECT DISTINCT text_value FROM productcatalog_product_attribute pa
+			WHERE pa.attribute_type_id = $1 AND pa.text_value IS NOT NULL` + scope + ` ORDER BY text_value`
+		args := []any{t.ID()}
+		if categorySlug != "" {
+			args = append(args, categorySlug)
+		}
+		vrows, err := db.db.QueryContext(ctx, q, args...)
+		if err != nil {
+			return nil, fmt.Errorf("facet enum %s: %w", t.ID(), err)
+		}
+		var values []string
+		func() {
+			defer func() { _ = vrows.Close() }()
+			for vrows.Next() {
+				var v string
+				if err = vrows.Scan(&v); err != nil {
+					return
+				}
+				values = append(values, v)
+			}
+		}()
+		if err = vrows.Err(); err != nil {
+			return nil, fmt.Errorf("scan enum facet %s: %w", t.ID(), err)
+		}
+		if len(values) == 0 {
+			continue
+		}
+		facets = append(facets, app.Facet{Type: t, Values: values})
+	}
+	return facets, nil
+}
+
+// sortedKeys returns the map keys sorted, so generated SQL placeholders are
+// stable and tests are deterministic.
+func sortedKeys(m map[string]app.Range) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedEnumKeys(m map[string][]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

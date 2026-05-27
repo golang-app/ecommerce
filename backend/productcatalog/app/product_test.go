@@ -20,6 +20,9 @@ type productStorage interface {
 	AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error
 	Reserve(ctx context.Context, quantities map[string]int) error
 	Release(ctx context.Context, quantities map[string]int) error
+	ListProducts(ctx context.Context, q app.ProductQuery) ([]domain.Product, error)
+	Categories(ctx context.Context) ([]domain.Category, error)
+	Facets(ctx context.Context, categorySlug string) ([]app.Facet, error)
 }
 
 var storage productStorage

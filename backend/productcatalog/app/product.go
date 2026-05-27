@@ -20,6 +20,9 @@ type ProductStorage interface {
 	AddVariant(ctx context.Context, productID string, position int, v domain.Variant) error
 	Reserve(ctx context.Context, quantities map[string]int) error
 	Release(ctx context.Context, quantities map[string]int) error
+	ListProducts(ctx context.Context, q ProductQuery) ([]domain.Product, error)
+	Categories(ctx context.Context) ([]domain.Category, error)
+	Facets(ctx context.Context, categorySlug string) ([]Facet, error)
 }
 
 func NewProductService(s ProductStorage) ProductService {
@@ -49,6 +52,21 @@ func (ps ProductService) Reserve(ctx context.Context, quantities map[string]int)
 // Release returns previously-reserved stock (e.g. after a failed payment).
 func (ps ProductService) Release(ctx context.Context, quantities map[string]int) error {
 	return ps.storage.Release(ctx, quantities)
+}
+
+// List returns the products matching the given listing-page query.
+func (ps ProductService) List(ctx context.Context, q ProductQuery) ([]domain.Product, error) {
+	return ps.storage.ListProducts(ctx, q)
+}
+
+// Categories returns all catalog categories in display order.
+func (ps ProductService) Categories(ctx context.Context) ([]domain.Category, error) {
+	return ps.storage.Categories(ctx)
+}
+
+// Facets returns the available filter facets, optionally scoped to a category.
+func (ps ProductService) Facets(ctx context.Context, categorySlug string) ([]Facet, error) {
+	return ps.storage.Facets(ctx, categorySlug)
 }
 
 // defaultStock is given to a simple product's auto-created default variant.
