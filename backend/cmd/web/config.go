@@ -70,6 +70,24 @@ type config struct {
 	// e.g. cents) at or above which the chosen shipping method's cost is
 	// overridden to 0 at place time. 0 disables the threshold.
 	FreeShippingThreshold int64 `conf:"default:0"`
+	// DefaultCurrency is the ISO 4217 code orders are placed in — the
+	// storage currency. Every Price in the system is assumed to be
+	// denominated in it; the display-only currency picker converts FROM
+	// this code TO whatever the shopper selected.
+	DefaultCurrency string `conf:"default:USD"`
+	// SupportedCurrencies is a comma-separated list of ISO 4217 codes the
+	// header picker offers (e.g. "USD,EUR,GBP"). The DefaultCurrency is
+	// always prepended if missing. When only the default is listed (the
+	// out-of-the-box value), the picker stays hidden.
+	SupportedCurrencies string `conf:"default:USD"`
+	// FXRates are the static, operator-configured conversion multipliers
+	// FROM DefaultCurrency TO each supported display currency, in
+	// "CCY:rate" pairs (e.g. "EUR:0.92,GBP:0.79"). They are NOT a live
+	// feed — operators must update them by hand when the market drifts.
+	// Upgrading to a real provider only requires a different
+	// implementation of internal/fx.Rates; every storefront template and
+	// the /currency handler talk through that single seam.
+	FXRates string
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep

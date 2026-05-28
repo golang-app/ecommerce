@@ -38,36 +38,54 @@
           <tr>
             <td>{{$line.ProductName}}</td>
             <td class="col-qty">{{$line.Quantity}}</td>
-            <td class="col-price">{{$line.PriceDisplay}} {{$line.PriceCurrency}}</td>
-            <td class="col-total">{{$line.LineTotalDisplay}} {{$line.PriceCurrency}}</td>
+            <td class="col-price">{{ money $line.PriceAmount }}</td>
+            <td class="col-total">{{ money $line.LineTotal }}</td>
           </tr>
         {{end}}
       </tbody>
       <tfoot>
         <tr>
           <td colspan="3">subtotal</td>
-          <td class="col-total">{{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}</td>
+          <td class="col-total">{{ money .Order.Subtotal }}</td>
         </tr>
+        {{if or (gt .Order.DiscountAmount 0) .Order.DiscountCode}}
+          <tr>
+            <td colspan="3">discount{{with .Order.DiscountCode}} &middot; <code>{{.}}</code>{{end}}</td>
+            <td class="col-total">
+              {{if gt .Order.DiscountAmount 0}}-{{ money .Order.DiscountAmount }}{{else}}free shipping{{end}}
+            </td>
+          </tr>
+        {{end}}
         {{if gt .Order.TaxAmount 0}}
           <tr>
             <td colspan="3">tax</td>
-            <td class="col-total">{{.Order.TaxDisplay}} {{.Order.TotalCurrency}}</td>
+            <td class="col-total">{{ money .Order.TaxAmount }}</td>
           </tr>
         {{end}}
         {{if not .Order.ShippingMethod.IsZero}}
           <tr>
             <td colspan="3">shipping &middot; {{.Order.ShippingMethod.Label}}</td>
             <td class="col-total">
-              {{if eq .Order.ShippingCost 0}}free{{else}}{{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}{{end}}
+              {{if eq .Order.ShippingCost 0}}free{{else}}{{ money .Order.ShippingCost }}{{end}}
             </td>
           </tr>
         {{end}}
         <tr>
           <td colspan="3">total charged</td>
-          <td class="col-total">{{.Order.TotalDisplay}} {{.Order.TotalCurrency}}</td>
+          <td class="col-total">{{ money .Order.TotalAmount }}</td>
         </tr>
       </tfoot>
     </table>
+
+    {{/*
+      Display-only currency disclosure. Renders when the customer is
+      viewing the order in a non-default currency. The order itself was
+      placed in USD; we make that clear so the totals row isn't
+      misread as the amount actually charged.
+    */}}
+    {{if ne .Currency "USD"}}
+      <p class="order__hint muted">Prices shown in {{.Currency}}; orders are placed in USD.</p>
+    {{end}}
 
     {{if eq .Order.ShippingMethod.Code "pickup"}}
       <section class="order__ship">

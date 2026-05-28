@@ -1,0 +1,46 @@
+{{define "title"}}Wishlist · {{.SiteName}}{{end}}
+{{define "description"}}The products you have saved for later.{{end}}
+
+{{define "main"}}
+  <h1 class="page-title">account</h1>
+  <div class="account">
+    <aside class="account__side">{{template "account-nav" .}}</aside>
+    <div class="account__content">
+      <h2 class="account-card__title">wishlist</h2>
+      {{if .Entries}}
+        <div class="product-grid">
+          {{range $e := .Entries}}
+            <div class="product-card wishlist-card">
+              <a class="wishlist-card__link" href="/product/{{$e.ProductID}}">
+                {{if $e.Thumbnail}}
+                  <img class="product-card__image"
+                       src="{{$e.Thumbnail}}"
+                       alt="{{$e.ProductName}}"
+                       loading="lazy"
+                       width="800" height="800">
+                {{end}}
+                <h3 class="product-card__name">{{$e.ProductName}}</h3>
+                <p class="product-card__price">{{ money $e.Price.Amount }}</p>
+              </a>
+              {{- /* The remove form POSTs to the same toggle endpoint the
+                     product page uses: since the item is currently in the
+                     wishlist, toggling removes it. Standard form POST so the
+                     page reloads and the row disappears without needing JS. */ -}}
+              <form class="wishlist-card__remove" method="post" action="/wishlist/{{$e.VariantID}}/toggle">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="btn btn--ghost" aria-label="remove from wishlist">
+                  <span aria-hidden="true">&#9829;</span> remove
+                </button>
+              </form>
+              {{if not $e.InStock}}
+                <p class="muted wishlist-card__stock">out of stock</p>
+              {{end}}
+            </div>
+          {{end}}
+        </div>
+      {{else}}
+        <p class="cart-empty">your wishlist is empty. <a href="/">browse products</a></p>
+      {{end}}
+    </div>
+  </div>
+{{end}}

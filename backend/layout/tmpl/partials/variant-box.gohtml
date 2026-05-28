@@ -3,7 +3,7 @@
   {{if .Variant.IsZero}}
     <p class="product__price muted">that combination isn't available</p>
   {{else}}
-    <p class="product__price">{{.Variant.Price.Display}} {{.Variant.Price.Currency}}</p>
+    <p class="product__price">{{ money .Variant.Price.Amount }}</p>
     {{if .Variant.InStock}}
       {{if .Variant.LowStock}}
         <p class="stock stock--low">only {{.Variant.Stock}} left</p>
@@ -19,6 +19,13 @@
     {{else}}
       <p class="stock stock--out">out of stock</p>
     {{end}}
+    {{- /* The wishlist toggle lives inside variant-box so it follows the
+           currently-selected variant: each time the variant selects fire,
+           the variant-response partial re-renders this whole box and the
+           heart reflects the new variant's saved state. We synthesise the
+           partial's dot via dict so the partial's keys (VariantID /
+           InWishlist / LoggedIn) come from the variant + parent context. */ -}}
+    {{template "wishlist-button" (dict "VariantID" .Variant.ID "InWishlist" .InWishlist "LoggedIn" .LoggedIn)}}
   {{end}}
 </div>
 {{end}}

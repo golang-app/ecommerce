@@ -1,0 +1,39 @@
+{{define "wishlist-button"}}
+{{- /*
+  Heart toggle rendered next to the add-to-cart button.
+  Render states:
+    * not logged in:           a small link to /auth/login (no toggle, no POST)
+    * logged in, NOT saved:    an outline-heart "save" button
+    * logged in, in wishlist:  a filled-heart "remove" button
+  The button POSTs to /wishlist/{VariantID}/toggle with hx-swap="outerHTML";
+  the handler responds with this same template re-rendered in the new state.
+  X-CSRF-Token is auto-stamped by the htmx:configRequest hook in layout.gohtml.
+
+  The dot is always a flat map carrying VariantID, InWishlist, LoggedIn —
+  produced either by the WishlistToggle HTTP handler or by variant-box's
+  `dict` invocation.
+*/ -}}
+{{if .LoggedIn}}
+  {{if .InWishlist}}
+    <button class="btn btn--ghost wishlist-toggle wishlist-toggle--on"
+            hx-post="/wishlist/{{.VariantID}}/toggle"
+            hx-swap="outerHTML"
+            aria-label="remove from wishlist"
+            title="remove from wishlist">
+      <span aria-hidden="true">&#9829;</span> saved
+    </button>
+  {{else}}
+    <button class="btn btn--ghost wishlist-toggle wishlist-toggle--off"
+            hx-post="/wishlist/{{.VariantID}}/toggle"
+            hx-swap="outerHTML"
+            aria-label="save to wishlist"
+            title="save to wishlist">
+      <span aria-hidden="true">&#9825;</span> save
+    </button>
+  {{end}}
+{{else}}
+  <a class="wishlist-toggle wishlist-toggle--anon muted" href="/auth/login">
+    <span aria-hidden="true">&#9825;</span> log in to save
+  </a>
+{{end}}
+{{end}}

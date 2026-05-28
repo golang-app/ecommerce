@@ -46,6 +46,8 @@ type Order struct {
 	subtotalAmt  int64
 	taxAmt       int64
 	shipCostAmt  int64
+	discountCode string
+	discountAmt  int64
 	totalAmt     int64
 	totalCcy     string
 	status       Status
@@ -138,31 +140,53 @@ func (o Order) TotalDisplay() string  { return money(o.totalAmt) }
 func (o Order) Carrier() string       { return o.carrier }
 func (o Order) TrackingCode() string  { return o.trackingCode }
 
+// DiscountCode returns the literal promo code applied at place time
+// (empty when no code was used). The order is event-sourced so the
+// historical value is preserved across replays.
+func (o Order) DiscountCode() string { return o.discountCode }
+
+// DiscountAmount returns the resolved discount in minor units that was
+// subtracted from the subtotal before tax. For free-shipping codes this
+// is 0 — the saving is reflected in ShippingCost instead.
+func (o Order) DiscountAmount() int64 { return o.discountAmt }
+
+// DiscountDisplay renders the discount amount for the totals row in the
+// templates (negative sign included).
+func (o Order) DiscountDisplay() string { return money(o.discountAmt) }
+
 // --- event-sourced write side ---
 
 // PlaceOrder is the command that creates a new order from a cart snapshot
 // and the customer's checkout choices. It emits an OrderPlaced event.
 //
 // tax is the tax amount in minor units already computed by the caller
-// (CheckoutService) from the configured rate. effectiveShipping is the
-// shipping price actually charged — equal to shipMethod.Cost() in the normal
-// case, but 0 when a configured free-shipping threshold knocked it down.
-func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, lines []Line, tax, effectiveShipping int64, at time.Time) (*Order, error) {
+// (CheckoutService) from the configured rate AFTER the promo-code discount
+// has been subtracted from the subtotal. effectiveShipping is the shipping
+// price actually charged — 0 when a configured free-shipping threshold
+// knocked it down, 0 when a free-shipping promo code was applied, or the
+// catalogue method's Cost() otherwise.
+//
+// discountCode/discountAmount carry the resolved promo code (empty / 0 when
+// none was used). The event-sourced aggregate keeps these so replaying
+// history reproduces the original totals.
+func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, lines []Line, tax, effectiveShipping int64, discountCode string, discountAmount int64, at time.Time) (*Order, error) {
 	if len(lines) == 0 {
 		return nil, ErrCartEmpty
 	}
 	o := &Order{}
 	o.raise(OrderPlaced{
-		OrderID:      id,
-		UserID:       userID,
-		CustomerID:   customerID,
-		ShipTo:       shipTo,
-		ShipMethod:   shipMethod,
-		PayMethod:    payMethod,
-		Lines:        lines,
-		Tax:          tax,
-		ShippingCost: effectiveShipping,
-		At:           at,
+		OrderID:        id,
+		UserID:         userID,
+		CustomerID:     customerID,
+		ShipTo:         shipTo,
+		ShipMethod:     shipMethod,
+		PayMethod:      payMethod,
+		Lines:          lines,
+		Tax:            tax,
+		ShippingCost:   effectiveShipping,
+		DiscountCode:   discountCode,
+		DiscountAmount: discountAmount,
+		At:             at,
 	})
 	return o, nil
 }
@@ -211,7 +235,15 @@ func (o *Order) apply(e Event) {
 		} else {
 			o.shipCostAmt = ev.ShippingCost
 		}
-		o.totalAmt = subtotal + o.taxAmt + o.shipCostAmt
+		// Promo code is replayed verbatim from the event so historical
+		// orders preserve the math: the discount was subtracted from the
+		// subtotal BEFORE tax, so the total is computed as
+		//   (subtotal - discount) + tax + effective_shipping
+		// — see checkout/app.Place for the live computation that
+		// produced these fields.
+		o.discountCode = ev.DiscountCode
+		o.discountAmt = ev.DiscountAmount
+		o.totalAmt = subtotal - o.discountAmt + o.taxAmt + o.shipCostAmt
 		o.totalCcy = ccy
 		o.status = StatusPending
 		o.placedAt = ev.At

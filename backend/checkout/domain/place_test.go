@@ -12,7 +12,7 @@ func TestPlaceOrder_EmptyCartRejected(t *testing.T) {
 	_, err := domain.PlaceOrder("ord-1", "cart-1", "", domain.Address{},
 		domain.RebuildShippingMethod("pickup", "Personal pickup", 0),
 		domain.RebuildPaymentMethod("cod", "Cash on delivery"),
-		nil, 0, 0, time.Now())
+		nil, 0, 0, "", 0, time.Now())
 	if !errors.Is(err, domain.ErrCartEmpty) {
 		t.Errorf("err = %v, want ErrCartEmpty", err)
 	}
@@ -28,7 +28,7 @@ func TestPlaceOrder_EmitsPendingOrderPlaced(t *testing.T) {
 	o, err := domain.PlaceOrder("ord-1", "cart-1", "jane@example.com", domain.Address{},
 		method,
 		domain.RebuildPaymentMethod("card", "Credit / debit card"),
-		lines, 0, method.Cost(), at)
+		lines, 0, method.Cost(), "", 0, at)
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}

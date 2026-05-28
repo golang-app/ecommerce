@@ -1,0 +1,25 @@
+{{define "main"}}
+  <p class="crumbs"><a href="/admin/promo-codes">promo codes</a> / edit</p>
+  <h2 class="account-card__title">edit promo code <code>{{.Code.CodeText}}</code></h2>
+
+  <form class="form" method="post" action="/admin/promo-codes/{{.Code.CodeText}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <div class="field">
+      <label for="p-kind">kind</label>
+      <select id="p-kind" name="kind">
+        <option value="percent" {{if eq (printf "%s" .Code.Kind) "percent"}}selected{{end}}>percent (1..100)</option>
+        <option value="fixed" {{if eq (printf "%s" .Code.Kind) "fixed"}}selected{{end}}>fixed amount (minor units)</option>
+        <option value="free_shipping" {{if eq (printf "%s" .Code.Kind) "free_shipping"}}selected{{end}}>free shipping</option>
+      </select>
+    </div>
+    <div class="field"><label for="p-value">value</label><input id="p-value" name="value" type="number" value="{{.Code.ValueMinor}}" min="0"></div>
+    <div class="field"><label for="p-ccy">currency</label><input id="p-ccy" name="currency" value="{{.Code.Currency}}" maxlength="3"></div>
+    <div class="field"><label for="p-from">valid from (YYYY-MM-DD, optional)</label><input id="p-from" name="valid_from" type="date" value="{{with .Code.ValidFrom}}{{.Format "2006-01-02"}}{{end}}"></div>
+    <div class="field"><label for="p-until">valid until (YYYY-MM-DD, optional)</label><input id="p-until" name="valid_until" type="date" value="{{with .Code.ValidUntil}}{{.Format "2006-01-02"}}{{end}}"></div>
+    <div class="field"><label for="p-max">max uses (0 = unlimited)</label><input id="p-max" name="max_uses" type="number" value="{{.Code.MaxUses}}" min="0"></div>
+    <div class="field"><label for="p-percust">per-customer max (0 = unlimited)</label><input id="p-percust" name="per_customer_max" type="number" value="{{.Code.PerCustomerMax}}" min="0"></div>
+    <p class="muted">used so far: {{.Code.UsedCount}}</p>
+    <button type="submit" class="btn">save changes</button>
+    <p class="form__aside"><a href="/admin/promo-codes">&larr; back to promo codes</a></p>
+  </form>
+{{end}}

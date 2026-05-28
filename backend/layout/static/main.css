@@ -152,6 +152,34 @@ main {
   outline: 0;
 }
 
+/* ---------- header: currency picker ---------- */
+/*
+  Display-only multi-currency selector. The <select> mimics the search
+  input's understated underline-only style so it doesn't compete with
+  the brand mark or the primary nav. JS-free submit on change keeps
+  the experience a single click.
+*/
+.currency-switch {
+  margin: 0;
+}
+.currency-switch select {
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--fg-muted);
+  font: inherit;
+  padding: var(--space-1) 0;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.currency-switch select:focus,
+.currency-switch select:focus-visible {
+  border-bottom-color: var(--fg);
+  color: var(--fg);
+  outline: 0;
+}
+
 /* ---------- accessibility: visually-hidden ---------- */
 /*
   Off-screen but still announced by screen readers. Use for labels that the

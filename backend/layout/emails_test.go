@@ -32,6 +32,8 @@ func TestRenderOrderConfirmation(t *testing.T) {
 		"USD",
 		"",
 		"",
+		"",
+		0,
 	)
 
 	msg, err := RenderOrderConfirmation(view, "http://localhost:8080")

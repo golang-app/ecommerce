@@ -85,6 +85,10 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 		"./layout/tmpl/productCatalog/allProducts.gohtml",
 	}
 
+	// The grid fragment uses {{ money .PriceFrom.Amount }} to render the
+	// price in the customer's selected display currency. We bind the
+	// same FuncMap renderTemplate installs so the HTMX-only grid keeps
+	// parity with the full-page render path.
 	var ts = template.Must(template.New("").Funcs(template.FuncMap{
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
@@ -92,6 +96,7 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 		"add": func(a, b string) float64 {
 			return 666
 		},
+		"money": moneyFunc(handler.rates, handler.currentCurrency(r)),
 	}).ParseFiles(files...))
 	err = ts.ExecuteTemplate(w, "allProducts.gohtml", resp)
 	if err != nil {
@@ -135,9 +140,64 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Reviews block: aggregate badge, list of recent reviews, and the
+	// CanReview / AlreadyReviewed flags that decide whether to render the
+	// submission form. All three calls degrade gracefully — a failure in
+	// the reviews service must never block the product page from loading.
+	productID := string(product.ID())
+	reviews, err := handler.reviewsSrv.ListForProduct(r.Context(), productID, 20)
+	if err != nil {
+		handler.logger.WithError(err).Warn("cannot list reviews for product")
+		reviews = nil
+	}
+	aggMap, err := handler.reviewsSrv.AggregateForProducts(r.Context(), []string{productID})
+	if err != nil {
+		handler.logger.WithError(err).Warn("cannot aggregate reviews for product")
+		aggMap = nil
+	}
+	aggregate := aggMap[productID]
+
+	customerID := handler.currentCustomerID(r)
+	canReview := false
+	alreadyReviewed := false
+	if customerID != "" {
+		// CanReview is "the buyer has purchased this product"; we ask the
+		// checkout query directly so the rendered hint matches the same
+		// check Submit enforces.
+		bought, qErr := handler.checkoutQry.HasPurchasedProduct(r.Context(), customerID, productID)
+		if qErr != nil {
+			handler.logger.WithError(qErr).Warn("cannot verify purchase for review form")
+		}
+		canReview = bought
+		if canReview {
+			done, hErr := handler.reviewsSrv.HasReviewed(r.Context(), productID, customerID)
+			if hErr != nil {
+				handler.logger.WithError(hErr).Warn("cannot check existing review")
+			}
+			alreadyReviewed = done
+		}
+	}
+
+	// Wishlist state for the currently-resolved variant drives the
+	// heart-button render. Anonymous visitors see the "log in to save"
+	// hint regardless of state, so we skip the lookup for them.
+	inWishlist := false
+	if customerID != "" && !variant.IsZero() {
+		saved, wErr := handler.wishlistSrv.Contains(r.Context(), customerID, variant.ID())
+		if wErr != nil {
+			handler.logger.WithError(wErr).Warn("cannot check wishlist state")
+		}
+		inWishlist = saved
+	}
+
 	handler.renderTemplate(w, r, "productCatalog/show", map[string]any{
-		"Product": product,
-		"Variant": variant,
+		"Product":         product,
+		"Variant":         variant,
+		"Reviews":         reviews,
+		"Aggregate":       aggregate,
+		"CanReview":       canReview,
+		"AlreadyReviewed": alreadyReviewed,
+		"InWishlist":      inWishlist,
 	})
 }
 
@@ -158,10 +218,35 @@ func (handler httpHandler) ProductVariant(w http.ResponseWriter, r *http.Request
 	}
 	variant, _ := product.ResolveVariant(selected)
 
-	ts := template.Must(template.New("").ParseGlob("./layout/tmpl/partials/*.gohtml"))
+	// Re-check wishlist state for the newly-resolved variant so the heart
+	// button inside the variant-box partial reflects the per-variant
+	// bookmark. Anonymous browsers skip the lookup — they render the
+	// "log in to save" hint regardless.
+	customerID := handler.currentCustomerID(r)
+	loggedIn := customerID != ""
+	inWishlist := false
+	if loggedIn && !variant.IsZero() {
+		saved, wErr := handler.wishlistSrv.Contains(r.Context(), customerID, variant.ID())
+		if wErr != nil {
+			handler.logger.WithError(wErr).Warn("cannot check wishlist state")
+		}
+		inWishlist = saved
+	}
+
+	// The variant-response fragment embeds the variant-box partial, which
+	// renders the price via {{ money .Variant.Price.Amount }}. We have to
+	// install the same currency-aware helper renderTemplate uses so the
+	// HTMX swap doesn't fail with an "undefined function: money" parse
+	// error at execute time.
+	ts := template.Must(template.New("").Funcs(template.FuncMap{
+		"dict":  templateDict,
+		"money": moneyFunc(handler.rates, handler.currentCurrency(r)),
+	}).ParseGlob("./layout/tmpl/partials/*.gohtml"))
 	if err := ts.ExecuteTemplate(w, "variant-response", map[string]any{
 		"Variant":     variant,
 		"ProductName": product.Name(),
+		"LoggedIn":    loggedIn,
+		"InWishlist":  inWishlist,
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

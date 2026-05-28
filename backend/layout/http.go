@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
@@ -46,10 +47,19 @@ type httpHandler struct {
 	checkoutSrv checkoutCommands
 	checkoutQry checkoutQueries
 	shipSrv     shippingService
+	reviewsSrv  reviewsService
+	wishlistSrv wishlistService
+	promoSrv    promoService
 	imageStore  imagestore.Store
 	mailer      mailer.Mailer
 	baseURL     string
-	logger      logrus.FieldLogger
+	// rates is the static, operator-configured FX table. It is shared
+	// across every render through the `money` template helper and is
+	// also exposed to the picker via the Currencies / Currency template
+	// variables. The conversion is purely a display transformation:
+	// orders stay priced in rates.Default() (USD).
+	rates  fx.Rates
+	logger logrus.FieldLogger
 }
 
 // HomePage renders the storefront landing page: a "new arrivals" grid of the
@@ -116,6 +126,10 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/", m.handler.HomePage)
 	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
 	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
+	// Display-only currency picker. Stores the chosen ISO code on the
+	// gorilla session; conversion happens at render time through the
+	// `money` template helper. CSRF-protected by the global middleware.
+	r.HandleFunc("/currency", observability.HTTPWrap(m.handler.HandleSetCurrency, m.logger)).Methods("POST")
 
 	r.HandleFunc("/cart", observability.HTTPWrap(m.handler.Cart, m.logger)).Methods("GET")
 	r.HandleFunc("/cart/{variantID}", observability.HTTPWrap(m.handler.AddToCart, m.logger)).Methods("POST")
@@ -124,6 +138,7 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/api/v1/products", observability.HTTPWrap(m.handler.AllProducts, m.logger))
 	r.HandleFunc("/product/{productID}", observability.HTTPWrap(m.handler.Product, m.logger)).Methods("GET")
 	r.HandleFunc("/product/{productID}/variant", observability.HTTPWrap(m.handler.ProductVariant, m.logger)).Methods("GET")
+	r.HandleFunc("/product/{productID}/review", observability.HTTPWrap(m.handler.SubmitReview, m.logger)).Methods("POST")
 
 	r.HandleFunc("/auth/login", observability.HTTPWrap(m.handler.Login, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/login", observability.HTTPWrap(m.handler.HandleLogin, m.logger)).Methods("POST")
@@ -154,6 +169,9 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/account/addresses/{id}/default", observability.HTTPWrap(m.handler.AccountSetDefaultAddress, m.logger)).Methods("POST")
 	r.HandleFunc("/account/details", observability.HTTPWrap(m.handler.AccountDetails, m.logger)).Methods("GET")
 	r.HandleFunc("/account/details/password", observability.HTTPWrap(m.handler.AccountChangePassword, m.logger)).Methods("POST")
+	r.HandleFunc("/account/wishlist", observability.HTTPWrap(m.handler.AccountWishlist, m.logger)).Methods("GET")
+
+	r.HandleFunc("/wishlist/{variantID}/toggle", observability.HTTPWrap(m.handler.WishlistToggle, m.logger)).Methods("POST")
 
 	// Admin panel. Later phases register the /admin/products, /admin/categories,
 	// /admin/attributes and /admin/orders handlers here, all behind requireAdmin.
@@ -209,6 +227,18 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/orders/{orderID}", observability.HTTPWrap(m.handler.AdminOrderDetail, m.logger)).Methods("GET")
 
 	r.HandleFunc("/admin/inventory", observability.HTTPWrap(m.handler.AdminInventory, m.logger)).Methods("GET")
+
+	r.HandleFunc("/admin/reviews", observability.HTTPWrap(m.handler.AdminReviews, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/reviews/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteReview, m.logger)).Methods("POST")
+
+	// Promo codes admin: list + inline create on /admin/promo-codes; the
+	// /{code}/edit and /{code}/delete sub-paths are registered before the
+	// /{code} catch-all so the latter doesn't shadow them.
+	r.HandleFunc("/admin/promo-codes", observability.HTTPWrap(m.handler.AdminPromoCodes, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/promo-codes", observability.HTTPWrap(m.handler.AdminCreatePromoCode, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/promo-codes/{code}/edit", observability.HTTPWrap(m.handler.AdminEditPromoCodeForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/promo-codes/{code}/delete", observability.HTTPWrap(m.handler.AdminDeletePromoCode, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/promo-codes/{code}", observability.HTTPWrap(m.handler.AdminUpdatePromoCode, m.logger)).Methods("POST")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
@@ -224,12 +254,24 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	partials, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
 	files = append(files, partials...)
 
+	// Active display currency is captured once per request and closed over
+	// by the `money` helper below; that way every {{ money .X }} call
+	// inside a single render uses the same currency without the template
+	// having to thread it through every partial.
+	currency := handler.currentCurrency(r)
+
 	var ts = template.Must(template.New("").Funcs(template.FuncMap{
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
 		},
 		"add":      func(a, b int) int { return a + b },
 		"truncate": truncateForMeta,
+		"dict":     templateDict,
+		// money converts a minor-unit amount stored in the default
+		// currency (USD) to the customer's active display currency and
+		// formats it as "X.YY CCY". The amount stays in USD inside the
+		// database; only the rendered HTML changes.
+		"money": moneyFunc(handler.rates, currency),
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
@@ -266,6 +308,12 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		navCategories = nil
 	}
 	data["NavCategories"] = navCategories
+	// Currency selection: Currency is the customer's active display
+	// currency (defaults to rates.Default()), Currencies is the list the
+	// header picker offers. Admin renders do NOT set these (they always
+	// show USD); see renderAdminTemplate.
+	data["Currency"] = currency
+	data["Currencies"] = handler.rates.Supported()
 	// SearchQuery is the value the header search input shows. It defaults to
 	// "" so every page renders the box; the search/catalog pages override it
 	// from the URL `q`.
@@ -303,12 +351,22 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	partials, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
 	files = append(files, partials...)
 
+	// The partials glob pulls in storefront partials (e.g. variant-box)
+	// that reference the `money` helper. Admin pages never invoke those
+	// partials, but html/template still needs every function mentioned
+	// in any parsed template to be registered at parse time — so we
+	// install a USD-fixed `money` here. The admin section is deliberately
+	// pinned to the storage currency: operators see the amount that will
+	// actually be charged, not a converted display value.
+	adminMoney := moneyFunc(handler.rates, handler.rates.Default())
 	var ts = template.Must(template.New("").Funcs(template.FuncMap{
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
 		},
-		"add":  func(a, b int) int { return a + b },
-		"join": func(sep string, items []string) string { return strings.Join(items, sep) },
+		"add":   func(a, b int) int { return a + b },
+		"join":  func(sep string, items []string) string { return strings.Join(items, sep) },
+		"dict":  templateDict,
+		"money": adminMoney,
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
@@ -336,6 +394,27 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 		handler.logger.WithError(err).Error("cannot execute admin template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
+}
+
+// templateDict builds a map[string]any from alternating key/value
+// arguments inside a template (`dict "VariantID" .Variant.ID ...`). This
+// lets a partial be invoked with a synthesised dot, which is how the
+// "wishlist-button" partial gets its fields when it's embedded inside the
+// variant-box (the parent dot there is the page's data map, not a flat
+// {VariantID, InWishlist, LoggedIn} triple).
+func templateDict(pairs ...any) (map[string]any, error) {
+	if len(pairs)%2 != 0 {
+		return nil, fmt.Errorf("dict: expected an even number of arguments, got %d", len(pairs))
+	}
+	out := make(map[string]any, len(pairs)/2)
+	for i := 0; i < len(pairs); i += 2 {
+		key, ok := pairs[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("dict: key %d is not a string (%T)", i, pairs[i])
+		}
+		out[key] = pairs[i+1]
+	}
+	return out, nil
 }
 
 func renderPartial(w http.ResponseWriter, r *http.Request, h http.HandlerFunc) string {

@@ -17,6 +17,12 @@
 
     <div class="product__body">
       <h1 class="product__name">{{.Product.Name}}</h1>
+      {{if gt .Aggregate.Count 0}}
+        <p class="product__rating muted">
+          rating: {{printf "%.1f" .Aggregate.Average}} / 5
+          ({{.Aggregate.Count}} review{{if ne .Aggregate.Count 1}}s{{end}})
+        </p>
+      {{end}}
       <p class="product__description">{{.Product.Description}}</p>
 
       {{if .Product.HasOptions}}
@@ -63,4 +69,52 @@
       <p class="product__hint muted">added to your cart without a page reload.</p>
     </div>
   </article>
+
+  <section id="reviews" class="product-reviews">
+    <h2 class="product-reviews__title">reviews</h2>
+
+    {{if .Reviews}}
+      <ul class="product-reviews__list">
+        {{range $r := .Reviews}}
+          <li class="product-review">
+            <p class="product-review__head">
+              <span class="product-review__rating">{{$r.Rating}} / 5</span>
+              <span class="muted"> &middot; {{$r.CreatedAt.Format "Jan 2, 2006"}}</span>
+              <span class="muted"> &middot; {{$r.CustomerID}}</span>
+            </p>
+            <p class="product-review__body">{{$r.Body}}</p>
+          </li>
+        {{end}}
+      </ul>
+    {{else}}
+      <p class="muted">no reviews yet.</p>
+    {{end}}
+
+    {{if and .LoggedIn .CanReview (not .AlreadyReviewed)}}
+      <form class="product-review__form" method="post" action="/product/{{.Product.ID}}/review">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="field">
+          <label for="review-rating">rating</label>
+          <select id="review-rating" name="rating" required>
+            <option value="5">5 — excellent</option>
+            <option value="4">4 — good</option>
+            <option value="3">3 — okay</option>
+            <option value="2">2 — poor</option>
+            <option value="1">1 — bad</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="review-body">your review</label>
+          <textarea id="review-body" name="body" rows="4" required maxlength="4000"></textarea>
+        </div>
+        <button type="submit" class="btn">submit review</button>
+      </form>
+    {{else if and .LoggedIn .AlreadyReviewed}}
+      <p class="muted">you have already reviewed this product.</p>
+    {{else if .LoggedIn}}
+      <p class="muted">only verified buyers can leave a review.</p>
+    {{else}}
+      <p class="muted"><a href="/auth/login">log in</a> to leave a review.</p>
+    {{end}}
+  </section>
 {{end}}

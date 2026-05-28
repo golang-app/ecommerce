@@ -19,9 +19,11 @@ func TestEventCodecRoundTrip_OrderPlaced(t *testing.T) {
 		Lines: []domain.Line{
 			domain.NewLine("ceramic-mug-cream", "Ceramic Mug — Cream", 2, 2400, "USD"),
 		},
-		Tax:          426,
-		ShippingCost: 0,
-		At:           at,
+		Tax:            426,
+		ShippingCost:   0,
+		DiscountCode:   "SAVE10",
+		DiscountAmount: 240,
+		At:             at,
 	}
 
 	typ, payload, err := marshalEvent(original)
@@ -61,6 +63,9 @@ func TestEventCodecRoundTrip_OrderPlaced(t *testing.T) {
 	}
 	if op.Tax != 426 || op.ShippingCost != 0 {
 		t.Errorf("tax/shipping round-trip mismatch: tax=%d shipping=%d", op.Tax, op.ShippingCost)
+	}
+	if op.DiscountCode != "SAVE10" || op.DiscountAmount != 240 {
+		t.Errorf("discount round-trip mismatch: code=%q amount=%d", op.DiscountCode, op.DiscountAmount)
 	}
 }
 

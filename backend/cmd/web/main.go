@@ -18,12 +18,16 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/bkielbasa/go-ecommerce/backend/promo"
+	"github.com/bkielbasa/go-ecommerce/backend/reviews"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
+	"github.com/bkielbasa/go-ecommerce/backend/wishlist"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
@@ -127,7 +131,21 @@ func main() {
 		FreeShippingThreshold: cfg.FreeShippingThreshold,
 	}
 	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, bus, catalogService, catalogService, pricing)
+	// Promo bounded context: owns promo_code + promo_redemption. The
+	// checkout service redeems through its narrow PromoRedeemer seam so
+	// the math stays inside checkout while the ledger lives here.
+	promoBD, promoSrv := promo.New(db)
+	checkoutSrv = checkoutSrv.WithPromoRedeemer(promoSrv)
 	shipSrv := shippinginfo.New(db)
+	// Reviews context: depends on productcatalog (via FK in storage) and on
+	// checkout's HasPurchasedProduct (wired through a tiny ACL on the
+	// reviews side). Returns both the BoundedContext envelope and the
+	// concrete service which layout consumes.
+	reviewsBD, reviewsSrv := reviews.New(db, checkoutQry)
+	// Wishlist context: owns its data wholly, depends only on
+	// productcatalog_variant through the table's FK. Returns both the
+	// BoundedContext envelope and the concrete service which layout consumes.
+	wishlistBD, wishlistSrv := wishlist.New(db)
 
 	// Mailer is the outbound-email abstraction. When SMTP_HOST is empty
 	// (the dev default), New() returns a LogMailer that writes each email
@@ -179,7 +197,13 @@ func main() {
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
+	// fxRates are static, operator-configured. They are NOT a live feed —
+	// upgrading to a real provider only requires a different implementation
+	// of fx.Rates. The conversion is purely a render transformation: orders
+	// remain stored and charged in DefaultCurrency (USD).
+	fxRates := fx.New(cfg.DefaultCurrency, cfg.SupportedCurrencies, cfg.FXRates, logger)
+
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, promoSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
 	// CSRF protection wraps every route on the application router. It must be
 	// installed after layout.New has set up the session store (which the
 	// middleware reads from) but before app.Run() begins serving.
@@ -187,6 +211,9 @@ func main() {
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)
+	app.AddBoundedContext(reviewsBD)
+	app.AddBoundedContext(wishlistBD)
+	app.AddBoundedContext(promoBD)
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock

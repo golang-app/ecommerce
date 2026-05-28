@@ -35,6 +35,14 @@
               <td colspan="3">subtotal</td>
               <td class="col-total">{{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}</td>
             </tr>
+            {{if or (gt .Order.DiscountAmount 0) .Order.DiscountCode}}
+              <tr>
+                <td colspan="3">discount{{with .Order.DiscountCode}} &middot; <code>{{.}}</code>{{end}}</td>
+                <td class="col-total">
+                  {{if gt .Order.DiscountAmount 0}}-{{.Order.DiscountDisplay}} {{.Order.TotalCurrency}}{{else}}free shipping{{end}}
+                </td>
+              </tr>
+            {{end}}
             {{if gt .Order.TaxAmount 0}}
               <tr>
                 <td colspan="3">tax</td>

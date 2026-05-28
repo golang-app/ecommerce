@@ -1,0 +1,66 @@
+{{define "main"}}
+  <h2 class="account-card__title">promo codes</h2>
+
+  {{if .Codes}}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>code</th>
+          <th>kind</th>
+          <th>value</th>
+          <th>valid from</th>
+          <th>valid until</th>
+          <th>uses</th>
+          <th>per customer</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $c := .Codes}}
+          <tr>
+            <td><code>{{$c.CodeText}}</code></td>
+            <td>{{$c.KindDisplay}}</td>
+            <td>{{$c.ValueDisplay}}</td>
+            <td>{{with $c.ValidFrom}}{{.Format "2006-01-02"}}{{else}}—{{end}}</td>
+            <td>{{with $c.ValidUntil}}{{.Format "2006-01-02"}}{{else}}—{{end}}</td>
+            <td>{{$c.UsedCount}}{{if gt $c.MaxUses 0}} / {{$c.MaxUses}}{{else}} / ∞{{end}}</td>
+            <td>{{if gt $c.PerCustomerMax 0}}{{$c.PerCustomerMax}}{{else}}∞{{end}}</td>
+            <td class="admin-table__actions">
+              <a href="/admin/promo-codes/{{$c.CodeText}}/edit">edit</a>
+              <form method="post" action="/admin/promo-codes/{{$c.CodeText}}/delete"
+                    onsubmit="return confirm('Delete this promo code? Past redemptions stay on the orders but the code cannot be re-used.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no promo codes yet.</p>
+  {{end}}
+
+  <section class="admin-form">
+    <h3 class="account-card__title">create a promo code</h3>
+    <form class="form" method="post" action="/admin/promo-codes">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field"><label for="p-code">code</label><input id="p-code" name="code" required maxlength="64" placeholder="SAVE10"></div>
+      <div class="field">
+        <label for="p-kind">kind</label>
+        <select id="p-kind" name="kind">
+          <option value="percent">percent (1..100)</option>
+          <option value="fixed">fixed amount (minor units)</option>
+          <option value="free_shipping">free shipping</option>
+        </select>
+      </div>
+      <div class="field"><label for="p-value">value</label><input id="p-value" name="value" type="number" value="0" min="0"></div>
+      <div class="field"><label for="p-ccy">currency</label><input id="p-ccy" name="currency" value="USD" maxlength="3"></div>
+      <div class="field"><label for="p-from">valid from (YYYY-MM-DD, optional)</label><input id="p-from" name="valid_from" type="date"></div>
+      <div class="field"><label for="p-until">valid until (YYYY-MM-DD, optional)</label><input id="p-until" name="valid_until" type="date"></div>
+      <div class="field"><label for="p-max">max uses (0 = unlimited)</label><input id="p-max" name="max_uses" type="number" value="0" min="0"></div>
+      <div class="field"><label for="p-percust">per-customer max (0 = unlimited)</label><input id="p-percust" name="per_customer_max" type="number" value="1" min="0"></div>
+      <button type="submit" class="btn">create promo code</button>
+    </form>
+  </section>
+{{end}}
