@@ -8,6 +8,15 @@
 
     <link rel="stylesheet" href="/static/admin.css">
     <script src="https://unpkg.com/htmx.org@1.9.5"></script>
+    <script>
+      // Mirror of the storefront layout: every HTMX request from the admin
+      // shell carries the per-session CSRF token in X-CSRF-Token so
+      // csrfMiddleware lets it through. Attached to `document` because the
+      // <body> element has not been parsed yet.
+      document.addEventListener('htmx:configRequest', function (event) {
+        event.detail.headers['X-CSRF-Token'] = {{ .CSRFToken }};
+      });
+    </script>
   </head>
   <body class="admin-body">
 

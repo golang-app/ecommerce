@@ -4,6 +4,7 @@
 
   <section class="admin-section">
     <form class="form" method="post" action="/admin/products" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <div class="field"><label for="p-id">id (slug)</label><input id="p-id" name="id" required placeholder="lowercase-with-hyphens"></div>
       <div class="field"><label for="p-name">name</label><input id="p-name" name="name" required></div>
       <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required></textarea></div>

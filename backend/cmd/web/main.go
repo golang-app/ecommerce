@@ -108,7 +108,11 @@ func main() {
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled))
+	// CSRF protection wraps every route on the application router. It must be
+	// installed after layout.New has set up the session store (which the
+	// middleware reads from) but before app.Run() begins serving.
+	app.Use(layout.CSRFMiddleware)
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)

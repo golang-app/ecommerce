@@ -12,6 +12,7 @@
     <section class="admin-section">
       <h3 class="admin-section__title">core fields</h3>
       <form class="form" method="post" action="/admin/products/{{.Product.ID}}" data-tab="details" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <div class="field"><label for="p-name">name</label><input id="p-name" name="name" value="{{.Product.Name}}" required></div>
         <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required>{{.Product.Description}}</textarea></div>
         <div class="field"><label for="p-price">price (major units, e.g. 9.00)</label><input id="p-price" name="price" value="{{.Product.Price.Display}}" required></div>
@@ -30,6 +31,7 @@
       <h3 class="admin-section__title">categories</h3>
       {{if .Categories}}
         <form class="form" method="post" action="/admin/products/{{.Product.ID}}/categories" data-tab="details">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <div class="admin-checks">
             {{range $c := .Categories}}
               <label class="admin-check"><input type="checkbox" name="category" value="{{$c.ID}}" {{if index $.Assigned $c.ID}}checked{{end}}> {{$c.Name}}</label>
@@ -54,6 +56,7 @@
               <tr>
                 <td colspan="2">
                   <form class="form form--inline" method="post" action="/admin/products/{{$.Product.ID}}/options/update" data-tab="options-variants">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <input type="hidden" name="current_name" value="{{$ot.Name}}">
                     <input name="new_name" value="{{$ot.Name}}" placeholder="name" aria-label="name" required>
                     <input name="values" value="{{join ", " $ot.Values}}" placeholder="Red, Blue" aria-label="values" required>
@@ -63,6 +66,7 @@
                 <td class="admin-table__actions">
                   <form method="post" action="/admin/products/{{$.Product.ID}}/options/delete" data-tab="options-variants"
                         onsubmit="return confirm('Delete this option type? It will be removed from every variant.');">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <input type="hidden" name="name" value="{{$ot.Name}}">
                     <button type="submit" class="linkbtn linkbtn--danger">delete</button>
                   </form>
@@ -77,6 +81,7 @@
 
       <h4 class="admin-section__subtitle">add an option type</h4>
       <form class="form" method="post" action="/admin/products/{{.Product.ID}}/options" data-tab="options-variants">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <div class="field"><label for="ot-name">name</label><input id="ot-name" name="name" required placeholder="Color"></div>
         <div class="field"><label for="ot-values">values (comma-separated)</label><input id="ot-values" name="values" required placeholder="Red, Blue"></div>
         <div class="field"><label for="ot-default">default value</label><input id="ot-default" name="default" required placeholder="Red"></div>
@@ -98,6 +103,7 @@
                 <td>{{with $v.Label $ots}}{{.}}{{else}}default{{end}}</td>
                 <td colspan="4">
                   <form class="form form--inline" method="post" action="/admin/products/{{$.Product.ID}}/variants/{{$v.ID}}" data-tab="options-variants" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                     <input name="sku" value="{{$v.SKU}}" placeholder="sku" aria-label="sku">
                     <input name="price" value="{{$v.Price.Display}}" placeholder="9.00" aria-label="price">
                     <input type="file" name="image_file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="image upload">
@@ -110,6 +116,7 @@
                   {{if not $single}}
                     <form method="post" action="/admin/products/{{$.Product.ID}}/variants/{{$v.ID}}/delete" data-tab="options-variants"
                           onsubmit="return confirm('Delete this variant?');">
+                      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                       <button type="submit" class="linkbtn linkbtn--danger">delete</button>
                     </form>
                   {{else}}
@@ -127,6 +134,7 @@
       {{if .Product.HasOptions}}
         <h4 class="admin-section__subtitle">add a variant</h4>
         <form class="form" method="post" action="/admin/products/{{.Product.ID}}/variants" data-tab="options-variants" enctype="multipart/form-data">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           {{range $ot := .Product.OptionTypes}}
             <div class="field">
               <label for="opt-{{$ot.Name}}">{{$ot.Name}}</label>
@@ -155,6 +163,7 @@
       <h3 class="admin-section__title">attribute set</h3>
       <p class="form__aside muted">the chosen set controls which attributes appear below (and in what order). Choose &ldquo;none&rdquo; to fall back to all attribute types.</p>
       <form class="form" method="post" action="/admin/products/{{.Product.ID}}/attribute-set" data-tab="attributes">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <div class="field">
           <label for="p-attribute-set">attribute set</label>
           <select id="p-attribute-set" name="attribute_set">
@@ -170,6 +179,7 @@
       <h3 class="admin-section__title">attributes</h3>
       {{if .AttrTypes}}
         <form class="form" method="post" action="/admin/products/{{.Product.ID}}/attributes" data-tab="attributes">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           {{range $t := .AttrTypes}}
             <div class="field">
               <label for="attr-{{$t.ID}}">{{$t.Name}}{{with $t.Unit}} ({{.}}){{end}}</label>

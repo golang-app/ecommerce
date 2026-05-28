@@ -38,6 +38,7 @@
       <p class="muted checkout__note">demo only — no real card is charged. enter anything in the payment fields.</p>
 
       <form class="form" method="post" action="/checkout">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <fieldset class="fieldset">
           <legend class="fieldset__legend">shipping method</legend>
           {{range .ShippingMethods}}

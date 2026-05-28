@@ -101,8 +101,13 @@ type checkoutQueries interface {
 // session cookie store from the supplied secret and Secure flag. Callers must
 // supply a non-empty sessionSecret; main.go enforces the production-vs-default
 // policy before calling here.
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure bool) application.BoundedContext {
+//
+// csrfEnabled toggles the request-level CSRF check; production always wants
+// true, and only local debugging should ever flip it to false (see
+// cmd/web/config.go CSRFEnabled for the operator-facing knob).
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
+	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
 		handler: httpHandler{
 			cartSrv:     cartSrv,

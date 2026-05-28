@@ -83,6 +83,16 @@ type MuxRegister interface {
 	MuxRegister(*mux.Router)
 }
 
+// Use registers a request-level middleware on the underlying gorilla/mux
+// router. Middlewares are applied in registration order and run for every
+// route, including the /healthyz and /readyz endpoints registered at New().
+// The /static and /uploads handlers also run through them, which is
+// harmless for the middlewares we use (CSRF only enforces unsafe methods,
+// otelmux is pure observation).
+func (app *App) Use(mw mux.MiddlewareFunc) {
+	app.router.Use(mw)
+}
+
 func (app *App) AddDependency(dep dependency.Dependency) {
 	app.deps.Add(dep)
 }

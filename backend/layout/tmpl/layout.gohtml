@@ -26,6 +26,19 @@
 
     <link rel="stylesheet" href="/static/main.css">
     <script src="https://unpkg.com/htmx.org@1.9.5"></script>
+    <script>
+      // Stamp X-CSRF-Token on every HTMX-issued request. HTMX-driven
+      // POSTs (most notably the add-to-cart button on the variant box)
+      // do not include the hidden csrf_token form field that server-
+      // rendered <form method="post"> blocks carry, so the header is
+      // the only channel they have to satisfy csrfMiddleware. Wiring
+      // this once in the base layout covers every HTMX call site.
+      // The listener is attached to `document` (which exists in <head>)
+      // because htmx events bubble — `document.body` does not exist yet.
+      document.addEventListener('htmx:configRequest', function (event) {
+        event.detail.headers['X-CSRF-Token'] = {{ .CSRFToken }};
+      });
+    </script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>

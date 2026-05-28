@@ -30,6 +30,7 @@
               <a href="/admin/products/{{$p.ID}}/edit">edit</a>
               <form method="post" action="/admin/products/{{$p.ID}}/delete"
                     onsubmit="return confirm('Delete this product? Its variants, category and attribute links will be removed.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button type="submit" class="linkbtn linkbtn--danger">delete</button>
               </form>
             </td>

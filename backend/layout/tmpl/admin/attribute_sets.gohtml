@@ -24,6 +24,7 @@
               <a href="/admin/attribute-sets/{{$s.ID}}/edit">edit</a>
               <form method="post" action="/admin/attribute-sets/{{$s.ID}}/delete"
                     onsubmit="return confirm('Delete this attribute set? Its member links will be removed.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button type="submit" class="linkbtn linkbtn--danger">delete</button>
               </form>
             </td>

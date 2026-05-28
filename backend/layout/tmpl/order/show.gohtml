@@ -87,6 +87,7 @@
       {{if .CanCancel}}
         <form method="post" action="/order/{{.Order.ID}}/cancel"
               onsubmit="return confirm('Cancel this order? Reserved stock will be released.');">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <button type="submit" class="linkbtn linkbtn--danger">cancel order</button>
         </form>
       {{end}}

@@ -3,6 +3,7 @@
   <h2 class="account-card__title">edit attribute type</h2>
 
   <form class="form" method="post" action="/admin/attributes/{{.Attribute.ID}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div class="field"><label for="a-name">name</label><input id="a-name" name="name" value="{{.Attribute.Name}}" required></div>
     <div class="field"><label for="a-unit">unit (optional)</label><input id="a-unit" name="unit" value="{{.Attribute.Unit}}"></div>
     <div class="field">

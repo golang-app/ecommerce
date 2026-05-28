@@ -88,10 +88,22 @@ type Client struct {
 }
 
 func (handler httpHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "ecommerce")
+
+	// Per-IP rate limit: 5/min. Credential stuffing is the threat model; a
+	// human re-typing the wrong password a handful of times still gets
+	// through, but a bot trying dozens of passwords from the same source
+	// gets bounced back to the login form with a flash.
+	if !loginLimiter.Allow(clientIP(r)) {
+		session.AddFlash("Too many login attempts, please try again in a moment.", "error")
+		_ = session.Save(r, w)
+		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+		return
+	}
+
 	var c Client
 	c.Username = r.FormValue("email")
 	c.Password = r.FormValue("password")
-	session, _ := store.Get(r, "ecommerce")
 
 	sess, err := handler.authSrv.Login(r.Context(), c.Username, c.Password)
 	if err != nil {
@@ -132,11 +144,23 @@ type NewClient struct {
 
 func (handler httpHandler) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	session, _ := store.Get(r, "ecommerce")
+
+	// Per-IP rate limit: 3/hour. Real account signups are infrequent; the
+	// rate is deliberately tight enough to throttle automated account
+	// creation but loose enough that a household behind one NAT can still
+	// register a couple of customers.
+	if !registerLimiter.Allow(clientIP(r)) {
+		session.AddFlash("Too many registration attempts, please try again later.", "error")
+		_ = session.Save(r, w)
+		http.Redirect(w, r, "/auth/register", http.StatusSeeOther)
+		return
+	}
+
 	var c NewClient
 
 	c.Username = r.FormValue("email")
 	c.Password = r.FormValue("password")
-	session, _ := store.Get(r, "ecommerce")
 
 	if err := handler.authSrv.CreateNewCustomer(ctx, c.Username, c.Password); err != nil {
 		var e domain.PasswordPolicyError

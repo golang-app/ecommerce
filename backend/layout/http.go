@@ -219,6 +219,21 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
+	// CSRFToken is injected into every page so:
+	//   * hidden <input name="csrf_token"> fields in <form method="post"> get a
+	//     fresh value on each render, and
+	//   * the htmx:configRequest snippet in layout.gohtml can stamp the same
+	//     value onto the X-CSRF-Token header for HTMX-driven POSTs.
+	// issueCSRFToken shares the request-scoped gorilla/sessions registry, so
+	// it mutates the same `session` pointer; the flash reads and the
+	// session.Save below therefore see the just-minted token.
+	csrfToken, err := issueCSRFToken(r, w)
+	if err != nil {
+		handler.logger.WithError(err).Error("cannot issue CSRF token")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	data["CSRFToken"] = csrfToken
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
@@ -283,10 +298,20 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
+	// Same CSRF/htmx contract as renderTemplate — the admin shell also
+	// embeds the configRequest script that stamps X-CSRF-Token on every
+	// HTMX request, and admin templates emit a hidden csrf_token input.
+	csrfToken, err := issueCSRFToken(r, w)
+	if err != nil {
+		handler.logger.WithError(err).Error("cannot issue CSRF token")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	data["CSRFToken"] = csrfToken
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["AdminEmail"] = handler.currentCustomerID(r)
-	err := session.Save(r, w)
+	err = session.Save(r, w)
 	if err != nil {
 		handler.logger.WithError(err).Error("cannot save session")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

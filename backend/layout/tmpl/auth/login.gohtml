@@ -5,6 +5,7 @@
   <h1 class="page-title">sign in</h1>
 
   <form class="form" method="post" action="/auth/login">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div class="field">
       <label for="login-email">email</label>
       <input id="login-email" type="email" name="email" autocomplete="email" required>

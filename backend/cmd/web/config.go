@@ -22,6 +22,12 @@ type config struct {
 	// plain-HTTP local/docker-compose development so the browser still accepts
 	// the cookie.
 	CookieSecure bool `conf:"default:false"`
+	// CSRFEnabled toggles the request-level CSRF check. It defaults to true
+	// — production never wants this off. The only legitimate reason to set
+	// CSRF_ENABLED=false is a short-lived local debugging session where you
+	// want to curl/wget unsafe endpoints without minting a token first; do
+	// NOT ship a deployment with this disabled.
+	CSRFEnabled bool `conf:"default:true"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep
