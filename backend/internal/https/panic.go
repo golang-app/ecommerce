@@ -4,15 +4,18 @@ import (
 	"net/http"
 	"runtime/debug"
 
-	"log"
+	"github.com/sirupsen/logrus"
 )
 
-func WrapPanic(fn http.HandlerFunc) http.HandlerFunc {
+func WrapPanic(fn http.HandlerFunc, logger logrus.FieldLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
-			if r := recover(); r != nil {
+			if rec := recover(); rec != nil {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-				log.Printf("Panic: %v\nStack trace: %+v", r, string(debug.Stack()))
+				logger.WithFields(logrus.Fields{
+					"panic": rec,
+					"stack": string(debug.Stack()),
+				}).Error("panic recovered in HTTP handler")
 			}
 		}()
 

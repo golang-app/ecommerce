@@ -1,10 +1,13 @@
+{{define "title"}}{{$name := ""}}{{range .Categories}}{{if eq .Slug $.ActiveCategory}}{{$name = .Name}}{{end}}{{end}}{{if .Search}}Search &#34;{{.Search}}&#34; · {{.SiteName}}{{else if $name}}{{$name}} · {{.SiteName}}{{else}}Shop · {{.SiteName}}{{end}}{{end}}
+{{define "description"}}{{$name := ""}}{{range .Categories}}{{if eq .Slug $.ActiveCategory}}{{$name = .Name}}{{end}}{{end}}{{if .Search}}Search results for &#34;{{.Search}}&#34; in our store.{{else if $name}}Browse {{$name}} products from our store.{{else}}Browse every product in our store.{{end}}{{end}}
+
 {{define "main"}}
-  <h1 class="page-title">shop</h1>
+  <h1 class="page-title">{{if .Search}}search: {{.Search}}{{else}}shop{{end}}</h1>
 
   <div class="catalog">
     <aside class="filter-rail">
       <nav class="category-nav">
-        <a class="category-nav__link{{if eq .ActiveCategory ""}} is-active{{end}}" href="/products">all</a>
+        <a class="category-nav__link{{if and (eq .ActiveCategory "") (not .Search)}} is-active{{end}}" href="/products">all</a>
         {{range .Categories}}
           <a class="category-nav__link{{if eq $.ActiveCategory .Slug}} is-active{{end}}"
              href="/category/{{.Slug}}">{{.Name}}</a>
@@ -18,6 +21,7 @@
               hx-trigger="submit, change delay:300ms"
               hx-push-url="false">
           <input type="hidden" name="category" value="{{.ActiveCategory}}">
+          <input type="hidden" name="q" value="{{.Search}}">
 
           {{range .Facets}}
             <div class="facet">
@@ -48,14 +52,14 @@
 
           <div class="filter-form__actions">
             <button type="submit" class="btn btn--block">apply</button>
-            <a class="filter-form__clear" href="{{if .ActiveCategory}}/category/{{.ActiveCategory}}{{else}}/products{{end}}">clear</a>
+            <a class="filter-form__clear" href="{{if .Search}}/search?q={{.Search}}{{else if .ActiveCategory}}/category/{{.ActiveCategory}}{{else}}/products{{end}}">clear</a>
           </div>
         </form>
       {{end}}
     </aside>
 
     <div id="product-grid" class="catalog__grid"
-         hx-get="/api/v1/products?category={{.ActiveCategory}}"
+         hx-get="/api/v1/products?category={{.ActiveCategory}}&q={{.Search}}"
          hx-trigger="load"
          hx-swap="innerHTML">
       <p class="muted"><span class="loading"></span> loading&hellip;</p>

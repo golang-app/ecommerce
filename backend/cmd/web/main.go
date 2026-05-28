@@ -18,6 +18,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
@@ -93,7 +94,9 @@ func main() {
 
 	app.AddBoundedContext(cartBD)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv))
+	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
+
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir))
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)

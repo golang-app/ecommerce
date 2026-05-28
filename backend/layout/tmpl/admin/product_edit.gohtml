@@ -11,12 +11,17 @@
   <div class="admin-tab" id="tab-details" data-tab="details" role="tabpanel">
     <section class="admin-section">
       <h3 class="admin-section__title">core fields</h3>
-      <form class="form" method="post" action="/admin/products/{{.Product.ID}}" data-tab="details">
+      <form class="form" method="post" action="/admin/products/{{.Product.ID}}" data-tab="details" enctype="multipart/form-data">
         <div class="field"><label for="p-name">name</label><input id="p-name" name="name" value="{{.Product.Name}}" required></div>
         <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required>{{.Product.Description}}</textarea></div>
         <div class="field"><label for="p-price">price (major units, e.g. 9.00)</label><input id="p-price" name="price" value="{{.Product.Price.Display}}" required></div>
         <div class="field"><label for="p-currency">currency</label><input id="p-currency" name="currency" value="{{.Product.Price.Currency}}"></div>
-        <div class="field"><label for="p-thumbnail">thumbnail URL</label><input id="p-thumbnail" name="thumbnail" value="{{.Product.Thumbnail}}"></div>
+        <div class="field">
+          <label for="p-thumbnail-file">thumbnail</label>
+          <input id="p-thumbnail-file" type="file" name="thumbnail_file" accept="image/jpeg,image/png,image/webp,image/gif">
+          <input id="p-thumbnail" name="thumbnail" value="{{.Product.Thumbnail}}" placeholder="or paste a URL">
+          <p class="form__aside muted">Upload a new image to replace the current one, or paste a URL. If both are provided, the upload wins.</p>
+        </div>
         <button type="submit" class="btn">save core fields</button>
       </form>
     </section>
@@ -92,10 +97,11 @@
               <tr>
                 <td>{{with $v.Label $ots}}{{.}}{{else}}default{{end}}</td>
                 <td colspan="4">
-                  <form class="form form--inline" method="post" action="/admin/products/{{$.Product.ID}}/variants/{{$v.ID}}" data-tab="options-variants">
+                  <form class="form form--inline" method="post" action="/admin/products/{{$.Product.ID}}/variants/{{$v.ID}}" data-tab="options-variants" enctype="multipart/form-data">
                     <input name="sku" value="{{$v.SKU}}" placeholder="sku" aria-label="sku">
                     <input name="price" value="{{$v.Price.Display}}" placeholder="9.00" aria-label="price">
-                    <input name="image" value="{{$v.Image}}" placeholder="image URL" aria-label="image">
+                    <input type="file" name="image_file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="image upload">
+                    <input name="image" value="{{$v.Image}}" placeholder="or image URL" aria-label="image URL">
                     <input name="stock" type="number" min="0" value="{{$v.Stock}}" aria-label="stock">
                     <button type="submit" class="btn btn--small">save</button>
                   </form>
@@ -120,7 +126,7 @@
 
       {{if .Product.HasOptions}}
         <h4 class="admin-section__subtitle">add a variant</h4>
-        <form class="form" method="post" action="/admin/products/{{.Product.ID}}/variants" data-tab="options-variants">
+        <form class="form" method="post" action="/admin/products/{{.Product.ID}}/variants" data-tab="options-variants" enctype="multipart/form-data">
           {{range $ot := .Product.OptionTypes}}
             <div class="field">
               <label for="opt-{{$ot.Name}}">{{$ot.Name}}</label>
@@ -132,7 +138,12 @@
           <div class="field"><label for="nv-sku">sku</label><input id="nv-sku" name="sku"></div>
           <div class="field"><label for="nv-price">price (major units, e.g. 9.00)</label><input id="nv-price" name="price" required placeholder="9.00"></div>
           <div class="field"><label for="nv-stock">stock</label><input id="nv-stock" name="stock" type="number" min="0" value="0"></div>
-          <div class="field"><label for="nv-image">image URL</label><input id="nv-image" name="image"></div>
+          <div class="field">
+            <label for="nv-image-file">image</label>
+            <input id="nv-image-file" type="file" name="image_file" accept="image/jpeg,image/png,image/webp,image/gif">
+            <input id="nv-image" name="image" placeholder="or paste a URL">
+            <p class="form__aside muted">Upload an image, or paste a URL. If both are provided, the upload wins.</p>
+          </div>
           <button type="submit" class="btn">add variant</button>
         </form>
       {{end}}

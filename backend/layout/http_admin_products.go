@@ -3,6 +3,7 @@ package layout
 import (
 	"errors"
 	"math"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -10,6 +11,42 @@ import (
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/gorilla/mux"
 )
+
+// maxMultipartSize caps multipart form parsing. The biggest payload is one
+// image (5 MiB, enforced again inside the image store) plus the other text
+// fields, so we give a small headroom for those.
+const maxMultipartSize int64 = 6 << 20
+
+// resolveImage prefers an uploaded file over a typed-in URL: if the form has a
+// file at fileField, it is saved through the image store and the resulting
+// public URL is returned. Otherwise the trimmed value of urlField is returned.
+// Returns ("", nil) when neither is provided.
+func (handler httpHandler) resolveImage(r *http.Request, fileField, urlField string) (string, error) {
+	f, fh, err := r.FormFile(fileField)
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			return strings.TrimSpace(r.FormValue(urlField)), nil
+		}
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	return handler.imageStore.Save(r.Context(), fh.Filename, fh.Header.Get("Content-Type"), f)
+}
+
+// resolveImageFromHeader is the parallel-array variant of resolveImage used by
+// the variant-create form. Caller passes the FileHeader (or nil) and the
+// fallback URL string. A nil header returns the trimmed URL.
+func (handler httpHandler) resolveImageFromHeader(r *http.Request, fh *multipart.FileHeader, urlValue string) (string, error) {
+	if fh == nil {
+		return strings.TrimSpace(urlValue), nil
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	return handler.imageStore.Save(r.Context(), fh.Filename, fh.Header.Get("Content-Type"), f)
+}
 
 // parsePriceMinorUnits parses a decimal major-units price string (e.g. "9.00"
 // or "9.5") into integer minor units (cents). It rejects negative or malformed
@@ -70,7 +107,7 @@ func (handler httpHandler) AdminCreateProduct(w http.ResponseWriter, r *http.Req
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
 	}
-	_ = r.ParseForm()
+	_ = r.ParseMultipartForm(maxMultipartSize)
 	id := strings.TrimSpace(r.FormValue("id"))
 	currency := strings.TrimSpace(r.FormValue("currency"))
 	if currency == "" {
@@ -82,7 +119,13 @@ func (handler httpHandler) AdminCreateProduct(w http.ResponseWriter, r *http.Req
 		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
 		return
 	}
-	err = handler.catalogSrv.Add(r.Context(), id, r.FormValue("name"), r.FormValue("description"), price, currency, r.FormValue("thumbnail"))
+	thumbnail, err := handler.resolveImage(r, "thumbnail_file", "thumbnail")
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
+		return
+	}
+	err = handler.catalogSrv.Add(r.Context(), id, r.FormValue("name"), r.FormValue("description"), price, currency, thumbnail)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
@@ -171,7 +214,7 @@ func (handler httpHandler) AdminUpdateProduct(w http.ResponseWriter, r *http.Req
 		return
 	}
 	id := mux.Vars(r)["id"]
-	_ = r.ParseForm()
+	_ = r.ParseMultipartForm(maxMultipartSize)
 	currency := strings.TrimSpace(r.FormValue("currency"))
 	if currency == "" {
 		currency = "USD"
@@ -182,7 +225,13 @@ func (handler httpHandler) AdminUpdateProduct(w http.ResponseWriter, r *http.Req
 		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
 		return
 	}
-	err = handler.catalogSrv.UpdateProduct(r.Context(), id, r.FormValue("name"), r.FormValue("description"), price, currency, r.FormValue("thumbnail"))
+	thumbnail, err := handler.resolveImage(r, "thumbnail_file", "thumbnail")
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+		return
+	}
+	err = handler.catalogSrv.UpdateProduct(r.Context(), id, r.FormValue("name"), r.FormValue("description"), price, currency, thumbnail)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 	} else {
@@ -352,7 +401,7 @@ func (handler httpHandler) AdminCreateVariantProduct(w http.ResponseWriter, r *h
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
 	}
-	_ = r.ParseForm()
+	_ = r.ParseMultipartForm(maxMultipartSize)
 	id := strings.TrimSpace(r.FormValue("id"))
 	currency := strings.TrimSpace(r.FormValue("currency"))
 	if currency == "" {
@@ -397,15 +446,30 @@ func (handler httpHandler) AdminCreateVariantProduct(w http.ResponseWriter, r *h
 	vStocks := r.Form["v_stock[]"]
 	vImages := r.Form["v_image[]"]
 	vOptions := r.Form["v_options[]"]
+	// Parallel uploaded files (may be nil if there is no multipart form).
+	var vImageFiles []*multipart.FileHeader
+	if r.MultipartForm != nil {
+		vImageFiles = r.MultipartForm.File["v_image_file[]"]
+	}
 	var variants []pcapp.VariantInput
 	for i := range vPrices {
 		sku := ""
 		if i < len(vSKUs) {
 			sku = strings.TrimSpace(vSKUs[i])
 		}
-		image := ""
+		urlImage := ""
 		if i < len(vImages) {
-			image = strings.TrimSpace(vImages[i])
+			urlImage = vImages[i]
+		}
+		var fh *multipart.FileHeader
+		if i < len(vImageFiles) {
+			fh = vImageFiles[i]
+		}
+		image, imgErr := handler.resolveImageFromHeader(r, fh, urlImage)
+		if imgErr != nil {
+			handler.flash(w, r, imgErr.Error(), "error")
+			http.Redirect(w, r, back, http.StatusSeeOther)
+			return
 		}
 		optsRaw := ""
 		if i < len(vOptions) {
@@ -461,7 +525,13 @@ func (handler httpHandler) AdminCreateVariantProduct(w http.ResponseWriter, r *h
 		return
 	}
 
-	err := handler.catalogSrv.AddVariantProduct(r.Context(), id, r.FormValue("name"), r.FormValue("description"), currency, r.FormValue("thumbnail"), optionTypes, variants)
+	thumbnail, err := handler.resolveImage(r, "thumbnail_file", "thumbnail")
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+		http.Redirect(w, r, back, http.StatusSeeOther)
+		return
+	}
+	err = handler.catalogSrv.AddVariantProduct(r.Context(), id, r.FormValue("name"), r.FormValue("description"), currency, thumbnail, optionTypes, variants)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 		http.Redirect(w, r, back, http.StatusSeeOther)
@@ -511,7 +581,7 @@ func (handler httpHandler) AdminAddVariant(w http.ResponseWriter, r *http.Reques
 		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
 		return
 	}
-	_ = r.ParseForm()
+	_ = r.ParseMultipartForm(maxMultipartSize)
 	options := map[string]string{}
 	for _, ot := range product.OptionTypes() {
 		options[ot.Name()] = strings.TrimSpace(r.FormValue("opt_" + ot.Name()))
@@ -536,7 +606,13 @@ func (handler httpHandler) AdminAddVariant(w http.ResponseWriter, r *http.Reques
 		}
 		stock = s
 	}
-	err = handler.catalogSrv.AddVariantToProduct(r.Context(), id, r.FormValue("sku"), r.FormValue("image"), price, currency, stock, options)
+	image, err := handler.resolveImage(r, "image_file", "image")
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+		return
+	}
+	err = handler.catalogSrv.AddVariantToProduct(r.Context(), id, r.FormValue("sku"), image, price, currency, stock, options)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 	} else {
@@ -558,7 +634,7 @@ func (handler httpHandler) AdminUpdateVariant(w http.ResponseWriter, r *http.Req
 		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
 		return
 	}
-	_ = r.ParseForm()
+	_ = r.ParseMultipartForm(maxMultipartSize)
 	currency := strings.TrimSpace(r.FormValue("currency"))
 	if currency == "" {
 		currency = product.Price().Currency().String()
@@ -579,7 +655,13 @@ func (handler httpHandler) AdminUpdateVariant(w http.ResponseWriter, r *http.Req
 		}
 		stock = s
 	}
-	err = handler.catalogSrv.UpdateVariant(r.Context(), variantID, r.FormValue("sku"), r.FormValue("image"), price, currency, stock)
+	image, err := handler.resolveImage(r, "image_file", "image")
+	if err != nil {
+		handler.flash(w, r, err.Error(), "error")
+		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+		return
+	}
+	err = handler.catalogSrv.UpdateVariant(r.Context(), variantID, r.FormValue("sku"), image, price, currency, stock)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 	} else {

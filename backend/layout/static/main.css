@@ -2,7 +2,7 @@
 :root {
   --bg:        #FAFAF7;
   --fg:        #111;
-  --fg-muted:  #6B6B66;
+  --fg-muted:  #5F5F5A;
   --rule:      #E5E3DC;
   --accent:    #2B2B2B;
   --danger:    #8B2C2C;
@@ -124,6 +124,51 @@ main {
 }
 .nav a:hover { color: var(--fg); }
 .nav .cart-link__count { color: var(--fg); }
+
+/* ---------- header: search ---------- */
+.site-search {
+  flex: 1 1 14rem;
+  max-width: 22rem;
+  margin: 0;
+}
+.site-search input[type="search"] {
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  font: inherit;
+  color: var(--fg);
+  padding: var(--space-1) 0;
+  outline: none;
+  letter-spacing: .01em;
+}
+.site-search input[type="search"]::placeholder {
+  color: var(--fg-muted);
+  font-style: italic;
+}
+.site-search input[type="search"]:focus,
+.site-search input[type="search"]:focus-visible {
+  border-bottom-color: var(--fg);
+  outline: 0;
+}
+
+/* ---------- accessibility: visually-hidden ---------- */
+/*
+  Off-screen but still announced by screen readers. Use for labels that the
+  visual design omits (e.g. the search input next to a brand mark).
+*/
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
 
 /* ---------- footer ---------- */
 .site-footer {
@@ -797,3 +842,55 @@ main {
 /* ---------- utility ---------- */
 .muted { color: var(--fg-muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+/* ---------- accessibility: skip link ---------- */
+/*
+  Hidden off-screen by default; revealed when it receives keyboard focus so
+  keyboard-only / screen-reader users can bypass the header nav and jump
+  straight to the page content (#main).
+*/
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: var(--space-1) var(--space-2);
+  background: var(--accent);
+  color: var(--bg);
+  border: 0;
+  z-index: 1000;
+  transform: translateY(-150%);
+  transition: transform .15s ease;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- accessibility: focus-visible ---------- */
+/*
+  Consistent, high-contrast focus ring on all interactive elements. We hide
+  the default outline only when the element is NOT keyboard-focused so mouse
+  clicks don't leave a lingering ring.
+*/
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.btn:focus-visible,
+.linkbtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Static field label that mirrors .field label styling but is not a real
+   <label for=…>. Used where we render a read-only value below it. */
+.field__static-label {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  text-transform: lowercase;
+  letter-spacing: .04em;
+  margin: 0;
+}

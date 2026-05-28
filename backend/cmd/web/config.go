@@ -6,6 +6,10 @@ type config struct {
 	ServerPort int `conf:"default:8080,SERVER_PORT"`
 	Postgres   postgresConfig
 	Env        string `conf:"default:dev"`
+	// UploadsDir is the host-side directory the disk image store writes to.
+	// It is also the directory the /uploads/* HTTP route serves from. The
+	// container default lines up with the docker-compose bind mount.
+	UploadsDir string `conf:"default:/uploads"`
 }
 
 type postgresConfig struct {

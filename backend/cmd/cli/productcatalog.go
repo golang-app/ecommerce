@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -76,12 +76,12 @@ Product with variants (each variant priced independently):
 
 	cmd.Flags().StringVarP(&id, "id", "", "", "product id")
 	if err := cmd.MarkFlagRequired("id"); err != nil {
-		log.Print(err)
+		logrus.WithError(err).Error("cannot mark --id flag as required")
 	}
 
 	cmd.Flags().StringVarP(&name, "name", "n", "", "product name")
 	if err := cmd.MarkFlagRequired("name"); err != nil {
-		log.Print(err)
+		logrus.WithError(err).Error("cannot mark --name flag as required")
 	}
 
 	cmd.Flags().Int64VarP(&price, "price", "", 0, "product price in minor units (e.g. cents) — for a simple product")

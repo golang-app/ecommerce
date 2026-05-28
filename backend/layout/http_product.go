@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
@@ -22,17 +22,19 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 	category := q.Get("category")
+	search := strings.TrimSpace(q.Get("q"))
 
 	query := pcapp.ProductQuery{
 		CategorySlug:   category,
 		NumericRanges:  map[string]pcapp.Range{},
 		EnumSelections: map[string][]string{},
+		Search:         search,
 	}
 
 	// Use the facets for this scope to know which params are numeric vs enum.
 	facets, err := handler.catalogSrv.Facets(ctx, category)
 	if err != nil {
-		log.Printf("cannot get facets for %q: %s", category, err)
+		handler.logger.WithError(err).WithField("category", category).Warn("cannot get facets")
 		facets = nil
 	}
 
@@ -70,12 +72,13 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 	products, err := handler.catalogSrv.List(ctx, query)
 	if err != nil {
 		https.InternalError(w, "internal-error", "cannot get list of all products")
-		log.Printf("cannot get list of all products: %s", err)
+		handler.logger.WithError(err).Error("cannot get list of all products")
 		return
 	}
 
 	resp := map[string]any{
 		"Products": products,
+		"Search":   search,
 	}
 
 	files := []string{

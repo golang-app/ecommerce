@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -43,6 +44,8 @@ type httpHandler struct {
 	checkoutSrv checkoutCommands
 	checkoutQry checkoutQueries
 	shipSrv     shippingService
+	imageStore  imagestore.Store
+	logger      logrus.FieldLogger
 }
 
 // HomePage renders the storefront landing page: a "new arrivals" grid of the
@@ -50,7 +53,7 @@ type httpHandler struct {
 func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
 	newest, err := handler.catalogSrv.Newest(r.Context(), 8)
 	if err != nil {
-		log.Printf("cannot get newest products: %s", err)
+		handler.logger.WithError(err).Warn("cannot get newest products")
 		newest = nil
 	}
 	handler.renderTemplate(w, r, "home", map[string]any{
@@ -77,13 +80,13 @@ func (handler httpHandler) CategoryPage(w http.ResponseWriter, r *http.Request) 
 func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Request, activeCategory string) {
 	categories, err := handler.catalogSrv.Categories(r.Context())
 	if err != nil {
-		log.Printf("cannot get categories: %s", err)
+		handler.logger.WithError(err).Warn("cannot get categories")
 		categories = nil
 	}
 
 	facets, err := handler.catalogSrv.Facets(r.Context(), activeCategory)
 	if err != nil {
-		log.Printf("cannot get facets for %q: %s", activeCategory, err)
+		handler.logger.WithError(err).WithField("category", activeCategory).Warn("cannot get facets")
 		facets = nil
 	}
 
@@ -91,11 +94,21 @@ func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Req
 		"Categories":     categories,
 		"Facets":         facets,
 		"ActiveCategory": activeCategory,
+		"Search":         "",
 	})
 }
 
 func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.PathPrefix("/static/").Handler(StaticHandler())
+	// User-uploaded images live on disk (see internal/imagestore) and are
+	// served from m.uploadsDir under the /uploads/ URL prefix.
+	r.PathPrefix("/uploads/").Handler(imagestore.Serve(m.uploadsDir))
+	// SEO endpoints. Registered before the "/" catch-all so they are not
+	// shadowed by the home page route. Both are public (no admin gate).
+	r.HandleFunc("/robots.txt", observability.HTTPWrap(m.handler.Robots, m.logger)).Methods("GET")
+	r.HandleFunc("/sitemap.xml", observability.HTTPWrap(m.handler.Sitemap, m.logger)).Methods("GET")
+	// Public search page. Registered before the "/" catch-all.
+	r.HandleFunc("/search", observability.HTTPWrap(m.handler.SearchPage, m.logger)).Methods("GET")
 	r.HandleFunc("/", m.handler.HomePage)
 	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
 	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
@@ -198,7 +211,8 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
 		},
-		"add": func(a, b int) int { return a + b },
+		"add":      func(a, b int) int { return a + b },
+		"truncate": truncateForMeta,
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
@@ -207,22 +221,34 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
 	data["LoggedIn"] = handler.currentCustomerID(r) != ""
 	data["IsAdmin"] = handler.isAdmin(r)
+	// SEO helpers consumed by the base template's title/og/canonical blocks.
+	// SiteName is the brand suffix in <title> ("Foo · GoCommerce"); CanonicalURL
+	// is the absolute URL for the current request (scheme + host + path), used
+	// for <link rel=canonical> and og:url.
+	data["SiteName"] = "GoCommerce"
+	data["CanonicalURL"] = requestBaseURL(r) + r.URL.Path
 	// NavCategories lets the storefront header list category links on every page.
 	navCategories, err := handler.catalogSrv.Categories(r.Context())
 	if err != nil {
-		log.Printf("cannot get nav categories: %s", err)
+		handler.logger.WithError(err).Warn("cannot get nav categories")
 		navCategories = nil
 	}
 	data["NavCategories"] = navCategories
+	// SearchQuery is the value the header search input shows. It defaults to
+	// "" so every page renders the box; the search/catalog pages override it
+	// from the URL `q`.
+	if _, ok := data["SearchQuery"]; !ok {
+		data["SearchQuery"] = ""
+	}
 	err = session.Save(r, w)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot save session")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 
 	err = ts.ExecuteTemplate(w, "base", data)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot execute template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -259,13 +285,13 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	data["AdminEmail"] = handler.currentCustomerID(r)
 	err := session.Save(r, w)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot save session")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 
 	err = ts.ExecuteTemplate(w, "adminbase", data)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot execute admin template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }

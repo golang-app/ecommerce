@@ -4,7 +4,21 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Ecommerce</title>
+
+    {{/*
+      Per-page SEO blocks. Each page template can {{define "title"}}…{{end}} to
+      override the storefront default. The og:* blocks fall back to the title
+      and description so a page only has to set one place.
+    */}}
+    <title>{{block "title" .}}{{.SiteName}}{{end}}</title>
+    <meta name="description" content="{{block "description" .}}A small Go + HTMX e-commerce demo store.{{end}}">
+    <link rel="canonical" href="{{block "canonical" .}}{{.CanonicalURL}}{{end}}">
+    <meta property="og:site_name" content="{{.SiteName}}">
+    <meta property="og:title" content="{{block "ogtitle" .}}{{template "title" .}}{{end}}">
+    <meta property="og:type" content="{{block "ogtype" .}}website{{end}}">
+    <meta property="og:url" content="{{block "ogurl" .}}{{template "canonical" .}}{{end}}">
+    <meta property="og:description" content="{{block "ogdescription" .}}{{template "description" .}}{{end}}">
+    <meta property="og:image" content="{{block "ogimage" .}}{{end}}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,18 +28,30 @@
     <script src="https://unpkg.com/htmx.org@1.9.5"></script>
   </head>
   <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
 
     <header class="site-header">
       <div class="shell site-header__inner">
         <a href="/" class="brand">Ecommerce</a>
-        <nav>
+        <form class="site-search" role="search" action="/search" method="get">
+          <label class="visually-hidden" for="site-search-q">Search</label>
+          <input id="site-search-q" type="search" name="q"
+                 placeholder="Search&hellip;"
+                 value="{{.SearchQuery}}"
+                 hx-get="/api/v1/products"
+                 hx-trigger="keyup changed delay:300ms"
+                 hx-target="#product-grid"
+                 hx-swap="innerHTML"
+                 hx-include="[name=category]">
+        </form>
+        <nav aria-label="Primary">
           <ul class="nav">
             <li><a href="/products">shop</a></li>
             {{range .NavCategories}}
               <li><a href="/category/{{.Slug}}">{{.Name}}</a></li>
             {{end}}
             <li>
-              <a href="/cart" class="cart-link">cart
+              <a href="/cart" class="cart-link" aria-label="Cart">cart
                 <span id="cartBudge"
                       hx-get="/cart/budge"
                       hx-trigger="load, cartBudge from:body"
@@ -45,7 +71,7 @@
       </div>
     </header>
 
-    <main>
+    <main id="main">
       <div class="shell">
         {{ range .FlashInfo }}
           <p class="flash flash--info">{{ . }}</p>

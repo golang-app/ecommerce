@@ -15,5 +15,9 @@
     {{end}}
   </div>
 {{else}}
-  <p class="muted">no products match these filters.</p>
+  {{if .Search}}
+    <p class="muted">no products match &ldquo;{{.Search}}&rdquo;.</p>
+  {{else}}
+    <p class="muted">no products match.</p>
+  {{end}}
 {{end}}
