@@ -15,6 +15,7 @@ import (
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
+	wishlistDomain "github.com/bkielbasa/go-ecommerce/backend/wishlist/domain"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,6 +23,7 @@ type catalogService interface {
 	AllProducts(ctx context.Context) ([]pcdomain.Product, error)
 	Newest(ctx context.Context, limit int) ([]pcdomain.Product, error)
 	Find(ctx context.Context, id string) (pcdomain.Product, error)
+	FindVariant(ctx context.Context, variantID string) (pcdomain.Product, pcdomain.Variant, error)
 	List(ctx context.Context, q pcapp.ProductQuery) ([]pcdomain.Product, error)
 	Categories(ctx context.Context) ([]pcdomain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]pcapp.Facet, error)
@@ -110,6 +112,17 @@ type reviewsService interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// wishlistService is the narrow seam the layout package needs from the
+// wishlist bounded context. Toggle drives the product-page heart button
+// (returns the new state for the htmx outerHTML swap); ListByCustomer
+// powers /account/wishlist; Contains decides which of the two button
+// states (filled vs outline heart) to render on the product page.
+type wishlistService interface {
+	Toggle(ctx context.Context, customerID, variantID string) (bool, error)
+	ListByCustomer(ctx context.Context, customerID string) ([]wishlistDomain.Item, error)
+	Contains(ctx context.Context, customerID, variantID string) (bool, error)
+}
+
 // checkoutQueries is the read side of the checkout context (CQRS); it returns
 // dedicated read models, not the write aggregate.
 type checkoutQueries interface {
@@ -129,7 +142,7 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -141,6 +154,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			checkoutQry: checkoutQry,
 			shipSrv:     shipSrv,
 			reviewsSrv:  reviewsSrv,
+			wishlistSrv: wishlistSrv,
 			imageStore:  imageStore,
 			mailer:      mailerSrv,
 			baseURL:     baseURL,

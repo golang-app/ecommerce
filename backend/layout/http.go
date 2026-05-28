@@ -47,6 +47,7 @@ type httpHandler struct {
 	checkoutQry checkoutQueries
 	shipSrv     shippingService
 	reviewsSrv  reviewsService
+	wishlistSrv wishlistService
 	imageStore  imagestore.Store
 	mailer      mailer.Mailer
 	baseURL     string
@@ -156,6 +157,9 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/account/addresses/{id}/default", observability.HTTPWrap(m.handler.AccountSetDefaultAddress, m.logger)).Methods("POST")
 	r.HandleFunc("/account/details", observability.HTTPWrap(m.handler.AccountDetails, m.logger)).Methods("GET")
 	r.HandleFunc("/account/details/password", observability.HTTPWrap(m.handler.AccountChangePassword, m.logger)).Methods("POST")
+	r.HandleFunc("/account/wishlist", observability.HTTPWrap(m.handler.AccountWishlist, m.logger)).Methods("GET")
+
+	r.HandleFunc("/wishlist/{variantID}/toggle", observability.HTTPWrap(m.handler.WishlistToggle, m.logger)).Methods("POST")
 
 	// Admin panel. Later phases register the /admin/products, /admin/categories,
 	// /admin/attributes and /admin/orders handlers here, all behind requireAdmin.
@@ -235,6 +239,7 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		},
 		"add":      func(a, b int) int { return a + b },
 		"truncate": truncateForMeta,
+		"dict":     templateDict,
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
@@ -314,6 +319,7 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 		},
 		"add":  func(a, b int) int { return a + b },
 		"join": func(sep string, items []string) string { return strings.Join(items, sep) },
+		"dict": templateDict,
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
@@ -341,6 +347,27 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 		handler.logger.WithError(err).Error("cannot execute admin template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
+}
+
+// templateDict builds a map[string]any from alternating key/value
+// arguments inside a template (`dict "VariantID" .Variant.ID ...`). This
+// lets a partial be invoked with a synthesised dot, which is how the
+// "wishlist-button" partial gets its fields when it's embedded inside the
+// variant-box (the parent dot there is the page's data map, not a flat
+// {VariantID, InWishlist, LoggedIn} triple).
+func templateDict(pairs ...any) (map[string]any, error) {
+	if len(pairs)%2 != 0 {
+		return nil, fmt.Errorf("dict: expected an even number of arguments, got %d", len(pairs))
+	}
+	out := make(map[string]any, len(pairs)/2)
+	for i := 0; i < len(pairs); i += 2 {
+		key, ok := pairs[i].(string)
+		if !ok {
+			return nil, fmt.Errorf("dict: key %d is not a string (%T)", i, pairs[i])
+		}
+		out[key] = pairs[i+1]
+	}
+	return out, nil
 }
 
 func renderPartial(w http.ResponseWriter, r *http.Request, h http.HandlerFunc) string {

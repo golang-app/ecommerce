@@ -173,6 +173,18 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Wishlist state for the currently-resolved variant drives the
+	// heart-button render. Anonymous visitors see the "log in to save"
+	// hint regardless of state, so we skip the lookup for them.
+	inWishlist := false
+	if customerID != "" && !variant.IsZero() {
+		saved, wErr := handler.wishlistSrv.Contains(r.Context(), customerID, variant.ID())
+		if wErr != nil {
+			handler.logger.WithError(wErr).Warn("cannot check wishlist state")
+		}
+		inWishlist = saved
+	}
+
 	handler.renderTemplate(w, r, "productCatalog/show", map[string]any{
 		"Product":         product,
 		"Variant":         variant,
@@ -180,6 +192,7 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		"Aggregate":       aggregate,
 		"CanReview":       canReview,
 		"AlreadyReviewed": alreadyReviewed,
+		"InWishlist":      inWishlist,
 	})
 }
 
@@ -200,10 +213,29 @@ func (handler httpHandler) ProductVariant(w http.ResponseWriter, r *http.Request
 	}
 	variant, _ := product.ResolveVariant(selected)
 
-	ts := template.Must(template.New("").ParseGlob("./layout/tmpl/partials/*.gohtml"))
+	// Re-check wishlist state for the newly-resolved variant so the heart
+	// button inside the variant-box partial reflects the per-variant
+	// bookmark. Anonymous browsers skip the lookup — they render the
+	// "log in to save" hint regardless.
+	customerID := handler.currentCustomerID(r)
+	loggedIn := customerID != ""
+	inWishlist := false
+	if loggedIn && !variant.IsZero() {
+		saved, wErr := handler.wishlistSrv.Contains(r.Context(), customerID, variant.ID())
+		if wErr != nil {
+			handler.logger.WithError(wErr).Warn("cannot check wishlist state")
+		}
+		inWishlist = saved
+	}
+
+	ts := template.Must(template.New("").Funcs(template.FuncMap{
+		"dict": templateDict,
+	}).ParseGlob("./layout/tmpl/partials/*.gohtml"))
 	if err := ts.ExecuteTemplate(w, "variant-response", map[string]any{
 		"Variant":     variant,
 		"ProductName": product.Name(),
+		"LoggedIn":    loggedIn,
+		"InWishlist":  inWishlist,
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

@@ -19,6 +19,13 @@
     {{else}}
       <p class="stock stock--out">out of stock</p>
     {{end}}
+    {{- /* The wishlist toggle lives inside variant-box so it follows the
+           currently-selected variant: each time the variant selects fire,
+           the variant-response partial re-renders this whole box and the
+           heart reflects the new variant's saved state. We synthesise the
+           partial's dot via dict so the partial's keys (VariantID /
+           InWishlist / LoggedIn) come from the variant + parent context. */ -}}
+    {{template "wishlist-button" (dict "VariantID" .Variant.ID "InWishlist" .InWishlist "LoggedIn" .LoggedIn)}}
   {{end}}
 </div>
 {{end}}

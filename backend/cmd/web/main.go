@@ -25,6 +25,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/bkielbasa/go-ecommerce/backend/reviews"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
+	"github.com/bkielbasa/go-ecommerce/backend/wishlist"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
@@ -134,6 +135,10 @@ func main() {
 	// reviews side). Returns both the BoundedContext envelope and the
 	// concrete service which layout consumes.
 	reviewsBD, reviewsSrv := reviews.New(db, checkoutQry)
+	// Wishlist context: owns its data wholly, depends only on
+	// productcatalog_variant through the table's FK. Returns both the
+	// BoundedContext envelope and the concrete service which layout consumes.
+	wishlistBD, wishlistSrv := wishlist.New(db)
 
 	// Mailer is the outbound-email abstraction. When SMTP_HOST is empty
 	// (the dev default), New() returns a LogMailer that writes each email
@@ -185,7 +190,7 @@ func main() {
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
 	// CSRF protection wraps every route on the application router. It must be
 	// installed after layout.New has set up the session store (which the
 	// middleware reads from) but before app.Run() begins serving.
@@ -194,6 +199,7 @@ func main() {
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)
 	app.AddBoundedContext(reviewsBD)
+	app.AddBoundedContext(wishlistBD)
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock
