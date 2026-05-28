@@ -49,6 +49,18 @@ func main() {
 
 	logger := newLogger(logrus.DebugLevel, appName)
 
+	// Session secret hygiene: in production the operator MUST override the
+	// default. In any other env we still log a loud WARN so a forgotten
+	// SESSION_SECRET in staging/dev is impossible to miss.
+	if cfg.SessionSecret == defaultSessionSecret {
+		switch cfg.Env {
+		case "prod", "production":
+			logger.Fatal("SESSION_SECRET is set to the insecure default; refusing to start in production. Set SESSION_SECRET to a strong random value.")
+		default:
+			logger.Warn("SESSION_SECRET is set to the insecure default; this is acceptable only for local development. Set SESSION_SECRET to a strong random value before deploying.")
+		}
+	}
+
 	ctx, cancel := internal.Context()
 	defer cancel()
 
@@ -96,7 +108,7 @@ func main() {
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure))
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)

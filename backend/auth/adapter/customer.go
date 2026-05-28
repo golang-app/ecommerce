@@ -8,4 +8,8 @@ type Customer struct {
 	Username     string
 	PasswordHash string
 	IsAdmin      bool
+	// MustChangePassword is true when the customer has to set a new password
+	// before they can use the site (the seeded admin starts true; the change
+	// is cleared after a successful ChangePassword).
+	MustChangePassword bool
 }

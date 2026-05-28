@@ -9,6 +9,10 @@ import (
 // already written the response (a redirect to login for anonymous users, or a
 // 403 for non-admins) and returns ok=false; callers should simply return.
 //
+// If the admin still has the must_change_password flag set, the gate sends
+// them to /auth/change-password so the forced-reset flow cannot be skipped
+// by deep-linking to an admin page.
+//
 // Later admin phases (products, categories, orders, ...) reuse this gate as
 // their first line.
 func (handler httpHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -21,6 +25,14 @@ func (handler httpHandler) requireAdmin(w http.ResponseWriter, r *http.Request) 
 	isAdmin, err := handler.authSrv.IsAdmin(r.Context(), email)
 	if err != nil || !isAdmin {
 		http.Error(w, "Forbidden", http.StatusForbidden)
+		return "", false
+	}
+
+	// Force the password change before any admin work. A lookup error here
+	// is treated as "not flagged" so a transient DB hiccup doesn't lock
+	// the admin out of the panel.
+	if must, mcpErr := handler.authSrv.MustChangePassword(r.Context(), email); mcpErr == nil && must {
+		http.Redirect(w, r, "/auth/change-password", http.StatusSeeOther)
 		return "", false
 	}
 

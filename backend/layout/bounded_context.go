@@ -69,6 +69,7 @@ type authService interface {
 	FindByToken(ctx context.Context, sessToken string) (*authDomain.Session, error)
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 	IsAdmin(ctx context.Context, email string) (bool, error)
+	MustChangePassword(ctx context.Context, email string) (bool, error)
 }
 
 type shippingService interface {
@@ -96,7 +97,12 @@ type checkoutQueries interface {
 	ListAll(ctx context.Context) ([]checkoutQuery.OrderSummary, error)
 }
 
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string) application.BoundedContext {
+// New wires the layout bounded context. It also initialises the process-wide
+// session cookie store from the supplied secret and Secure flag. Callers must
+// supply a non-empty sessionSecret; main.go enforces the production-vs-default
+// policy before calling here.
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure bool) application.BoundedContext {
+	store = newCookieStore(sessionSecret, cookieSecure)
 	return &boundedContext{
 		handler: httpHandler{
 			cartSrv:     cartSrv,

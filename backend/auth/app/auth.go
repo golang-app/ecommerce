@@ -22,6 +22,10 @@ type CustomerStorage interface {
 	Create(ctx context.Context, email, passwordHash string) error
 	Find(ctx context.Context, email string) (adapter.Customer, error)
 	UpdatePassword(ctx context.Context, email, passwordHash string) error
+	// ClearMustChangePassword resets the must_change_password flag for the
+	// given customer. Called by ChangePassword after a successful update so
+	// the change-password gate stops firing on subsequent logins.
+	ClearMustChangePassword(ctx context.Context, email string) error
 }
 
 type SessStorage interface {
@@ -156,7 +160,17 @@ func (a auth) ChangePassword(ctx context.Context, email, oldPassword, newPasswor
 		return fmt.Errorf("could not hash password: %w", err)
 	}
 
-	return a.authStorage.UpdatePassword(ctx, email, newHash)
+	if err := a.authStorage.UpdatePassword(ctx, email, newHash); err != nil {
+		return fmt.Errorf("could not update password: %w", err)
+	}
+
+	// A successful password change always clears the must-change-password
+	// gate (no-op for users who weren't flagged in the first place).
+	if err := a.authStorage.ClearMustChangePassword(ctx, email); err != nil {
+		return fmt.Errorf("could not clear must-change-password flag: %w", err)
+	}
+
+	return nil
 }
 
 // IsAdmin reports whether the customer identified by email has the admin
@@ -172,6 +186,21 @@ func (a auth) IsAdmin(ctx context.Context, email string) (bool, error) {
 	}
 
 	return customer.IsAdmin, nil
+}
+
+// MustChangePassword reports whether the given customer is currently flagged
+// for a forced password change. A missing customer is treated as false so
+// anonymous lookups don't trip the gate; any other lookup error is returned.
+func (a auth) MustChangePassword(ctx context.Context, email string) (bool, error) {
+	customer, err := a.authStorage.Find(ctx, email)
+	if err == domain.ErrCustomerNotFound {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("could not find customer: %w", err)
+	}
+
+	return customer.MustChangePassword, nil
 }
 
 func hashPassword(password string) (string, error) {

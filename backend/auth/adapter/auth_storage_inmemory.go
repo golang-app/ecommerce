@@ -41,6 +41,18 @@ func (i *inMemory) UpdatePassword(ctx context.Context, email, hash string) error
 	return nil
 }
 
+// ClearMustChangePassword flips the must_change_password flag back to false
+// for the given customer; called after a successful ChangePassword.
+func (i *inMemory) ClearMustChangePassword(ctx context.Context, email string) error {
+	c, ok := i.customers[email]
+	if !ok {
+		return domain.ErrCustomerNotFound
+	}
+	c.MustChangePassword = false
+	i.customers[email] = c
+	return nil
+}
+
 func (i *inMemory) Find(ctx context.Context, email string) (Customer, error) {
 	customer, ok := i.customers[email]
 	if !ok {

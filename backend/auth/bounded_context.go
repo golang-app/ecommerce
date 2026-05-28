@@ -20,6 +20,7 @@ type appService interface {
 	FindByToken(ctx context.Context, sessToken string) (*domain.Session, error)
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 	IsAdmin(ctx context.Context, email string) (bool, error)
+	MustChangePassword(ctx context.Context, email string) (bool, error)
 }
 
 func New(db *sql.DB) (application.BoundedContext, appService) {

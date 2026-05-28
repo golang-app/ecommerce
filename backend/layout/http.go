@@ -15,23 +15,24 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	key   = []byte("go-ecommerce")
-	store = newCookieStore(key)
-)
+// store is the process-wide session cookie store. It is initialised once by
+// layout.New() (which reads SESSION_SECRET and COOKIE_SECURE from config) and
+// reused by every handler in this package. Keeping it package-level keeps the
+// existing `store.Get(r, "ecommerce")` call-sites unchanged; there is only
+// one layout boundedContext per process so a single shared store is fine.
+var store *sessions.CookieStore
 
 // newCookieStore returns a CookieStore whose Options work over plain HTTP
-// (localhost / docker compose) so the demo runs without TLS. gorilla
-// sessions defaults to Secure + SameSite=None which makes the cookie
-// invisible to non-HTTPS clients. Flip Secure to true when serving over
-// HTTPS for real.
-func newCookieStore(key []byte) *sessions.CookieStore {
+// (localhost / docker compose) when secure=false; flip secure=true for
+// HTTPS deployments (COOKIE_SECURE=true). HttpOnly and SameSite=Lax are
+// always on.
+func newCookieStore(key []byte, secure bool) *sessions.CookieStore {
 	s := sessions.NewCookieStore(key)
 	s.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   86400 * 30,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
 	return s
@@ -126,6 +127,8 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/auth/logout", observability.HTTPWrap(m.handler.HandleLogout, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.Register, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.HandleRegister, m.logger)).Methods("POST")
+	r.HandleFunc("/auth/change-password", observability.HTTPWrap(m.handler.ChangePasswordPage, m.logger)).Methods("GET")
+	r.HandleFunc("/auth/change-password", observability.HTTPWrap(m.handler.HandleChangePassword, m.logger)).Methods("POST")
 	r.HandleFunc("/auth/menuIcon", observability.HTTPWrap(m.handler.AuthMenuItem, m.logger)).Methods("GET", "OPTIONS")
 
 	r.HandleFunc("/checkout", observability.HTTPWrap(m.handler.Checkout, m.logger)).Methods("GET")
