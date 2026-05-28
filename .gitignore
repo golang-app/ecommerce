@@ -16,3 +16,7 @@
 .vscode/
 
 __debug_bin
+
+# Uploaded admin images (bind-mounted in docker-compose).
+data/uploads/*
+!data/uploads/.gitkeep

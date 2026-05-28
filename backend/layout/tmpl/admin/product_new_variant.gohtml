@@ -2,14 +2,19 @@
   <p class="crumbs"><a href="/admin/products">products</a> / new variant product</p>
   <h2 class="account-card__title">create a variant product</h2>
 
-  <form class="form" method="post" action="/admin/products/new-variant">
+  <form class="form" method="post" action="/admin/products/new-variant" enctype="multipart/form-data">
     <section class="admin-section">
       <h3 class="admin-section__title">product</h3>
       <div class="field"><label for="p-id">id (slug)</label><input id="p-id" name="id" required placeholder="lowercase-with-hyphens"></div>
       <div class="field"><label for="p-name">name</label><input id="p-name" name="name" required></div>
       <div class="field"><label for="p-description">description</label><textarea id="p-description" name="description" required></textarea></div>
       <div class="field"><label for="p-currency">currency</label><input id="p-currency" name="currency" value="USD"></div>
-      <div class="field"><label for="p-thumbnail">thumbnail URL</label><input id="p-thumbnail" name="thumbnail"></div>
+      <div class="field">
+        <label for="p-thumbnail-file">thumbnail</label>
+        <input id="p-thumbnail-file" type="file" name="thumbnail_file" accept="image/jpeg,image/png,image/webp,image/gif">
+        <input id="p-thumbnail" name="thumbnail" placeholder="or paste a URL">
+        <p class="form__aside muted">Upload an image, or paste a URL. If both are provided, the upload wins.</p>
+      </div>
       <div class="field">
         <label for="p-attribute-set">attribute set</label>
         <select id="p-attribute-set" name="attribute_set">
@@ -40,13 +45,16 @@
       <h3 class="admin-section__title">variants</h3>
       <p class="form__aside muted">options formatted as "Name=Value, Name2=Value2" (must match the option type names above). price in major units (e.g. 9.00).</p>
       <table class="admin-table variant-table">
-        <thead><tr><th>sku</th><th>price</th><th>stock</th><th>image URL</th><th>options</th><th></th></tr></thead>
+        <thead><tr><th>sku</th><th>price</th><th>stock</th><th>image (upload or URL)</th><th>options</th><th></th></tr></thead>
         <tbody id="v-rows">
           <tr class="v-row">
             <td><input name="v_sku[]" placeholder="TSHIRT-RED-L"></td>
             <td><input name="v_price[]" placeholder="9.00"></td>
             <td><input name="v_stock[]" type="number" min="0" value="0"></td>
-            <td><input name="v_image[]"></td>
+            <td>
+              <input type="file" name="v_image_file[]" accept="image/jpeg,image/png,image/webp,image/gif">
+              <input name="v_image[]" placeholder="or URL">
+            </td>
             <td><input name="v_options[]" placeholder="Color=Red, Size=L"></td>
             <td><button type="button" class="linkbtn linkbtn--danger v-remove">remove</button></td>
           </tr>

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
@@ -43,6 +44,7 @@ type httpHandler struct {
 	checkoutSrv checkoutCommands
 	checkoutQry checkoutQueries
 	shipSrv     shippingService
+	imageStore  imagestore.Store
 	logger      logrus.FieldLogger
 }
 
@@ -97,6 +99,9 @@ func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Req
 
 func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.PathPrefix("/static/").Handler(StaticHandler())
+	// User-uploaded images live on disk (see internal/imagestore) and are
+	// served from m.uploadsDir under the /uploads/ URL prefix.
+	r.PathPrefix("/uploads/").Handler(imagestore.Serve(m.uploadsDir))
 	r.HandleFunc("/", m.handler.HomePage)
 	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
 	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")

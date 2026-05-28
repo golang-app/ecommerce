@@ -9,6 +9,7 @@ import (
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
@@ -95,7 +96,7 @@ type checkoutQueries interface {
 	ListAll(ctx context.Context) ([]checkoutQuery.OrderSummary, error)
 }
 
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string) application.BoundedContext {
 	return &boundedContext{
 		handler: httpHandler{
 			cartSrv:     cartSrv,
@@ -104,13 +105,16 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			checkoutSrv: checkoutSrv,
 			checkoutQry: checkoutQry,
 			shipSrv:     shipSrv,
+			imageStore:  imageStore,
 			logger:      logger,
 		},
-		logger: logger,
+		uploadsDir: uploadsDir,
+		logger:     logger,
 	}
 }
 
 type boundedContext struct {
-	handler httpHandler
-	logger  logrus.FieldLogger
+	handler    httpHandler
+	uploadsDir string
+	logger     logrus.FieldLogger
 }
