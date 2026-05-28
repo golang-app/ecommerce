@@ -200,8 +200,15 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/attribute-sets/{id}", observability.HTTPWrap(m.handler.AdminUpdateAttributeSet, m.logger)).Methods("POST")
 
 	r.HandleFunc("/admin/orders", observability.HTTPWrap(m.handler.AdminOrders, m.logger)).Methods("GET")
+	// Specific fulfillment sub-paths must be registered before the
+	// /admin/orders/{orderID} catch-all so they don't get shadowed.
 	r.HandleFunc("/admin/orders/{orderID}/cancel", observability.HTTPWrap(m.handler.AdminCancelOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}/ship", observability.HTTPWrap(m.handler.AdminShipOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}/deliver", observability.HTTPWrap(m.handler.AdminDeliverOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}/refund", observability.HTTPWrap(m.handler.AdminRefundOrder, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/orders/{orderID}", observability.HTTPWrap(m.handler.AdminOrderDetail, m.logger)).Methods("GET")
+
+	r.HandleFunc("/admin/inventory", observability.HTTPWrap(m.handler.AdminInventory, m.logger)).Methods("GET")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {

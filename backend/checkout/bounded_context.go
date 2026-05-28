@@ -28,15 +28,27 @@ type StockReserver interface {
 	Release(ctx context.Context, quantities map[string]int) error
 }
 
+// StockMovements is the audit-log seam: every reservation/release/refund the
+// checkout context drives is also recorded in the catalogue's stock movement
+// log. Implemented by productcatalog/app.ProductService.
+type StockMovements interface {
+	Record(ctx context.Context, variantID string, delta int, reason, refOrderID string) error
+}
+
 // New wires the checkout context and returns its command service (write side,
 // event-sourced) and query service (read side, projection-backed) separately,
 // keeping the CQRS split explicit at the composition root. Cross-context side
 // effects (e.g. clearing the cart) are driven by integration events published
 // on bus, not by direct calls.
-func New(db *sql.DB, cart CartReader, bus *eventbus.Bus, stock StockReserver) (application.BoundedContext, app.CheckoutService, query.Service) {
+//
+// movements may be nil — checkout then runs without writing audit rows, which
+// is the historical behaviour. pricing carries tax + free-shipping config; a
+// zero-value PricingPolicy disables both, again matching the historical
+// behaviour.
+func New(db *sql.DB, cart CartReader, bus *eventbus.Bus, stock StockReserver, movements StockMovements, pricing app.PricingPolicy) (application.BoundedContext, app.CheckoutService, query.Service) {
 	storage := adapter.NewPostgres(db)
 	payment := adapter.NewFakePayment()
-	cmd := app.NewCheckoutService(cart, storage, payment, stock, bus, newOrderID)
+	cmd := app.NewCheckoutService(cart, storage, payment, stock, movements, bus, newOrderID, pricing)
 	queries := query.NewService(storage)
 	return &boundedContext{}, cmd, queries
 }

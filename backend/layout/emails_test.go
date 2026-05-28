@@ -26,8 +26,12 @@ func TestRenderOrderConfirmation(t *testing.T) {
 		domain.RebuildShippingMethod("pickup", "Pickup", 0),
 		domain.RebuildPaymentMethod("card", "Card"),
 		1998,
+		0,
+		0,
 		1998,
 		"USD",
+		"",
+		"",
 	)
 
 	msg, err := RenderOrderConfirmation(view, "http://localhost:8080")

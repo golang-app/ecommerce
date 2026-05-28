@@ -56,6 +56,8 @@ type catalogService interface {
 	CreateAttributeSet(ctx context.Context, name string, attributeTypeIDs []string) error
 	UpdateAttributeSet(ctx context.Context, id, name string, attributeTypeIDs []string) error
 	DeleteAttributeSet(ctx context.Context, id string) error
+
+	ListStockMovements(ctx context.Context, variantID string, limit int) ([]pcdomain.StockMovement, error)
 }
 
 type cartService interface {
@@ -90,6 +92,9 @@ type checkoutCommands interface {
 	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod) (checkoutDomain.Order, error)
 	Cancel(ctx context.Context, orderID, customerID string) error
 	AdminCancel(ctx context.Context, orderID string) error
+	MarkShipped(ctx context.Context, orderID, carrier, trackingCode string) error
+	MarkDelivered(ctx context.Context, orderID string) error
+	Refund(ctx context.Context, orderID, reason string) error
 }
 
 // checkoutQueries is the read side of the checkout context (CQRS); it returns

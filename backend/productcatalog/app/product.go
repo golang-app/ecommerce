@@ -53,6 +53,10 @@ type ProductStorage interface {
 	UpdateAttributeSet(ctx context.Context, s domain.AttributeSet) error
 	DeleteAttributeSet(ctx context.Context, id string) error
 	SetAttributeSetItems(ctx context.Context, setID string, attributeTypeIDs []string) error
+
+	// Inventory audit trail.
+	InsertStockMovement(ctx context.Context, variantID string, delta int, reason, refOrderID string) error
+	ListStockMovements(ctx context.Context, variantID string, limit int) ([]domain.StockMovement, error)
 }
 
 func NewProductService(s ProductStorage) ProductService {
@@ -350,12 +354,45 @@ func (ps ProductService) DeleteProduct(ctx context.Context, id string) error {
 	return ps.storage.DeleteProduct(ctx, id)
 }
 
-// SetVariantStock sets a single variant's stock level (rejecting negatives).
+// SetVariantStock sets a single variant's stock level (rejecting negatives)
+// and records the change in the inventory audit log. The delta is computed
+// against the variant's current stock so the audit row reflects the actual
+// movement, not just the new level.
 func (ps ProductService) SetVariantStock(ctx context.Context, variantID string, stock int) error {
 	if stock < 0 {
 		return fmt.Errorf("stock cannot be negative: %d", stock)
 	}
-	return ps.storage.SetVariantStock(ctx, variantID, stock)
+	_, current, err := ps.storage.FindVariant(ctx, variantID)
+	if err != nil {
+		return err
+	}
+	if err := ps.storage.SetVariantStock(ctx, variantID, stock); err != nil {
+		return err
+	}
+	delta := stock - current.Stock()
+	if delta == 0 {
+		return nil
+	}
+	// Best-effort audit row: a logging failure should not undo the stock
+	// update the operator just confirmed.
+	_ = ps.storage.InsertStockMovement(ctx, variantID, delta, "admin-adjust", "")
+	return nil
+}
+
+// Record writes a single audit row to the stock movement log. Intended as
+// the StockMovements seam for the checkout context (reserve / release /
+// refund flows).
+func (ps ProductService) Record(ctx context.Context, variantID string, delta int, reason, refOrderID string) error {
+	return ps.storage.InsertStockMovement(ctx, variantID, delta, reason, refOrderID)
+}
+
+// ListStockMovements returns the most recent audit rows, optionally scoped
+// to one variant. A non-positive limit falls back to 200 rows.
+func (ps ProductService) ListStockMovements(ctx context.Context, variantID string, limit int) ([]domain.StockMovement, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	return ps.storage.ListStockMovements(ctx, variantID, limit)
 }
 
 // SetProductCategories replaces the product's category links with the given set.

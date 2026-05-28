@@ -61,6 +61,15 @@ type config struct {
 	// runs. Set to 0 (or any non-positive value) to disable the sweeper
 	// entirely. Default keeps lag low without hammering the read side.
 	ReservationSweepInterval time.Duration `conf:"default:5m"`
+	// TaxRatePercent is the flat tax rate applied to every order's subtotal
+	// at checkout time, expressed as a percentage (e.g. 8.875 for 8.875%).
+	// Defaults to 0, i.e. tax-free; tax is applied to the subtotal and is
+	// part of the historical order via OrderPlaced.Tax.
+	TaxRatePercent float64 `conf:"default:0"`
+	// FreeShippingThreshold is the minimum order subtotal (in minor units —
+	// e.g. cents) at or above which the chosen shipping method's cost is
+	// overridden to 0 at place time. 0 disables the threshold.
+	FreeShippingThreshold int64 `conf:"default:0"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep

@@ -576,6 +576,9 @@ main {
 .order-status--failed    { color: var(--danger); }
 .order-status--pending   { color: var(--info); }
 .order-status--cancelled { color: var(--danger); }
+.order-status--shipped   { color: #1f7a44; }
+.order-status--delivered { color: var(--fg-muted); }
+.order-status--refunded  { color: #a26200; }
 .order__actions { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
 
 /* ---------- order confirmation ---------- */

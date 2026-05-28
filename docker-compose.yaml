@@ -27,6 +27,10 @@ services:
       # released. Defaults: 30m / 5m. Override here for dev/testing.
       RESERVATION_TTL: ${RESERVATION_TTL:-30m}
       RESERVATION_SWEEP_INTERVAL: ${RESERVATION_SWEEP_INTERVAL:-5m}
+      # Tax rate (percent, e.g. 8.875 for 8.875%) and the free-shipping
+      # threshold in MINOR units (cents). Both default to zero (disabled).
+      TAX_RATE_PERCENT: ${TAX_RATE_PERCENT:-0}
+      FREE_SHIPPING_THRESHOLD: ${FREE_SHIPPING_THRESHOLD:-0}
     volumes:
       # User-uploaded admin images are persisted on the host. The Dockerfile
       # creates /uploads owned by the app user (uid 10001).

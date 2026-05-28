@@ -42,14 +42,16 @@ type lineDTO struct {
 }
 
 type orderPlacedDTO struct {
-	OrderID    string            `json:"order_id"`
-	UserID     string            `json:"user_id"`
-	CustomerID string            `json:"customer_id"`
-	ShipTo     addressDTO        `json:"ship_to"`
-	ShipMethod shippingMethodDTO `json:"ship_method"`
-	PayMethod  paymentMethodDTO  `json:"pay_method"`
-	Lines      []lineDTO         `json:"lines"`
-	At         time.Time         `json:"at"`
+	OrderID      string            `json:"order_id"`
+	UserID       string            `json:"user_id"`
+	CustomerID   string            `json:"customer_id"`
+	ShipTo       addressDTO        `json:"ship_to"`
+	ShipMethod   shippingMethodDTO `json:"ship_method"`
+	PayMethod    paymentMethodDTO  `json:"pay_method"`
+	Lines        []lineDTO         `json:"lines"`
+	Tax          int64             `json:"tax,omitempty"`
+	ShippingCost int64             `json:"shipping_cost,omitempty"`
+	At           time.Time         `json:"at"`
 }
 
 type paymentSucceededDTO struct {
@@ -64,6 +66,24 @@ type paymentFailedDTO struct {
 }
 
 type orderCancelledDTO struct {
+	OrderID string    `json:"order_id"`
+	Reason  string    `json:"reason"`
+	At      time.Time `json:"at"`
+}
+
+type orderShippedDTO struct {
+	OrderID      string    `json:"order_id"`
+	Carrier      string    `json:"carrier,omitempty"`
+	TrackingCode string    `json:"tracking_code,omitempty"`
+	At           time.Time `json:"at"`
+}
+
+type orderDeliveredDTO struct {
+	OrderID string    `json:"order_id"`
+	At      time.Time `json:"at"`
+}
+
+type orderRefundedDTO struct {
 	OrderID string    `json:"order_id"`
 	Reason  string    `json:"reason"`
 	At      time.Time `json:"at"`
@@ -85,14 +105,16 @@ func marshalEvent(e domain.Event) (string, []byte, error) {
 			})
 		}
 		payload = orderPlacedDTO{
-			OrderID:    ev.OrderID,
-			UserID:     ev.UserID,
-			CustomerID: ev.CustomerID,
-			ShipTo:     toAddressDTO(ev.ShipTo),
-			ShipMethod: shippingMethodDTO{Code: ev.ShipMethod.Code(), Label: ev.ShipMethod.Label(), Cost: ev.ShipMethod.Cost()},
-			PayMethod:  paymentMethodDTO{Code: ev.PayMethod.Code(), Label: ev.PayMethod.Label()},
-			Lines:      lines,
-			At:         ev.At,
+			OrderID:      ev.OrderID,
+			UserID:       ev.UserID,
+			CustomerID:   ev.CustomerID,
+			ShipTo:       toAddressDTO(ev.ShipTo),
+			ShipMethod:   shippingMethodDTO{Code: ev.ShipMethod.Code(), Label: ev.ShipMethod.Label(), Cost: ev.ShipMethod.Cost()},
+			PayMethod:    paymentMethodDTO{Code: ev.PayMethod.Code(), Label: ev.PayMethod.Label()},
+			Lines:        lines,
+			Tax:          ev.Tax,
+			ShippingCost: ev.ShippingCost,
+			At:           ev.At,
 		}
 	case domain.PaymentSucceeded:
 		payload = paymentSucceededDTO{OrderID: ev.OrderID, At: ev.At}
@@ -100,6 +122,12 @@ func marshalEvent(e domain.Event) (string, []byte, error) {
 		payload = paymentFailedDTO{OrderID: ev.OrderID, Reason: ev.Reason, At: ev.At}
 	case domain.OrderCancelled:
 		payload = orderCancelledDTO{OrderID: ev.OrderID, Reason: ev.Reason, At: ev.At}
+	case domain.OrderShipped:
+		payload = orderShippedDTO{OrderID: ev.OrderID, Carrier: ev.Carrier, TrackingCode: ev.TrackingCode, At: ev.At}
+	case domain.OrderDelivered:
+		payload = orderDeliveredDTO{OrderID: ev.OrderID, At: ev.At}
+	case domain.OrderRefunded:
+		payload = orderRefundedDTO{OrderID: ev.OrderID, Reason: ev.Reason, At: ev.At}
 	default:
 		return "", nil, fmt.Errorf("no codec for event %s", e.EventType())
 	}
@@ -124,14 +152,16 @@ func unmarshalEvent(eventType string, payload []byte) (domain.Event, error) {
 			lines = append(lines, domain.NewLine(l.ProductID, l.ProductName, l.Qty, l.PriceAmount, l.PriceCurrency))
 		}
 		return domain.OrderPlaced{
-			OrderID:    dto.OrderID,
-			UserID:     dto.UserID,
-			CustomerID: dto.CustomerID,
-			ShipTo:     domain.RebuildAddress(dto.ShipTo.Name, dto.ShipTo.Street1, dto.ShipTo.Street2, dto.ShipTo.City, dto.ShipTo.Zip, dto.ShipTo.Country),
-			ShipMethod: domain.RebuildShippingMethod(dto.ShipMethod.Code, dto.ShipMethod.Label, dto.ShipMethod.Cost),
-			PayMethod:  domain.RebuildPaymentMethod(dto.PayMethod.Code, dto.PayMethod.Label),
-			Lines:      lines,
-			At:         dto.At,
+			OrderID:      dto.OrderID,
+			UserID:       dto.UserID,
+			CustomerID:   dto.CustomerID,
+			ShipTo:       domain.RebuildAddress(dto.ShipTo.Name, dto.ShipTo.Street1, dto.ShipTo.Street2, dto.ShipTo.City, dto.ShipTo.Zip, dto.ShipTo.Country),
+			ShipMethod:   domain.RebuildShippingMethod(dto.ShipMethod.Code, dto.ShipMethod.Label, dto.ShipMethod.Cost),
+			PayMethod:   domain.RebuildPaymentMethod(dto.PayMethod.Code, dto.PayMethod.Label),
+			Lines:        lines,
+			Tax:          dto.Tax,
+			ShippingCost: dto.ShippingCost,
+			At:           dto.At,
 		}, nil
 	case "PaymentSucceeded":
 		var dto paymentSucceededDTO
@@ -151,6 +181,24 @@ func unmarshalEvent(eventType string, payload []byte) (domain.Event, error) {
 			return nil, fmt.Errorf("unmarshal OrderCancelled: %w", err)
 		}
 		return domain.OrderCancelled{OrderID: dto.OrderID, Reason: dto.Reason, At: dto.At}, nil
+	case "OrderShipped":
+		var dto orderShippedDTO
+		if err := json.Unmarshal(payload, &dto); err != nil {
+			return nil, fmt.Errorf("unmarshal OrderShipped: %w", err)
+		}
+		return domain.OrderShipped{OrderID: dto.OrderID, Carrier: dto.Carrier, TrackingCode: dto.TrackingCode, At: dto.At}, nil
+	case "OrderDelivered":
+		var dto orderDeliveredDTO
+		if err := json.Unmarshal(payload, &dto); err != nil {
+			return nil, fmt.Errorf("unmarshal OrderDelivered: %w", err)
+		}
+		return domain.OrderDelivered{OrderID: dto.OrderID, At: dto.At}, nil
+	case "OrderRefunded":
+		var dto orderRefundedDTO
+		if err := json.Unmarshal(payload, &dto); err != nil {
+			return nil, fmt.Errorf("unmarshal OrderRefunded: %w", err)
+		}
+		return domain.OrderRefunded{OrderID: dto.OrderID, Reason: dto.Reason, At: dto.At}, nil
 	default:
 		return nil, fmt.Errorf("unknown event type %q", eventType)
 	}

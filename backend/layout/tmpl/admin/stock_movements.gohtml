@@ -1,0 +1,45 @@
+{{define "main"}}
+  <h2 class="account-card__title">inventory · stock movements</h2>
+
+  <form method="get" action="/admin/inventory" class="admin-filter">
+    <label class="admin-filter__label" for="variant">variant id</label>
+    <input class="admin-filter__input" id="variant" name="variant" value="{{.VariantID}}" placeholder="filter by variant id">
+    <button type="submit" class="btn btn--ghost">filter</button>
+    {{if .VariantID}}
+      <a href="/admin/inventory" class="linkbtn">clear</a>
+    {{end}}
+  </form>
+
+  {{if .Movements}}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>when</th>
+          <th>variant</th>
+          <th class="col-qty">delta</th>
+          <th>reason</th>
+          <th>order</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $m := .Movements}}
+          <tr>
+            <td>{{$m.At.Format "Jan 2, 2006 15:04 MST"}}</td>
+            <td><code>{{$m.VariantID}}</code></td>
+            <td class="col-qty">{{$m.Delta}}</td>
+            <td>{{$m.Reason}}</td>
+            <td>
+              {{if $m.RefOrderID}}
+                <a href="/admin/orders/{{$m.RefOrderID}}"><code>{{$m.RefOrderID}}</code></a>
+              {{else}}
+                <span class="muted">—</span>
+              {{end}}
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no stock movements recorded yet.</p>
+  {{end}}
+{{end}}

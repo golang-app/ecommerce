@@ -12,6 +12,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/auth"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout"
+	checkoutapp "github.com/bkielbasa/go-ecommerce/backend/checkout/app"
 	checkoutintegration "github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/sweeper"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
@@ -97,7 +98,11 @@ func main() {
 	pcBD, catalogService := productcatalog.New(db)
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
 	authBD, authService := auth.New(db)
-	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, bus, catalogService)
+	pricing := checkoutapp.PricingPolicy{
+		TaxRatePercent:        cfg.TaxRatePercent,
+		FreeShippingThreshold: cfg.FreeShippingThreshold,
+	}
+	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, bus, catalogService, catalogService, pricing)
 	shipSrv := shippinginfo.New(db)
 
 	// Mailer is the outbound-email abstraction. When SMTP_HOST is empty

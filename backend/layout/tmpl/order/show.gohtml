@@ -8,6 +8,12 @@
     <header class="order__header">
       {{if eq .Order.Status "cancelled"}}
         <h1 class="order__title">order cancelled.</h1>
+      {{else if eq .Order.Status "refunded"}}
+        <h1 class="order__title">order refunded.</h1>
+      {{else if eq .Order.Status "delivered"}}
+        <h1 class="order__title">delivered.</h1>
+      {{else if eq .Order.Status "shipped"}}
+        <h1 class="order__title">on its way.</h1>
       {{else}}
         <h1 class="order__title">thank you.</h1>
       {{end}}
@@ -42,10 +48,18 @@
           <td colspan="3">subtotal</td>
           <td class="col-total">{{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}</td>
         </tr>
+        {{if gt .Order.TaxAmount 0}}
+          <tr>
+            <td colspan="3">tax</td>
+            <td class="col-total">{{.Order.TaxDisplay}} {{.Order.TotalCurrency}}</td>
+          </tr>
+        {{end}}
         {{if not .Order.ShippingMethod.IsZero}}
           <tr>
             <td colspan="3">shipping &middot; {{.Order.ShippingMethod.Label}}</td>
-            <td class="col-total">{{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}</td>
+            <td class="col-total">
+              {{if eq .Order.ShippingCost 0}}free{{else}}{{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}{{end}}
+            </td>
           </tr>
         {{end}}
         <tr>
@@ -70,6 +84,17 @@
           {{.Order.ShipTo.City}}, {{.Order.ShipTo.Zip}}<br>
           {{.Order.ShipTo.Country}}
         </address>
+      </section>
+    {{end}}
+
+    {{if or (eq .Order.Status "shipped") (eq .Order.Status "delivered")}}
+      <section class="order__ship">
+        <h2 class="order__ship-heading">fulfillment</h2>
+        <p>
+          {{if eq .Order.Status "shipped"}}shipped{{else}}delivered{{end}}
+          {{with .Order.Carrier}} &middot; carrier: {{.}}{{end}}
+          {{with .Order.TrackingCode}} &middot; tracking: <code>{{.}}</code>{{end}}
+        </p>
       </section>
     {{end}}
 
