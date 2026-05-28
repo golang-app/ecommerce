@@ -11,6 +11,23 @@ If you find anything that you can improve or add - feel free to talk about it in
 
 The project is a very early stage so there's a lot of work to do so every contribution is welcome!
 
+## Features
+
+**Storefront**
+- "New arrivals" homepage; full filterable catalog at `/products`.
+- Top menu with category links, cart and account/log out.
+- Faceted filters per category (numeric ranges + enum checkboxes), scoped to the active category.
+- Variant selectors (e.g. Color / Size) on product pages; add-to-cart over HTMX.
+- Customer accounts: orders history, saved shipping addresses, password change.
+- Checkout with personal pickup / courier / flat-rate shipping and card / PayPal / cash-on-delivery payment.
+
+**Admin panel** (`/admin`, seeded user `admin@example.com` / `Admin123!`)
+- Dashboard with store counts.
+- Products: list, create (simple or with option types + variants), edit core fields, per-variant SKU/price/stock/image, add/edit/delete variants, manage option types on existing products (with consistent cascades), assign categories, attributes and an attribute set, delete.
+- Categories, attribute types and attribute sets: full CRUD.
+- Orders: list all, view detail, admin-cancel.
+- Dedicated admin shell (sidebar layout) separate from the storefront.
+
 ## Context map
 
 The backend is organised as a set of DDD bounded contexts. Each context owns its
