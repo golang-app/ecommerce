@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"log"
 	"math/rand"
 	"net/http"
 	"time"
@@ -32,7 +31,7 @@ func (handler httpHandler) AddToCart(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		https.InternalError(w, "internal-error", err.Error())
-		log.Print(err)
+		handler.logger.WithError(err).Error("cannot add item to cart")
 		return
 	}
 

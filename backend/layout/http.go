@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
+	"github.com/sirupsen/logrus"
 )
 
 var (
@@ -43,6 +43,7 @@ type httpHandler struct {
 	checkoutSrv checkoutCommands
 	checkoutQry checkoutQueries
 	shipSrv     shippingService
+	logger      logrus.FieldLogger
 }
 
 // HomePage renders the storefront landing page: a "new arrivals" grid of the
@@ -50,7 +51,7 @@ type httpHandler struct {
 func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
 	newest, err := handler.catalogSrv.Newest(r.Context(), 8)
 	if err != nil {
-		log.Printf("cannot get newest products: %s", err)
+		handler.logger.WithError(err).Warn("cannot get newest products")
 		newest = nil
 	}
 	handler.renderTemplate(w, r, "home", map[string]any{
@@ -77,13 +78,13 @@ func (handler httpHandler) CategoryPage(w http.ResponseWriter, r *http.Request) 
 func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Request, activeCategory string) {
 	categories, err := handler.catalogSrv.Categories(r.Context())
 	if err != nil {
-		log.Printf("cannot get categories: %s", err)
+		handler.logger.WithError(err).Warn("cannot get categories")
 		categories = nil
 	}
 
 	facets, err := handler.catalogSrv.Facets(r.Context(), activeCategory)
 	if err != nil {
-		log.Printf("cannot get facets for %q: %s", activeCategory, err)
+		handler.logger.WithError(err).WithField("category", activeCategory).Warn("cannot get facets")
 		facets = nil
 	}
 
@@ -210,19 +211,19 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	// NavCategories lets the storefront header list category links on every page.
 	navCategories, err := handler.catalogSrv.Categories(r.Context())
 	if err != nil {
-		log.Printf("cannot get nav categories: %s", err)
+		handler.logger.WithError(err).Warn("cannot get nav categories")
 		navCategories = nil
 	}
 	data["NavCategories"] = navCategories
 	err = session.Save(r, w)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot save session")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 
 	err = ts.ExecuteTemplate(w, "base", data)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot execute template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -259,13 +260,13 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	data["AdminEmail"] = handler.currentCustomerID(r)
 	err := session.Save(r, w)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot save session")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 
 	err = ts.ExecuteTemplate(w, "adminbase", data)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot execute admin template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }

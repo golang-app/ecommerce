@@ -3,10 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/ardanlabs/conf"
 	_ "github.com/lib/pq"
+	"github.com/sirupsen/logrus"
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 )
 
@@ -19,16 +19,16 @@ func main() {
 			fmt.Println(conf.Usage("", &cfg))
 			return
 		}
-		log.Fatal(err)
+		logrus.WithError(err).Fatal("cannot parse configuration")
 	}
 
 	connString := cfg.Postgres.connectionString()
 	db, err := otelsql.Open("postgres", connString)
 	if err != nil {
-		log.Fatalf("cannot open connection to the DB: %s", err)
+		logrus.WithError(err).Fatal("cannot open connection to the DB")
 	}
 
 	defer func() { _ = db.Close() }()
 
-	Execute(db) 
+	Execute(db)
 }

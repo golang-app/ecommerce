@@ -104,6 +104,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			checkoutSrv: checkoutSrv,
 			checkoutQry: checkoutQry,
 			shipSrv:     shipSrv,
+			logger:      logger,
 		},
 		logger: logger,
 	}

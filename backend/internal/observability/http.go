@@ -8,5 +8,5 @@ import (
 )
 
 func HTTPWrap(h http.HandlerFunc, logger logrus.FieldLogger) http.HandlerFunc {
-	return LoggerMiddleware(https.WrapPanic(h), logger)
+	return LoggerMiddleware(https.WrapPanic(h, logger), logger)
 }

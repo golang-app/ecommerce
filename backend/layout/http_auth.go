@@ -3,7 +3,6 @@ package layout
 import (
   "errors"
 	"html/template"
-	"log"
   "os"
   "io"
 	"net/http"
@@ -18,7 +17,7 @@ func (handler httpHandler) Login(w http.ResponseWriter, r *http.Request) {
 func (handler httpHandler) AuthMenuItem(w http.ResponseWriter, r *http.Request) {
   c, err := store.Get(r, "ecommerce")
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot get session store")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -35,7 +34,7 @@ func (handler httpHandler) AuthMenuItem(w http.ResponseWriter, r *http.Request) 
 
   f, err := os.Open("./layout/tmpl/auth/menuItem.gohtml")
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot open menu item template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -43,14 +42,14 @@ func (handler httpHandler) AuthMenuItem(w http.ResponseWriter, r *http.Request) 
 
   body, err := io.ReadAll(f)
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot read menu item template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
   tmpl, err := template.New("").Parse(string(body))
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot parse menu item template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -59,7 +58,7 @@ func (handler httpHandler) AuthMenuItem(w http.ResponseWriter, r *http.Request) 
     "LoggedIn": loggedIn,
   })
 	if err != nil {
-		log.Print(err.Error())
+		handler.logger.WithError(err).Error("cannot execute menu item template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
