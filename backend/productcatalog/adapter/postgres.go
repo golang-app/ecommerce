@@ -332,7 +332,7 @@ func (db postgres) productAttributes(ctx context.Context, productID string) ([]d
 }
 
 func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
-	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product ORDER BY id`
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency, attribute_set_id FROM productcatalog_product ORDER BY id`
 
 	rows, err := db.db.QueryContext(ctx, q)
 	if err != nil {
@@ -369,7 +369,7 @@ func (db postgres) All(ctx context.Context) ([]domain.Product, error) {
 // (ties broken by id), each hydrated with its catalog/classification the same
 // way All does.
 func (db postgres) Newest(ctx context.Context, limit int) ([]domain.Product, error) {
-	q := `SELECT id, name, description, thumbnail, price_amount, price_currency
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency, attribute_set_id
 		FROM productcatalog_product
 		ORDER BY created_at DESC, id DESC
 		LIMIT $1`
@@ -406,7 +406,7 @@ func (db postgres) Newest(ctx context.Context, limit int) ([]domain.Product, err
 }
 
 func (db postgres) Find(ctx context.Context, id string) (domain.Product, error) {
-	q := `SELECT id, name, description, thumbnail, price_amount, price_currency FROM productcatalog_product WHERE id = $1`
+	q := `SELECT id, name, description, thumbnail, price_amount, price_currency, attribute_set_id FROM productcatalog_product WHERE id = $1`
 	p, err := scanProduct(db.db.QueryRowContext(ctx, q, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Product{}, domain.ErrProductNotFound
@@ -445,7 +445,8 @@ type rowScanner interface {
 func scanProduct(s rowScanner) (domain.Product, error) {
 	var id, name, description, thumbnail, currency string
 	var amount int64
-	if err := s.Scan(&id, &name, &description, &thumbnail, &amount, &currency); err != nil {
+	var attributeSetID sql.NullString
+	if err := s.Scan(&id, &name, &description, &thumbnail, &amount, &currency, &attributeSetID); err != nil {
 		return domain.Product{}, err
 	}
 	pid, err := domain.NewProductId(id)
@@ -460,7 +461,11 @@ func scanProduct(s rowScanner) (domain.Product, error) {
 	if err != nil {
 		return domain.Product{}, fmt.Errorf("rebuild price: %w", err)
 	}
-	return domain.NewProduct(pid, name, description, price, thumbnail)
+	p, err := domain.NewProduct(pid, name, description, price, thumbnail)
+	if err != nil {
+		return domain.Product{}, err
+	}
+	return p.WithAttributeSet(attributeSetID.String), nil
 }
 
 func scanVariant(s rowScanner) (domain.Variant, error) {
@@ -664,6 +669,158 @@ func (db postgres) DeleteAttributeType(ctx context.Context, id string) error {
 	return nil
 }
 
+// attributeSetMembers loads a set's member attribute types ordered by the join
+// table position.
+func (db postgres) attributeSetMembers(ctx context.Context, setID string) ([]domain.AttributeType, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT t.id, t.name, t.unit, t.kind, t.filterable, t.position
+		FROM productcatalog_attribute_set_item i
+		JOIN productcatalog_attribute_type t ON t.id = i.attribute_type_id
+		WHERE i.set_id = $1
+		ORDER BY i.position
+	`, setID)
+	if err != nil {
+		return nil, fmt.Errorf("query attribute set members: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.AttributeType
+	for rows.Next() {
+		var id, name, unit, kind string
+		var filterable bool
+		var position int
+		if err := rows.Scan(&id, &name, &unit, &kind, &filterable, &position); err != nil {
+			return nil, fmt.Errorf("scan attribute set member: %w", err)
+		}
+		out = append(out, domain.RebuildAttributeType(id, name, unit, domain.AttributeKind(kind), filterable, position))
+	}
+	return out, rows.Err()
+}
+
+// AllAttributeSets returns every attribute set in display order, each hydrated
+// with its ordered members.
+func (db postgres) AllAttributeSets(ctx context.Context) ([]domain.AttributeSet, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, name, position FROM productcatalog_attribute_set ORDER BY position, name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query attribute sets: %w", err)
+	}
+	type setRow struct {
+		id       string
+		name     string
+		position int
+	}
+	var base []setRow
+	func() {
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var sr setRow
+			if err = rows.Scan(&sr.id, &sr.name, &sr.position); err != nil {
+				return
+			}
+			base = append(base, sr)
+		}
+	}()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan attribute sets: %w", err)
+	}
+
+	out := make([]domain.AttributeSet, 0, len(base))
+	for _, sr := range base {
+		members, err := db.attributeSetMembers(ctx, sr.id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, domain.RebuildAttributeSet(sr.id, sr.name, sr.position, members))
+	}
+	return out, nil
+}
+
+// FindAttributeSet returns a single attribute set (with members) by id,
+// returning domain.ErrAttributeSetNotFound when missing.
+func (db postgres) FindAttributeSet(ctx context.Context, id string) (domain.AttributeSet, error) {
+	var name string
+	var position int
+	err := db.db.QueryRowContext(ctx, `
+		SELECT name, position FROM productcatalog_attribute_set WHERE id = $1
+	`, id).Scan(&name, &position)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.AttributeSet{}, domain.ErrAttributeSetNotFound
+	}
+	if err != nil {
+		return domain.AttributeSet{}, fmt.Errorf("find attribute set: %w", err)
+	}
+	members, err := db.attributeSetMembers(ctx, id)
+	if err != nil {
+		return domain.AttributeSet{}, err
+	}
+	return domain.RebuildAttributeSet(id, name, position, members), nil
+}
+
+// CreateAttributeSet inserts a new attribute set row (members are written
+// separately via SetAttributeSetItems).
+func (db postgres) CreateAttributeSet(ctx context.Context, s domain.AttributeSet) error {
+	_, err := db.db.ExecContext(ctx, `
+		INSERT INTO productcatalog_attribute_set (id, name, position) VALUES ($1, $2, $3)
+	`, s.ID(), s.Name(), s.Position())
+	if err != nil {
+		return fmt.Errorf("create attribute set: %w", err)
+	}
+	return nil
+}
+
+// UpdateAttributeSet updates an existing attribute set's name and position by id.
+func (db postgres) UpdateAttributeSet(ctx context.Context, s domain.AttributeSet) error {
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_attribute_set SET name = $2, position = $3 WHERE id = $1
+	`, s.ID(), s.Name(), s.Position())
+	if err != nil {
+		return fmt.Errorf("update attribute set: %w", err)
+	}
+	return nil
+}
+
+// DeleteAttributeSet removes an attribute set; its member items cascade.
+func (db postgres) DeleteAttributeSet(ctx context.Context, id string) error {
+	_, err := db.db.ExecContext(ctx, `DELETE FROM productcatalog_attribute_set WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete attribute set: %w", err)
+	}
+	return nil
+}
+
+// SetAttributeSetItems replaces a set's members: it deletes the existing items
+// and inserts the given attribute type ids with position = their index in the
+// slice (order matters), in a single transaction.
+func (db postgres) SetAttributeSetItems(ctx context.Context, setID string, attributeTypeIDs []string) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err = tx.ExecContext(ctx, `DELETE FROM productcatalog_attribute_set_item WHERE set_id = $1`, setID); err != nil {
+		return fmt.Errorf("clear attribute set items: %w", err)
+	}
+	for i, typeID := range attributeTypeIDs {
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO productcatalog_attribute_set_item (set_id, attribute_type_id, position)
+			VALUES ($1, $2, $3)
+		`, setID, typeID, i); err != nil {
+			return fmt.Errorf("insert attribute set item: %w", err)
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit attribute set items: %w", err)
+	}
+	return nil
+}
+
 // UpdateProduct updates the core product row (name, description, thumbnail,
 // price) by id. Variants, categories and attributes are untouched.
 func (db postgres) UpdateProduct(ctx context.Context, p domain.Product) error {
@@ -722,6 +879,22 @@ func (db postgres) SetProductCategories(ctx context.Context, productID string, c
 	}
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit product categories: %w", err)
+	}
+	return nil
+}
+
+// SetProductAttributeSet sets (or clears) the product's attribute_set_id. An
+// empty setID is written as SQL NULL.
+func (db postgres) SetProductAttributeSet(ctx context.Context, productID, setID string) error {
+	var setVal sql.NullString
+	if setID != "" {
+		setVal = sql.NullString{String: setID, Valid: true}
+	}
+	_, err := db.db.ExecContext(ctx, `
+		UPDATE productcatalog_product SET attribute_set_id = $2 WHERE id = $1
+	`, productID, setVal)
+	if err != nil {
+		return fmt.Errorf("set product attribute set: %w", err)
 	}
 	return nil
 }

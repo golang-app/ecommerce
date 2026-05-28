@@ -39,10 +39,15 @@ func (handler httpHandler) AdminProducts(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		products = nil
 	}
+	attrSets, err := handler.catalogSrv.AttributeSets(r.Context())
+	if err != nil {
+		attrSets = nil
+	}
 	handler.renderAdminTemplate(w, r, "admin/products", map[string]any{
-		"Active":   "products",
-		"Email":    email,
-		"Products": products,
+		"Active":        "products",
+		"Email":         email,
+		"Products":      products,
+		"AttributeSets": attrSets,
 	})
 }
 
@@ -69,6 +74,13 @@ func (handler httpHandler) AdminCreateProduct(w http.ResponseWriter, r *http.Req
 		handler.flash(w, r, err.Error(), "error")
 		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
 		return
+	}
+	if setID := strings.TrimSpace(r.FormValue("attribute_set")); setID != "" {
+		if err := handler.catalogSrv.SetProductAttributeSet(r.Context(), id, setID); err != nil {
+			handler.flash(w, r, "Product created, but the attribute set could not be assigned: "+err.Error(), "error")
+			http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+			return
+		}
 	}
 	handler.flash(w, r, "Product created", "info")
 	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
@@ -97,7 +109,9 @@ func (handler httpHandler) AdminEditProductForm(w http.ResponseWriter, r *http.R
 		assigned[c.ID()] = true
 	}
 
-	attrTypes, err := handler.catalogSrv.AttributeTypes(r.Context())
+	// The attributes section is driven by the product's attribute set (its
+	// ordered members), falling back to all attribute types when it has no set.
+	attrTypes, err := handler.catalogSrv.ProductAttributeTypes(r.Context(), id)
 	if err != nil {
 		attrTypes = nil
 	}
@@ -111,14 +125,30 @@ func (handler httpHandler) AdminEditProductForm(w http.ResponseWriter, r *http.R
 		}
 	}
 
+	// All sets (for the picker) and the product's current set name (if any).
+	attrSets, err := handler.catalogSrv.AttributeSets(r.Context())
+	if err != nil {
+		attrSets = nil
+	}
+	currentSetID := product.AttributeSetID()
+	currentSetName := ""
+	if currentSetID != "" {
+		if set, err := handler.catalogSrv.FindAttributeSet(r.Context(), currentSetID); err == nil {
+			currentSetName = set.Name()
+		}
+	}
+
 	handler.renderAdminTemplate(w, r, "admin/product_edit", map[string]any{
-		"Active":     "products",
-		"Email":      email,
-		"Product":    product,
-		"Categories": categories,
-		"Assigned":   assigned,
-		"AttrTypes":  attrTypes,
-		"AttrValues": attrValues,
+		"Active":         "products",
+		"Email":          email,
+		"Product":        product,
+		"Categories":     categories,
+		"Assigned":       assigned,
+		"AttrTypes":      attrTypes,
+		"AttrValues":     attrValues,
+		"AttributeSets":  attrSets,
+		"CurrentSetID":   currentSetID,
+		"CurrentSetName": currentSetName,
 	})
 }
 
@@ -209,7 +239,10 @@ func (handler httpHandler) AdminUpdateProductAttributes(w http.ResponseWriter, r
 		return
 	}
 	id := mux.Vars(r)["id"]
-	attrTypes, err := handler.catalogSrv.AttributeTypes(r.Context())
+	// Iterate the same ordered attribute types the edit form rendered (the
+	// product's set members, or all types when it has no set) so only those are
+	// processed/saved.
+	attrTypes, err := handler.catalogSrv.ProductAttributeTypes(r.Context(), id)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
@@ -238,6 +271,24 @@ func (handler httpHandler) AdminUpdateProductAttributes(w http.ResponseWriter, r
 		handler.flash(w, r, err.Error(), "error")
 	} else {
 		handler.flash(w, r, "Attributes updated", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
+// AdminUpdateProductAttributeSet assigns (or clears) the product's attribute
+// set from the picker on the edit page. The set controls which attribute types
+// the product's attributes section shows.
+func (handler httpHandler) AdminUpdateProductAttributeSet(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	_ = r.ParseForm()
+	setID := strings.TrimSpace(r.FormValue("attribute_set"))
+	if err := handler.catalogSrv.SetProductAttributeSet(r.Context(), id, setID); err != nil {
+		handler.flash(w, r, err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Attribute set updated", "info")
 	}
 	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
 }
@@ -271,9 +322,14 @@ func (handler httpHandler) AdminNewVariantProductForm(w http.ResponseWriter, r *
 	if !ok {
 		return
 	}
+	attrSets, err := handler.catalogSrv.AttributeSets(r.Context())
+	if err != nil {
+		attrSets = nil
+	}
 	handler.renderAdminTemplate(w, r, "admin/product_new_variant", map[string]any{
-		"Active": "products",
-		"Email":  email,
+		"Active":        "products",
+		"Email":         email,
+		"AttributeSets": attrSets,
 	})
 }
 
@@ -397,6 +453,13 @@ func (handler httpHandler) AdminCreateVariantProduct(w http.ResponseWriter, r *h
 		handler.flash(w, r, err.Error(), "error")
 		http.Redirect(w, r, back, http.StatusSeeOther)
 		return
+	}
+	if setID := strings.TrimSpace(r.FormValue("attribute_set")); setID != "" {
+		if err := handler.catalogSrv.SetProductAttributeSet(r.Context(), id, setID); err != nil {
+			handler.flash(w, r, "Variant product created, but the attribute set could not be assigned: "+err.Error(), "error")
+			http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+			return
+		}
 	}
 	handler.flash(w, r, "Variant product created", "info")
 	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)

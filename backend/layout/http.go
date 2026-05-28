@@ -152,6 +152,7 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/products/{id}/stock", observability.HTTPWrap(m.handler.AdminUpdateProductStock, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/categories", observability.HTTPWrap(m.handler.AdminUpdateProductCategories, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/attributes", observability.HTTPWrap(m.handler.AdminUpdateProductAttributes, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/{id}/attribute-set", observability.HTTPWrap(m.handler.AdminUpdateProductAttributeSet, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteProduct, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}", observability.HTTPWrap(m.handler.AdminUpdateProduct, m.logger)).Methods("POST")
 
@@ -166,6 +167,13 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/attributes/{id}/edit", observability.HTTPWrap(m.handler.AdminEditAttributeForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/attributes/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteAttribute, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/attributes/{id}", observability.HTTPWrap(m.handler.AdminUpdateAttribute, m.logger)).Methods("POST")
+
+	r.HandleFunc("/admin/attribute-sets", observability.HTTPWrap(m.handler.AdminAttributeSets, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/attribute-sets", observability.HTTPWrap(m.handler.AdminCreateAttributeSet, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/attribute-sets/new", observability.HTTPWrap(m.handler.AdminNewAttributeSetForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/attribute-sets/{id}/edit", observability.HTTPWrap(m.handler.AdminEditAttributeSetForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/attribute-sets/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteAttributeSet, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/attribute-sets/{id}", observability.HTTPWrap(m.handler.AdminUpdateAttributeSet, m.logger)).Methods("POST")
 
 	r.HandleFunc("/admin/orders", observability.HTTPWrap(m.handler.AdminOrders, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/orders/{orderID}/cancel", observability.HTTPWrap(m.handler.AdminCancelOrder, m.logger)).Methods("POST")

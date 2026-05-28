@@ -36,15 +36,24 @@ type catalogService interface {
 	SetVariantStock(ctx context.Context, variantID string, stock int) error
 	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
 	SetProductAttributes(ctx context.Context, productID string, values []pcapp.AttributeAssignment) error
+	SetProductAttributeSet(ctx context.Context, productID, setID string) error
+	ProductAttributeTypes(ctx context.Context, productID string) ([]pcdomain.AttributeType, error)
 
 	CreateCategory(ctx context.Context, name, slug string) error
 	UpdateCategory(ctx context.Context, id, name, slug string, position int) error
 	DeleteCategory(ctx context.Context, id string) error
 
 	AttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)
+	AllAttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)
 	CreateAttributeType(ctx context.Context, name, unit string, kind pcdomain.AttributeKind, filterable bool) error
 	UpdateAttributeType(ctx context.Context, id, name, unit string, kind pcdomain.AttributeKind, filterable bool, position int) error
 	DeleteAttributeType(ctx context.Context, id string) error
+
+	AttributeSets(ctx context.Context) ([]pcdomain.AttributeSet, error)
+	FindAttributeSet(ctx context.Context, id string) (pcdomain.AttributeSet, error)
+	CreateAttributeSet(ctx context.Context, name string, attributeTypeIDs []string) error
+	UpdateAttributeSet(ctx context.Context, id, name string, attributeTypeIDs []string) error
+	DeleteAttributeSet(ctx context.Context, id string) error
 }
 
 type cartService interface {

@@ -20,6 +20,7 @@ type productStorage interface {
 	SetVariantStock(ctx context.Context, variantID string, stock int) error
 	SetProductCategories(ctx context.Context, productID string, categoryIDs []string) error
 	SetProductAttributes(ctx context.Context, productID string, values []app.AttributeAssignment) error
+	SetProductAttributeSet(ctx context.Context, productID, setID string) error
 	Find(ctx context.Context, id string) (domain.Product, error)
 	FindVariant(ctx context.Context, variantID string) (domain.Product, domain.Variant, error)
 	AddOptionType(ctx context.Context, productID string, position int, ot domain.OptionType) error
@@ -41,6 +42,12 @@ type productStorage interface {
 	CreateAttributeType(ctx context.Context, t domain.AttributeType) error
 	UpdateAttributeType(ctx context.Context, t domain.AttributeType) error
 	DeleteAttributeType(ctx context.Context, id string) error
+	AllAttributeSets(ctx context.Context) ([]domain.AttributeSet, error)
+	FindAttributeSet(ctx context.Context, id string) (domain.AttributeSet, error)
+	CreateAttributeSet(ctx context.Context, s domain.AttributeSet) error
+	UpdateAttributeSet(ctx context.Context, s domain.AttributeSet) error
+	DeleteAttributeSet(ctx context.Context, id string) error
+	SetAttributeSetItems(ctx context.Context, setID string, attributeTypeIDs []string) error
 }
 
 var storage productStorage

@@ -85,6 +85,10 @@ type Product struct {
 	variants    []Variant
 	categories  []Category
 	attributes  []AttributeValue
+	// attributeSetID is the id of the attribute set that defines which attribute
+	// types this product has and in what order. Empty when the product has no
+	// set (it then falls back to all attribute types).
+	attributeSetID string
 }
 
 var emptyProduct = Product{}
@@ -161,6 +165,17 @@ func (p Product) WithClassification(categories []Category, attributes []Attribut
 
 func (p Product) Categories() []Category       { return p.categories }
 func (p Product) Attributes() []AttributeValue { return p.attributes }
+
+// AttributeSetID returns the id of the product's attribute set (empty when it
+// has none).
+func (p Product) AttributeSetID() string { return p.attributeSetID }
+
+// WithAttributeSet returns a copy of the product with its attribute set id set
+// (used by the storage layer after loading it, or when assigning a set).
+func (p Product) WithAttributeSet(setID string) Product {
+	p.attributeSetID = setID
+	return p
+}
 
 // Variant returns the variant with the given id, if it belongs to this product.
 func (p Product) Variant(id string) (Variant, bool) {

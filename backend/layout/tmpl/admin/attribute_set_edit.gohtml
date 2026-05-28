@@ -1,0 +1,35 @@
+{{define "main"}}
+  <p class="crumbs"><a href="/admin/attribute-sets">attribute sets</a> / {{if .IsNew}}new{{else}}edit{{end}}</p>
+  <h2 class="account-card__title">{{if .IsNew}}new attribute set{{else}}edit attribute set{{end}}</h2>
+
+  <form class="form" method="post" action="{{if .IsNew}}/admin/attribute-sets{{else}}/admin/attribute-sets/{{.SetID}}{{end}}">
+    <div class="field"><label for="s-name">name</label><input id="s-name" name="name" value="{{.SetName}}" required></div>
+
+    <h3 class="account-card__title">members</h3>
+    <p class="muted">tick the attribute types this set includes and set their order.</p>
+
+    {{if .Members}}
+      <table class="admin-table">
+        <thead>
+          <tr><th>include</th><th>name</th><th>kind</th><th>order</th></tr>
+        </thead>
+        <tbody>
+          {{range $row := .Members}}
+            {{$t := $row.Type}}
+            <tr>
+              <td><input type="checkbox" name="member" value="{{$t.ID}}" {{if $row.Checked}}checked{{end}}></td>
+              <td>{{$t.Name}}</td>
+              <td>{{$t.Kind}}</td>
+              <td><input type="number" name="order_{{$t.ID}}" value="{{$row.Order}}" min="1" style="width:5rem"></td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    {{else}}
+      <p class="muted">no attribute types defined yet. create some under <a href="/admin/attributes">attributes</a> first.</p>
+    {{end}}
+
+    <button type="submit" class="btn">{{if .IsNew}}create attribute set{{else}}save changes{{end}}</button>
+    <p class="form__aside"><a href="/admin/attribute-sets">&larr; back to attribute sets</a></p>
+  </form>
+{{end}}
