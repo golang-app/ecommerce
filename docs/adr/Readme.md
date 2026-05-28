@@ -4,7 +4,8 @@
 
 ## List of accepted ADRs
 
-* [ReactJS](19.04.2022-reactjs.md)
+* [ReactJS](19.04.2022-reactjs.md) (superseded by the HTMX ADR below)
+* [Switch the frontend from ReactJS to HTMX](18.09.2023-htmx.md)
 
 ## Template
 We'll use a simple template just to not overcomplicate it:
