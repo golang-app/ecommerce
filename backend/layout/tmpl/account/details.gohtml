@@ -1,3 +1,6 @@
+{{define "title"}}Account details · {{.SiteName}}{{end}}
+{{define "description"}}Your {{.SiteName}} account details and password.{{end}}
+
 {{define "main"}}
   <h1 class="page-title">account</h1>
   <div class="account">
@@ -6,7 +9,7 @@
       <h2 class="account-card__title">account details</h2>
 
       <div class="field">
-        <label>email</label>
+        <p class="field__static-label">email</p>
         <p>{{.Email}}</p>
       </div>
 

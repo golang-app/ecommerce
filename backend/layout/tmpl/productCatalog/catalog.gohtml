@@ -1,3 +1,6 @@
+{{define "title"}}{{$name := ""}}{{range .Categories}}{{if eq .Slug $.ActiveCategory}}{{$name = .Name}}{{end}}{{end}}{{if $name}}{{$name}} · {{.SiteName}}{{else}}Shop · {{.SiteName}}{{end}}{{end}}
+{{define "description"}}{{$name := ""}}{{range .Categories}}{{if eq .Slug $.ActiveCategory}}{{$name = .Name}}{{end}}{{end}}{{if $name}}Browse {{$name}} products from our store.{{else}}Browse every product in our store.{{end}}{{end}}
+
 {{define "main"}}
   <h1 class="page-title">shop</h1>
 
