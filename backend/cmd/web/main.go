@@ -89,6 +89,13 @@ func main() {
 		}
 	}()
 
+	// Construct package-level application metric instruments AFTER the
+	// MeterProvider is installed by RuntimeMetrics — otherwise the handles
+	// would be bound to the no-op default provider and every increment
+	// would silently drop. Run it once at boot; the helpers in
+	// observability/appmetrics.go read the resulting handles unconditionally.
+	observability.InitMetrics()
+
 	// Bridge logrus into the OTLP log pipeline. Returns a noop closer when
 	// OTEL_EXPORTER_OTLP_ENDPOINT is empty; the app keeps logging to
 	// stderr unchanged in that case.

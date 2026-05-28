@@ -10,6 +10,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // App is an instance of the whole application.
@@ -41,9 +42,19 @@ func New(ctx context.Context, port int) *App {
 	r.HandleFunc("/healthyz", deps.Healthy)
 	r.HandleFunc("/readyz", deps.Ready)
 
+	// Auto-instrument the HTTP server: otelhttp emits the standard
+	// http.server.duration histogram + request count with http.method /
+	// http.status_code attributes, and otelmux (installed above as a router
+	// middleware) fills in http.route based on the matched gorilla route so
+	// the metrics aren't blown up by raw URL paths. The /healthyz and
+	// /readyz endpoints are filtered out at the otelmux layer (above), which
+	// keeps the noisy probes from drowning real traffic; otelhttp still
+	// observes them but with the same route label, which Grafana can drop.
+	handler := otelhttp.NewHandler(r, "http.server")
+
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: r,
+		Handler: handler,
 	}
 
 	return &App{

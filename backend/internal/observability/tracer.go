@@ -102,3 +102,12 @@ func newResource(appName string) *resource.Resource {
 		semconv.ServiceNameKey.String(appName),
 	)
 }
+
+// Tracer returns the tracer associated with the given instrumentation name.
+// A thin wrapper over otel.Tracer kept here so other packages can depend on
+// the observability module instead of importing go.opentelemetry.io/otel
+// directly — this keeps the OTel SDK surface localised to one place and lets
+// us swap providers without touching every call site.
+func Tracer(name string) trace.Tracer {
+	return otel.Tracer(name)
+}

@@ -21,7 +21,27 @@ import (
 	"net/smtp"
 	"strings"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+)
+
+// tracer for the mailer package; each Send call gets its own span so the trace
+// timeline shows whether an outbound email contributed to a slow request.
+var tracer = observability.Tracer("github.com/bkielbasa/go-ecommerce/backend/internal/mailer")
+
+// MessageKind describes what kind of email a Message is. It is propagated as
+// a metric label (kind="order_confirmation", kind="password_reset", ...) so
+// dashboards can group sent/failed counts by email template without leaking
+// per-recipient cardinality. An empty Kind is recorded as "unknown".
+type MessageKind = string
+
+const (
+	KindUnknown           MessageKind = "unknown"
+	KindOrderConfirmation MessageKind = "order_confirmation"
+	KindPasswordReset     MessageKind = "password_reset"
 )
 
 // Message is one outbound email. From is optional: when blank, the Mailer
@@ -35,6 +55,21 @@ type Message struct {
 	Subject  string
 	HTMLBody string
 	TextBody string
+	// Kind tags the email template ("order_confirmation",
+	// "password_reset", ...). It is used only by the observability layer
+	// to label the gocommerce_emails_sent_total counter — an empty Kind
+	// is recorded as "unknown" and is otherwise harmless to the MIME
+	// payload.
+	Kind MessageKind
+}
+
+// kindOrDefault returns the configured Kind or "unknown" when blank, so the
+// metric label always carries a small bounded vocabulary.
+func kindOrDefault(k MessageKind) MessageKind {
+	if k == "" {
+		return KindUnknown
+	}
+	return k
 }
 
 // Mailer is the abstraction every caller in the codebase depends on. The
@@ -90,12 +125,30 @@ var ErrEmptyMessage = errors.New("mailer: message has no body")
 // Send dispatches msg over SMTP. The MIME body is built locally so the
 // implementation can produce a true multipart/alternative when both bodies
 // are present without dragging in net/mail or net/textproto.
-func (m *SMTPMailer) Send(ctx context.Context, msg Message) error {
+func (m *SMTPMailer) Send(ctx context.Context, msg Message) (rerr error) {
+	kind := kindOrDefault(msg.Kind)
+	ctx, span := tracer.Start(ctx, "Mailer.SMTP.Send", trace.WithAttributes(
+		attribute.String("mail.kind", kind),
+	))
+	defer span.End()
+	defer func() {
+		outcome := "success"
+		if rerr != nil {
+			outcome = "failure"
+		}
+		observability.EmailsSentInc(ctx, kind, outcome)
+	}()
+
 	if msg.HTMLBody == "" && msg.TextBody == "" {
+		span.RecordError(ErrEmptyMessage)
+		span.SetStatus(codes.Error, ErrEmptyMessage.Error())
 		return ErrEmptyMessage
 	}
 	if msg.To == "" {
-		return errors.New("mailer: To is required")
+		err := errors.New("mailer: To is required")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 
 	from := msg.From
@@ -105,6 +158,8 @@ func (m *SMTPMailer) Send(ctx context.Context, msg Message) error {
 
 	body, err := buildMIME(from, msg)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("mailer: build MIME: %w", err)
 	}
 
@@ -124,10 +179,17 @@ func (m *SMTPMailer) Send(ctx context.Context, msg Message) error {
 	// pre-cancelled context so a Publish that fires during shutdown does
 	// not block on the SMTP dial.
 	if err := ctx.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 
-	return smtp.SendMail(m.Host, auth, from, []string{msg.To}, body)
+	if err := smtp.SendMail(m.Host, auth, from, []string{msg.To}, body); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+	return nil
 }
 
 // buildMIME constructs the raw RFC822 bytes net/smtp expects. For
@@ -207,9 +269,25 @@ type LogMailer struct {
 // The body itself is intentionally NOT logged in full (passwords / reset
 // tokens can show up inside it); a truncated preview is enough for a
 // developer to confirm the right email was triggered.
-func (m *LogMailer) Send(ctx context.Context, msg Message) error {
+func (m *LogMailer) Send(ctx context.Context, msg Message) (rerr error) {
+	kind := kindOrDefault(msg.Kind)
+	ctx, span := tracer.Start(ctx, "Mailer.Log.Send", trace.WithAttributes(
+		attribute.String("mail.kind", kind),
+	))
+	defer span.End()
+	defer func() {
+		outcome := "success"
+		if rerr != nil {
+			outcome = "failure"
+		}
+		observability.EmailsSentInc(ctx, kind, outcome)
+	}()
+
 	if msg.To == "" {
-		return errors.New("mailer: To is required")
+		err := errors.New("mailer: To is required")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return err
 	}
 	from := msg.From
 	if from == "" {

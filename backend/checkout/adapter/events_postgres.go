@@ -4,9 +4,20 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// tracer for the checkout postgres adapter; used to spotlight LoadEvents on
+// the event-sourcing read path so trace consumers can see how much time the
+// event log replay contributes to a Cancel/Refund/etc. command.
+var adapterTracer = observability.Tracer("github.com/bkielbasa/go-ecommerce/backend/checkout/adapter")
 
 // appendEventsTx writes the aggregate's new events within an existing
 // transaction, numbering them from expectedVersion+1. The (aggregate_id,
@@ -35,11 +46,24 @@ func appendEventsTx(ctx context.Context, tx *sql.Tx, aggregateID string, expecte
 // rehydrating the write-side aggregate; the read side uses the projection
 // tables instead.
 func (p Postgres) LoadEvents(ctx context.Context, aggregateID string) ([]domain.Event, error) {
+	ctx, span := adapterTracer.Start(ctx, "checkout.adapter.LoadEvents", trace.WithAttributes(
+		attribute.String("checkout.aggregate_id", aggregateID),
+	))
+	defer span.End()
+	start := time.Now()
+	defer func() {
+		observability.Metrics().DBQueryDurationSec.Record(ctx, time.Since(start).Seconds(),
+			metric.WithAttributes(attribute.String("query", "checkout.load_events")),
+		)
+	}()
+
 	rows, err := p.db.QueryContext(ctx, `
 		SELECT event_type, payload FROM checkout_events
 		WHERE aggregate_id = $1 ORDER BY sequence
 	`, aggregateID)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return nil, fmt.Errorf("load events: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
@@ -49,15 +73,25 @@ func (p Postgres) LoadEvents(ctx context.Context, aggregateID string) ([]domain.
 		var typ string
 		var payload []byte
 		if err := rows.Scan(&typ, &payload); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
 		e, err := unmarshalEvent(typ, payload)
 		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return nil, err
 		}
 		events = append(events, e)
 	}
-	return events, rows.Err()
+	if err := rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return events, err
+	}
+	span.SetAttributes(attribute.Int("checkout.event_count", len(events)))
+	return events, nil
 }
 
 // Load rebuilds an order aggregate from its event history (write side).

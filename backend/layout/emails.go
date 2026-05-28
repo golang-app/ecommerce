@@ -109,6 +109,7 @@ func RenderOrderConfirmation(view checkoutQuery.OrderView, baseURL string) (mail
 		Subject:  "Your order " + view.ID() + " is confirmed",
 		HTMLBody: htmlBuf.String(),
 		TextBody: textBuf.String(),
+		Kind:     mailer.KindOrderConfirmation,
 	}, nil
 }
 
@@ -146,5 +147,6 @@ func RenderPasswordReset(toEmail, rawToken, baseURL string, ttlMinutes int) (mai
 		Subject:  "Reset your " + emailSiteName + " password",
 		HTMLBody: htmlBuf.String(),
 		TextBody: textBuf.String(),
+		Kind:     mailer.KindPasswordReset,
 	}, nil
 }

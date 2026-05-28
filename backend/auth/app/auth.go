@@ -9,8 +9,16 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/auth/adapter"
 	"github.com/bkielbasa/go-ecommerce/backend/auth/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// tracer is the package-level tracer used by the auth application layer.
+// Bound to the global TracerProvider; resolves to a no-op when no exporter
+// is configured so the calls cost effectively nothing.
+var tracer = observability.Tracer("github.com/bkielbasa/go-ecommerce/backend/auth/app")
 
 var (
 	ErrInvalidEmail  = fmt.Errorf("invalid email")
@@ -82,19 +90,35 @@ func NewAuth(authStorage CustomerStorage, sessStorage SessStorage, resetStorage 
 	}
 }
 
-func (a auth) CreateNewCustomer(ctx context.Context, email, password string) error {
+func (a auth) CreateNewCustomer(ctx context.Context, email, password string) (rerr error) {
+	ctx, span := tracer.Start(ctx, "Auth.CreateNewCustomer")
+	defer span.End()
+	// Defer the metrics decision until the function actually exits so every
+	// early return funnels through one place; named return rerr carries the
+	// outcome.
+	defer func() {
+		outcome := "success"
+		if rerr != nil {
+			outcome = "failure"
+		}
+		observability.RegistrationsInc(ctx, outcome)
+	}()
+
 	if !emailRegexp.MatchString(email) {
+		recordSpanError(span, ErrInvalidEmail)
 		return ErrInvalidEmail
 	}
 
 	for _, policy := range a.passPolicies {
 		if err := policy(password); err != nil {
+			recordSpanError(span, err)
 			return fmt.Errorf("cannot create customer: %w", err)
 		}
 	}
 
 	passwordHash, err := hashPassword(password)
 	if err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("could not hash password: %w", err)
 	}
 
@@ -106,12 +130,18 @@ func (a auth) CreateNewCustomer(ctx context.Context, email, password string) err
 	// so we can create a new one
 
 	case nil:
+		recordSpanError(span, domain.ErrCustomerExists)
 		return domain.ErrCustomerExists
 	default:
+		recordSpanError(span, err)
 		return fmt.Errorf("could not check if customer already exists: %w", err)
 	}
 
-	return a.authStorage.Create(ctx, email, passwordHash)
+	if err := a.authStorage.Create(ctx, email, passwordHash); err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+	return nil
 }
 
 func (a auth) FindByToken(ctx context.Context, sessToken string) (*domain.Session, error) {
@@ -138,13 +168,28 @@ func (a auth) Logout(ctx context.Context, sessToken string) error {
 	return nil
 }
 
-func (a auth) Login(ctx context.Context, email, password string) (*domain.Session, error) {
+func (a auth) Login(ctx context.Context, email, password string) (_ *domain.Session, rerr error) {
+	ctx, span := tracer.Start(ctx, "Auth.Login")
+	defer span.End()
+	// Login outcome is recorded once at function exit so the metric stays
+	// consistent regardless of which guard fires (customer lookup, bcrypt
+	// compare, session persist).
+	defer func() {
+		outcome := "success"
+		if rerr != nil {
+			outcome = "failure"
+		}
+		observability.LoginsInc(ctx, outcome)
+	}()
+
 	customer, err := a.authStorage.Find(ctx, email)
 	if err != nil {
+		recordSpanError(span, err)
 		return nil, fmt.Errorf("could not find customer: %w", err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(customer.PasswordHash), []byte(password)); err != nil {
+		recordSpanError(span, err)
 		return nil, fmt.Errorf("could not compare password hash: %w", err)
 	}
 
@@ -157,6 +202,7 @@ func (a auth) Login(ctx context.Context, email, password string) (*domain.Sessio
 	sess := domain.NewSession(sessID, c.Email(), expires)
 
 	if err := a.sessStorage.Store(ctx, sess); err != nil {
+		recordSpanError(span, err)
 		return nil, fmt.Errorf("could not store session: %w", err)
 	}
 
@@ -166,33 +212,42 @@ func (a auth) Login(ctx context.Context, email, password string) (*domain.Sessio
 // ChangePassword verifies the customer's current password, enforces the
 // password policy on the new one, and stores the new hash.
 func (a auth) ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error {
+	ctx, span := tracer.Start(ctx, "Auth.ChangePassword")
+	defer span.End()
+
 	customer, err := a.authStorage.Find(ctx, email)
 	if err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("could not find customer: %w", err)
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(customer.PasswordHash), []byte(oldPassword)); err != nil {
+		recordSpanError(span, ErrWrongPassword)
 		return ErrWrongPassword
 	}
 
 	for _, policy := range a.passPolicies {
 		if err := policy(newPassword); err != nil {
+			recordSpanError(span, err)
 			return fmt.Errorf("cannot change password: %w", err)
 		}
 	}
 
 	newHash, err := hashPassword(newPassword)
 	if err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("could not hash password: %w", err)
 	}
 
 	if err := a.authStorage.UpdatePassword(ctx, email, newHash); err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("could not update password: %w", err)
 	}
 
 	// A successful password change always clears the must-change-password
 	// gate (no-op for users who weren't flagged in the first place).
 	if err := a.authStorage.ClearMustChangePassword(ctx, email); err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("could not clear must-change-password flag: %w", err)
 	}
 
@@ -245,6 +300,9 @@ func hashPassword(password string) (string, error) {
 // returned verbatim so a transient DB outage still produces a 5xx rather
 // than a silent success that leaks no information.
 func (a auth) RequestPasswordReset(ctx context.Context, email string) (string, error) {
+	ctx, span := tracer.Start(ctx, "Auth.RequestPasswordReset")
+	defer span.End()
+
 	if a.resetStorage == nil {
 		return "", nil
 	}
@@ -258,9 +316,15 @@ func (a auth) RequestPasswordReset(ctx context.Context, email string) (string, e
 		return "", nil
 	}
 	if err != nil {
+		recordSpanError(span, err)
 		return "", fmt.Errorf("could not lookup customer: %w", err)
 	}
-	return a.resetStorage.BeginPasswordReset(ctx, email, passwordResetTTL)
+	token, err := a.resetStorage.BeginPasswordReset(ctx, email, passwordResetTTL)
+	if err != nil {
+		recordSpanError(span, err)
+		return "", err
+	}
+	return token, nil
 }
 
 // ResetPassword burns a reset token and replaces the customer's password
@@ -268,31 +332,48 @@ func (a auth) RequestPasswordReset(ctx context.Context, email string) (string, e
 // The token is consumed BEFORE the policy check on purpose: a policy
 // failure should not let a leaked token stay reusable.
 func (a auth) ResetPassword(ctx context.Context, rawToken, newPassword string) error {
+	ctx, span := tracer.Start(ctx, "Auth.ResetPassword")
+	defer span.End()
+
 	if a.resetStorage == nil {
+		recordSpanError(span, adapter.ErrInvalidResetToken)
 		return adapter.ErrInvalidResetToken
 	}
 	customerID, err := a.resetStorage.ConsumePasswordReset(ctx, rawToken)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 
 	for _, policy := range a.passPolicies {
 		if err := policy(newPassword); err != nil {
+			recordSpanError(span, err)
 			return fmt.Errorf("cannot reset password: %w", err)
 		}
 	}
 
 	newHash, err := hashPassword(newPassword)
 	if err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("could not hash password: %w", err)
 	}
 	if err := a.authStorage.UpdatePassword(ctx, customerID, newHash); err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("could not update password: %w", err)
 	}
 	// A successful password reset clears any forced-change flag the same
 	// way ChangePassword does — the user just proved they own the inbox.
 	if err := a.authStorage.ClearMustChangePassword(ctx, customerID); err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("could not clear must-change-password flag: %w", err)
 	}
 	return nil
+}
+
+// recordSpanError marks the span as errored and records the underlying error
+// so traces clearly identify failure paths without callers having to wire the
+// two operations themselves.
+func recordSpanError(span trace.Span, err error) {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
 }

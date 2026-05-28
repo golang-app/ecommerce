@@ -17,8 +17,16 @@ import (
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/query"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// tracer for the reservation sweeper; each periodic tick gets its own span so
+// it's easy to graph sweep frequency and outcome in Jaeger.
+var tracer = observability.Tracer("github.com/bkielbasa/go-ecommerce/backend/checkout/sweeper")
 
 // ExpireCommand is the subset of the checkout write side the sweeper needs.
 // Satisfied by app.CheckoutService.ExpirePending; the indirection keeps the
@@ -101,11 +109,19 @@ func (s *Sweeper) Run(ctx context.Context) {
 // tests can drive it deterministically without a ticker.
 func (s *Sweeper) sweep(ctx context.Context, now time.Time) {
 	cutoff := now.Add(-s.ttl)
+	ctx, span := tracer.Start(ctx, "Sweeper.sweep", trace.WithAttributes(
+		attribute.String("sweeper.cutoff", cutoff.Format(time.RFC3339)),
+	))
+	defer span.End()
+
 	ids, err := s.queries.ListExpiredPending(ctx, cutoff)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		s.logger.WithError(err).WithField("cutoff", cutoff).Warn("reservation sweeper: list expired pending failed")
 		return
 	}
+	span.SetAttributes(attribute.Int("sweeper.orders_found", len(ids)))
 	if len(ids) == 0 {
 		return
 	}

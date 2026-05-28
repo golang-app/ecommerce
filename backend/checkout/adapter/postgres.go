@@ -9,6 +9,11 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/query"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Postgres struct {
@@ -28,8 +33,22 @@ func (p Postgres) Save(ctx context.Context, order *domain.Order) error {
 		return nil
 	}
 
+	ctx, span := adapterTracer.Start(ctx, "checkout.adapter.Save", trace.WithAttributes(
+		attribute.String("order.id", order.ID()),
+		attribute.Int("checkout.pending_events", len(pending)),
+	))
+	defer span.End()
+	start := time.Now()
+	defer func() {
+		observability.Metrics().DBQueryDurationSec.Record(ctx, time.Since(start).Seconds(),
+			metric.WithAttributes(attribute.String("query", "checkout.save")),
+		)
+	}()
+
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer func() {
@@ -39,15 +58,21 @@ func (p Postgres) Save(ctx context.Context, order *domain.Order) error {
 	}()
 
 	if err = appendEventsTx(ctx, tx, order.ID(), order.ExpectedVersion(), pending); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return err
 	}
 	for _, e := range pending {
 		if err = projectEventTx(ctx, tx, e); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return err
 		}
 	}
 
 	if err = tx.Commit(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return fmt.Errorf("commit: %w", err)
 	}
 
