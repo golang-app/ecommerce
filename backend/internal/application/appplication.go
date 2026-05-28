@@ -27,7 +27,17 @@ func New(ctx context.Context, port int) *App {
 	r := mux.NewRouter()
 	deps := dependency.New()
 
-	r.Use(otelmux.Middleware("go-ecommerce"))
+	// Liveness/readiness endpoints are deliberately excluded from tracing.
+	// Kubernetes (and any other supervisor) polls them constantly; emitting
+	// a span per probe drowns out real traffic and inflates the trace
+	// backend for no diagnostic value.
+	r.Use(otelmux.Middleware("go-ecommerce", otelmux.WithFilter(func(req *http.Request) bool {
+		switch req.URL.Path {
+		case "/healthyz", "/readyz":
+			return false
+		}
+		return true
+	})))
 	r.HandleFunc("/healthyz", deps.Healthy)
 	r.HandleFunc("/readyz", deps.Ready)
 

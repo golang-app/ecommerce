@@ -7,6 +7,7 @@ services:
     depends_on:
       - migrate
       - mailhog
+      - otel-collector
     ports:
       - 8080:8080
     networks:
@@ -31,6 +32,13 @@ services:
       # threshold in MINOR units (cents). Both default to zero (disabled).
       TAX_RATE_PERCENT: ${TAX_RATE_PERCENT:-0}
       FREE_SHIPPING_THRESHOLD: ${FREE_SHIPPING_THRESHOLD:-0}
+      # OpenTelemetry: ship traces / metrics / logs to the local collector.
+      # Empty / unset values disable each exporter — observability.Init*
+      # functions detect this and skip exporter setup so the app still
+      # starts when the collector is down (the batcher tolerates it
+      # transparently either way).
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_INSECURE: "true"
     volumes:
       # User-uploaded admin images are persisted on the host. The Dockerfile
       # creates /uploads owned by the app user (uid 10001).
@@ -80,6 +88,77 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_HOST: postgres
+
+  # ----- Observability stack ------------------------------------------------
+  #
+  # The four services below form the dev telemetry pipeline:
+  #
+  #   backend --OTLP/HTTP:4318-->  otel-collector  ---->  jaeger   (traces)
+  #                                                 |--> prometheus (metrics)
+  #                                                 \--> stdout    (logs)
+  #
+  # Images pinned to recent stable tags; bump deliberately. `:latest` is
+  # avoided so a rebuild on a different day does not silently swap binaries.
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.108.0
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./deploy/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    ports:
+      # Exposed to the host for ad-hoc otlp probes via curl/grpcurl. The
+      # backend talks to the collector over the docker network, not the
+      # host-bound port.
+      - 14317:4317  # OTLP/gRPC (remapped to dodge other dev stacks)
+      - 14318:4318  # OTLP/HTTP
+      - 18889:8889  # Prometheus scrape target
+    depends_on:
+      - jaeger
+    networks:
+      - ecommerce
+
+  jaeger:
+    # all-in-one bundles collector + query + UI in a single binary; perfect
+    # for dev. 16686 is the UI and the query API Grafana hits. 4317 is its
+    # own OTLP/gRPC receiver — that's the port the collector forwards to.
+    image: jaegertracing/all-in-one:1.62.0
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - 16686:16686  # Jaeger UI
+    networks:
+      - ecommerce
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    volumes:
+      - ./deploy/prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - 19090:9090
+    networks:
+      - ecommerce
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    environment:
+      # Anonymous viewer access keeps the dev UX frictionless. No real data
+      # ever lives in this Grafana instance.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - 13000:3000
+    depends_on:
+      - prometheus
+      - jaeger
+    networks:
+      - ecommerce
 
 networks:
   ecommerce:

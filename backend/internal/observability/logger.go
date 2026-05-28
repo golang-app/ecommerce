@@ -5,6 +5,10 @@ import (
 	"net/http"
 
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/bridges/otellogrus"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/log/global"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -20,6 +24,62 @@ func Logger(ctx context.Context) logrus.FieldLogger {
 	}
 
 	return logrus.New()
+}
+
+// InitLogs wires the global OpenTelemetry LoggerProvider to an OTLP/HTTP
+// exporter and installs an otellogrus hook on the supplied logger so every
+// logrus.Info/Error/etc. call is also emitted as an OTLP log record. When
+// no OTLP endpoint is configured the function returns a noop shutdown
+// closer and leaves the logger untouched — logs still go to stderr via the
+// existing JSON formatter.
+//
+// The hook is attached to the *logrus.Logger backing the FieldLogger so
+// child loggers (anything produced via WithField/WithFields) inherit it.
+func InitLogs(ctx context.Context, appName string, base logrus.FieldLogger) (func(context.Context) error, error) {
+	endpoint := otlpEndpointFromEnv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT")
+	if endpoint == "" {
+		logrus.Info("OTel log exporter not configured (OTEL_EXPORTER_OTLP_ENDPOINT is empty); logs will not be shipped")
+		return noopShutdown, nil
+	}
+
+	opts := []otlploghttp.Option{otlploghttp.WithEndpointURL(endpoint)}
+	if otlpInsecureFromEnv() {
+		opts = append(opts, otlploghttp.WithInsecure())
+	}
+
+	exp, err := otlploghttp.New(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	provider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(exp)),
+		sdklog.WithResource(newResource(appName)),
+	)
+	global.SetLoggerProvider(provider)
+
+	// Hook the bridge into the underlying *logrus.Logger so every entry —
+	// including those routed through field-augmenting child loggers —
+	// flows into OTLP as well as the JSON formatter on stderr.
+	if l := rootLogger(base); l != nil {
+		l.AddHook(otellogrus.NewHook(appName, otellogrus.WithLoggerProvider(provider)))
+	}
+
+	return provider.Shutdown, nil
+}
+
+// rootLogger extracts the underlying *logrus.Logger from a FieldLogger
+// whether the caller passed the bare logger or a *logrus.Entry produced
+// via WithField. Returns nil for any other implementation; the bridge is
+// silently skipped in that case.
+func rootLogger(fl logrus.FieldLogger) *logrus.Logger {
+	switch v := fl.(type) {
+	case *logrus.Logger:
+		return v
+	case *logrus.Entry:
+		return v.Logger
+	}
+	return nil
 }
 
 func LoggerMiddleware(next http.HandlerFunc, logger logrus.FieldLogger) http.HandlerFunc {

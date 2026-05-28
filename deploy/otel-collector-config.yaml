@@ -1,0 +1,59 @@
+# OpenTelemetry Collector configuration for local dev.
+#
+# Receives OTLP (gRPC :4317 and HTTP :4318) from the backend and fans the
+# three signals out to the dev backends:
+#   - traces  -> Jaeger (OTLP/gRPC at jaeger:4317)
+#   - metrics -> Prometheus exporter on :8889 (Prometheus scrapes it)
+#   - logs    -> stdout via the debug exporter
+#
+# Phase B will likely add a Loki exporter for logs; for now stdout is
+# enough to confirm log records are flowing.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  # Jaeger 1.35+ accepts native OTLP on 4317 — no jaeger-specific exporter
+  # required. tls.insecure is fine for a docker-internal network.
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # The Prometheus exporter exposes a /metrics endpoint on :8889 that
+  # Prometheus scrapes. The namespace prefix keeps service-level metrics
+  # tidy in dashboards.
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: gocommerce
+
+  # Debug exporter dumps every log record to the collector's stdout. Tail
+  # `docker compose logs otel-collector` to verify the bridge is alive.
+  debug:
+    verbosity: detailed
+
+service:
+  telemetry:
+    logs:
+      level: info
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

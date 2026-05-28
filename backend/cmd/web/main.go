@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	checkoutapp "github.com/bkielbasa/go-ecommerce/backend/checkout/app"
 	checkoutintegration "github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/sweeper"
-	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
@@ -25,7 +23,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
-	logrustash "github.com/bshuster-repo/logrus-logstash-hook"
+	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
@@ -81,9 +79,28 @@ func main() {
 		}
 	}()
 
-	if err = observability.RuntimeMetrics(ctx, appName); err != nil {
+	metricsClose, err := observability.RuntimeMetrics(ctx, appName)
+	if err != nil {
 		logger.WithError(err).Fatal("failed to initialize runtime metrics")
 	}
+	defer func() {
+		if err = metricsClose(context.Background()); err != nil {
+			logger.WithError(err).Error("failed to close metrics provider")
+		}
+	}()
+
+	// Bridge logrus into the OTLP log pipeline. Returns a noop closer when
+	// OTEL_EXPORTER_OTLP_ENDPOINT is empty; the app keeps logging to
+	// stderr unchanged in that case.
+	logsClose, err := observability.InitLogs(ctx, appName, logger)
+	if err != nil {
+		logger.WithError(err).Fatal("failed to initialize OTel logs")
+	}
+	defer func() {
+		if err = logsClose(context.Background()); err != nil {
+			logger.WithError(err).Error("failed to close OTel log provider")
+		}
+	}()
 
 	app := application.New(ctx, cfg.ServerPort)
 
@@ -194,6 +211,21 @@ func main() {
 	logrus.Infof("application stopped")
 }
 
+// newLogger builds the process-wide structured logger.
+//
+// Output: JSON to stderr. Every entry carries the service.name field so
+// downstream tooling (kubectl logs, fluentd, etc.) can attribute the line
+// to this app without parsing.
+//
+// In addition to stderr, log records are exported via OTLP when
+// OTEL_EXPORTER_OTLP_ENDPOINT is configured — the bridge is installed by
+// observability.InitLogs after construction (it attaches a logrus.Hook to
+// the same underlying *logrus.Logger).
+//
+// The previous logstash TCP hook was removed: it tried to dial
+// "logstash:50000" with a 1s timeout on every boot, which always failed in
+// the standard dev compose-up and produced a spurious "lookup logstash: no
+// such host" error in the logs. The OTel log pipeline supersedes it.
 func newLogger(lvl logrus.Level, appName string) logrus.FieldLogger {
 	instance := &logrus.Logger{
 		Out:          os.Stderr,
@@ -204,16 +236,5 @@ func newLogger(lvl logrus.Level, appName string) logrus.FieldLogger {
 		ReportCaller: false,
 	}
 
-	conn, err := net.DialTimeout("tcp", "logstash:50000", time.Second)
-	if err != nil {
-		logrus.Error(err)
-	}
-
-	if conn != nil {
-		hook := logrustash.New(conn, logrustash.DefaultFormatter(logrus.Fields{"app": appName}))
-		instance.Hooks.Add(hook)
-	}
-
-	return instance.
-		WithField("service.name", appName)
+	return instance.WithField("service.name", appName)
 }
