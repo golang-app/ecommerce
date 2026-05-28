@@ -22,6 +22,11 @@ services:
       SMTP_HOST: mailhog:1025
       MAIL_FROM: no-reply@gocommerce.local
       BASE_URL: http://localhost:8080
+      # Stock reservation TTL: orders still pending after this duration are
+      # marked failed by the background sweeper and their reserved stock is
+      # released. Defaults: 30m / 5m. Override here for dev/testing.
+      RESERVATION_TTL: ${RESERVATION_TTL:-30m}
+      RESERVATION_SWEEP_INTERVAL: ${RESERVATION_SWEEP_INTERVAL:-5m}
     volumes:
       # User-uploaded admin images are persisted on the host. The Dockerfile
       # creates /uploads owned by the app user (uid 10001).

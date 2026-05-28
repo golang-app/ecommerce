@@ -13,6 +13,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout"
 	checkoutintegration "github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
+	"github.com/bkielbasa/go-ecommerce/backend/checkout/sweeper"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
@@ -157,6 +158,13 @@ func main() {
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)
+
+	// Reservation TTL sweeper: releases stock held by pending orders whose
+	// confirmation never arrived (process crash, abandoned cart after stock
+	// reserve, hung async payment). Bound to the application's lifecycle
+	// context; cancel triggers a clean exit.
+	reservationSweeper := sweeper.New(checkoutQry, checkoutSrv, cfg.ReservationTTL, cfg.ReservationSweepInterval, logger)
+	go reservationSweeper.Run(ctx)
 
 	go func() {
 		_ = app.Run()

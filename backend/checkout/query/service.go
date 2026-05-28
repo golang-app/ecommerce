@@ -1,6 +1,9 @@
 package query
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Repository is the read side's data source — it reads the projection tables
 // and returns read models, never the write aggregate.
@@ -8,6 +11,11 @@ type Repository interface {
 	Find(ctx context.Context, id string) (OrderView, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]OrderSummary, error)
 	ListAll(ctx context.Context) ([]OrderSummary, error)
+	// ListExpiredPending returns the ids of orders still in the pending
+	// status whose placed_at is strictly older than olderThan. The
+	// reservation TTL sweeper uses this to find orphaned reservations to
+	// release.
+	ListExpiredPending(ctx context.Context, olderThan time.Time) ([]string, error)
 }
 
 // Service is the checkout query side. It is intentionally separate from the
@@ -38,4 +46,11 @@ func (s Service) ListByCustomer(ctx context.Context, customerID string) ([]Order
 // customer. Intended for the admin order list.
 func (s Service) ListAll(ctx context.Context) ([]OrderSummary, error) {
 	return s.repo.ListAll(ctx)
+}
+
+// ListExpiredPending returns the ids of pending orders placed before
+// olderThan — i.e. reservations whose TTL has elapsed without the order
+// being confirmed or explicitly failed. Used by the reservation sweeper.
+func (s Service) ListExpiredPending(ctx context.Context, olderThan time.Time) ([]string, error) {
+	return s.repo.ListExpiredPending(ctx, olderThan)
 }

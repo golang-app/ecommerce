@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 type config struct {
 	ServerPort int `conf:"default:8080,SERVER_PORT"`
@@ -48,6 +51,16 @@ type config struct {
 	// reset link). Defaulting to localhost:8080 keeps `docker compose up`
 	// working out of the box; production deployments MUST override.
 	BaseURL string `conf:"default:http://localhost:8080"`
+	// ReservationTTL is how long a pending order may hold its stock
+	// reservation before the sweeper expires it. Tune to match the longest
+	// legitimate payment confirmation window for your processor; orders
+	// abandoned past this point have their stock released back to the
+	// catalogue. 30 minutes is a safe default for synchronous card flows.
+	ReservationTTL time.Duration `conf:"default:30m"`
+	// ReservationSweepInterval is how often the reservation TTL sweeper
+	// runs. Set to 0 (or any non-positive value) to disable the sweeper
+	// entirely. Default keeps lag low without hammering the read side.
+	ReservationSweepInterval time.Duration `conf:"default:5m"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep

@@ -160,6 +160,35 @@ func (p Postgres) ListByCustomer(ctx context.Context, customerID string) ([]quer
 	return summaries, nil
 }
 
+// ListExpiredPending returns the ids of orders still in the pending status
+// whose placed_at is strictly older than olderThan. The reservation TTL
+// sweeper uses this list to release orphaned stock reservations.
+func (p Postgres) ListExpiredPending(ctx context.Context, olderThan time.Time) ([]string, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT id
+		FROM checkout_order
+		WHERE status = $1 AND placed_at < $2
+		ORDER BY placed_at
+	`, string(domain.StatusPending), olderThan)
+	if err != nil {
+		return nil, fmt.Errorf("query expired pending: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan expired pending: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return ids, nil
+}
+
 // ListAll returns every order newest-first as list summaries, regardless of
 // customer (including anonymous orders with a NULL customer_id). It powers the
 // admin order list and uses the same grouped query as ListByCustomer without

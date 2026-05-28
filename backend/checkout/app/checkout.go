@@ -199,12 +199,42 @@ func (s CheckoutService) cancel(ctx context.Context, order *domain.Order, reason
 		return fmt.Errorf("save cancellation: %w", err)
 	}
 
-	// Return the reserved stock to the catalogue (best-effort).
+	s.releaseStock(ctx, order)
+	return nil
+}
+
+// releaseStock returns every line's quantity to the catalogue (best-effort).
+// Used by the cancel path and by the reservation TTL sweeper when failing
+// orphaned pending orders.
+func (s CheckoutService) releaseStock(ctx context.Context, order *domain.Order) {
 	quantities := map[string]int{}
 	for _, ln := range order.Items() {
 		quantities[ln.ProductID()] += ln.Quantity()
 	}
+	if len(quantities) == 0 {
+		return
+	}
 	_ = s.stock.Release(ctx, quantities)
+}
 
+// ExpirePending fails a pending order whose reservation TTL has elapsed: it
+// rehydrates the aggregate, marks it failed with a "reservation expired"
+// reason, persists the event, and releases the reserved stock. It is
+// idempotent — if the order is no longer pending (another worker raced us, or
+// the customer's payment finally landed) it returns nil without touching the
+// aggregate. Used by the reservation TTL sweeper.
+func (s CheckoutService) ExpirePending(ctx context.Context, orderID string) error {
+	order, err := s.storage.Load(ctx, orderID)
+	if err != nil {
+		return err
+	}
+	if order.Status() != domain.StatusPending {
+		return nil
+	}
+	order.MarkFailed("reservation expired", s.now())
+	if err := s.storage.Save(ctx, order); err != nil {
+		return fmt.Errorf("save expired order: %w", err)
+	}
+	s.releaseStock(ctx, order)
 	return nil
 }
