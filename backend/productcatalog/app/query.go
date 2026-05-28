@@ -10,13 +10,16 @@ type Range struct {
 
 // ProductQuery describes a listing-page filter: an optional category (by slug),
 // numeric attribute ranges and enum attribute selections. The maps are keyed by
-// attribute-type id. Search, when non-empty, applies a case-insensitive
-// substring match across the product name and description.
+// attribute-type id.
+//
+// Free-text search USED to live here as a Search field; it has been moved
+// to the search bounded context (an Open Host Service) and the storefront
+// routes /api/v1/products?q=... through that context instead. Listing
+// queries are now strictly category + facet filters.
 type ProductQuery struct {
 	CategorySlug   string
 	NumericRanges  map[string]Range
 	EnumSelections map[string][]string
-	Search         string
 }
 
 // AttributeAssignment is a single product attribute value to persist. Num is

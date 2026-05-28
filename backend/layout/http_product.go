@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -10,7 +11,11 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
+	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	searchapp "github.com/bkielbasa/go-ecommerce/backend/search/app"
+	searchdomain "github.com/bkielbasa/go-ecommerce/backend/search/domain"
 	"github.com/gorilla/mux"
 )
 
@@ -24,56 +29,68 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 	category := q.Get("category")
 	search := strings.TrimSpace(q.Get("q"))
 
-	query := pcapp.ProductQuery{
-		CategorySlug:   category,
-		NumericRanges:  map[string]pcapp.Range{},
-		EnumSelections: map[string][]string{},
-		Search:         search,
-	}
+	var products []pcdomain.Product
+	var err error
 
-	// Use the facets for this scope to know which params are numeric vs enum.
-	facets, err := handler.catalogSrv.Facets(ctx, category)
-	if err != nil {
-		handler.logger.WithError(err).WithField("category", category).Warn("cannot get facets")
-		facets = nil
-	}
+	if search != "" {
+		// Search-driven path: route the query through the search OHS and
+		// hydrate the returned hits via the catalogue. Facet/category
+		// rail values are intentionally ignored here — the rail is a
+		// best-effort secondary filter while search is the primary
+		// intent. Failures degrade silently to an empty result rather
+		// than 500ing.
+		products = handler.searchProducts(ctx, search)
+	} else {
+		query := pcapp.ProductQuery{
+			CategorySlug:   category,
+			NumericRanges:  map[string]pcapp.Range{},
+			EnumSelections: map[string][]string{},
+		}
 
-	for _, f := range facets {
-		typeID := f.Type.ID()
-		switch {
-		case f.Type.IsNumeric():
-			minStr := q.Get(typeID + "_min")
-			maxStr := q.Get(typeID + "_max")
-			if minStr == "" && maxStr == "" {
-				continue
-			}
-			rng := pcapp.Range{}
-			if minStr != "" {
-				if v, errParse := strconv.ParseFloat(minStr, 64); errParse == nil {
-					rng.Min = &v
+		// Use the facets for this scope to know which params are numeric vs enum.
+		facets, fErr := handler.catalogSrv.Facets(ctx, category)
+		if fErr != nil {
+			handler.logger.WithError(fErr).WithField("category", category).Warn("cannot get facets")
+			facets = nil
+		}
+
+		for _, f := range facets {
+			typeID := f.Type.ID()
+			switch {
+			case f.Type.IsNumeric():
+				minStr := q.Get(typeID + "_min")
+				maxStr := q.Get(typeID + "_max")
+				if minStr == "" && maxStr == "" {
+					continue
 				}
-			}
-			if maxStr != "" {
-				if v, errParse := strconv.ParseFloat(maxStr, 64); errParse == nil {
-					rng.Max = &v
+				rng := pcapp.Range{}
+				if minStr != "" {
+					if v, errParse := strconv.ParseFloat(minStr, 64); errParse == nil {
+						rng.Min = &v
+					}
 				}
-			}
-			if rng.Min == nil && rng.Max == nil {
-				continue
-			}
-			query.NumericRanges[typeID] = rng
-		case f.Type.IsEnum():
-			if vals := q[typeID]; len(vals) > 0 {
-				query.EnumSelections[typeID] = vals
+				if maxStr != "" {
+					if v, errParse := strconv.ParseFloat(maxStr, 64); errParse == nil {
+						rng.Max = &v
+					}
+				}
+				if rng.Min == nil && rng.Max == nil {
+					continue
+				}
+				query.NumericRanges[typeID] = rng
+			case f.Type.IsEnum():
+				if vals := q[typeID]; len(vals) > 0 {
+					query.EnumSelections[typeID] = vals
+				}
 			}
 		}
-	}
 
-	products, err := handler.catalogSrv.List(ctx, query)
-	if err != nil {
-		https.InternalError(w, "internal-error", "cannot get list of all products")
-		handler.logger.WithError(err).Error("cannot get list of all products")
-		return
+		products, err = handler.catalogSrv.List(ctx, query)
+		if err != nil {
+			https.InternalError(w, "internal-error", "cannot get list of all products")
+			handler.logger.WithError(err).Error("cannot get list of all products")
+			return
+		}
 	}
 
 	resp := map[string]any{
@@ -103,6 +120,42 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+// searchProducts queries the search OHS for product hits and hydrates each
+// hit through catalogSrv.Find so the grid template gets full Product
+// values (with variants, price, thumbnail). All failures degrade silently
+// to an empty result — the storefront prefers an empty grid over a 500
+// when the search index is misbehaving, since the catalogue itself is
+// still browseable via the category rail.
+func (handler httpHandler) searchProducts(ctx context.Context, q string) []pcdomain.Product {
+	// Record the user-visible search request — moved out of
+	// ProductService.List when search migrated to the OHS.
+	observability.SearchQueriesInc(ctx)
+	if handler.searchSrv == nil {
+		return nil
+	}
+	hits, err := handler.searchSrv.Search(ctx, q, searchapp.QueryOptions{
+		Kinds: []searchdomain.Kind{searchdomain.KindProduct},
+	})
+	if err != nil {
+		handler.logger.WithError(err).WithField("query", q).Warn("search OHS query failed; returning empty grid")
+		return nil
+	}
+	out := make([]pcdomain.Product, 0, len(hits))
+	for _, h := range hits {
+		p, err := handler.catalogSrv.Find(ctx, h.Document.ID())
+		if err != nil {
+			// A hit that no longer resolves to a product almost always
+			// means the catalogue and the search index drifted (admin
+			// deleted the product before the index was updated). Skip
+			// it; `cli reindex` will tidy up later.
+			handler.logger.WithError(err).WithField("product_id", h.Document.ID()).Warn("search hit does not resolve to a product; skipping")
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {

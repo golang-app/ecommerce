@@ -16,6 +16,7 @@ import (
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
+	searchapp "github.com/bkielbasa/go-ecommerce/backend/search/app"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
 	wishlistDomain "github.com/bkielbasa/go-ecommerce/backend/wishlist/domain"
 	"github.com/sirupsen/logrus"
@@ -137,6 +138,14 @@ type wishlistService interface {
 	Contains(ctx context.Context, customerID, variantID string) (bool, error)
 }
 
+// searchService is the narrow seam the layout package needs from the
+// search OHS. It maps onto search/app.Service.Search — Search returns
+// hits keyed by (kind, id) plus a relevance rank; the storefront uses
+// it to drive the "product grid when q is set" path in AllProducts.
+type searchService interface {
+	Search(ctx context.Context, q string, opts searchapp.QueryOptions) ([]searchapp.Hit, error)
+}
+
 // checkoutQueries is the read side of the checkout context (CQRS); it returns
 // dedicated read models, not the write aggregate.
 type checkoutQueries interface {
@@ -156,7 +165,7 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -170,6 +179,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			reviewsSrv:  reviewsSrv,
 			wishlistSrv: wishlistSrv,
 			promoSrv:    promoSrv,
+			searchSrv:   searchSrv,
 			imageStore:  imageStore,
 			mailer:      mailerSrv,
 			baseURL:     baseURL,

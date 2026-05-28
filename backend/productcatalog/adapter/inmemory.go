@@ -3,7 +3,6 @@ package adapter
 import (
 	"context"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
@@ -506,7 +505,6 @@ func (im *inMemory) inCategory(productID, slug string) bool {
 }
 
 func (im *inMemory) ListProducts(ctx context.Context, q app.ProductQuery) ([]domain.Product, error) {
-	search := strings.ToLower(strings.TrimSpace(q.Search))
 	var out []domain.Product
 	for _, p := range im.products {
 		pid := string(p.ID())
@@ -517,11 +515,6 @@ func (im *inMemory) ListProducts(ctx context.Context, q app.ProductQuery) ([]dom
 			continue
 		}
 		if !im.matchesEnum(pid, q.EnumSelections) {
-			continue
-		}
-		if search != "" &&
-			!strings.Contains(strings.ToLower(p.Name()), search) &&
-			!strings.Contains(strings.ToLower(p.Description()), search) {
 			continue
 		}
 		out = append(out, im.hydrate(p))
