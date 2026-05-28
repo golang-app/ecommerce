@@ -1,0 +1,12 @@
+# Auto-provision the Jaeger datasource. Grafana talks to the Jaeger query
+# API which the all-in-one image serves on :16686 alongside the UI.
+
+apiVersion: 1
+
+datasources:
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    uid: jaeger
+    url: http://jaeger:16686
+    editable: true

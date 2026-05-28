@@ -6,8 +6,24 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// tracer is the package-level tracer for the product catalogue application
+// layer. Bound to the global TracerProvider; a no-op when no exporter is
+// configured.
+var tracer = observability.Tracer("github.com/bkielbasa/go-ecommerce/backend/productcatalog/app")
+
+// recordSpanError flags the span as errored and records the error so traces
+// surface failures uniformly across the catalogue API.
+func recordSpanError(span trace.Span, err error) {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+}
 
 type ProductService struct {
 	storage ProductStorage
@@ -76,11 +92,32 @@ func (ps ProductService) Newest(ctx context.Context, limit int) ([]domain.Produc
 	if limit <= 0 {
 		limit = defaultNewestLimit
 	}
-	return ps.storage.Newest(ctx, limit)
+	ctx, span := tracer.Start(ctx, "Catalog.Newest", trace.WithAttributes(
+		attribute.Int("catalog.limit", limit),
+	))
+	defer span.End()
+
+	products, err := ps.storage.Newest(ctx, limit)
+	if err != nil {
+		recordSpanError(span, err)
+		return nil, err
+	}
+	span.SetAttributes(attribute.Int("catalog.result_count", len(products)))
+	return products, nil
 }
 
 func (ps ProductService) Find(ctx context.Context, id string) (domain.Product, error) {
-	return ps.storage.Find(ctx, id)
+	ctx, span := tracer.Start(ctx, "Catalog.Find", trace.WithAttributes(
+		attribute.String("product.id", id),
+	))
+	defer span.End()
+
+	p, err := ps.storage.Find(ctx, id)
+	if err != nil {
+		recordSpanError(span, err)
+		return p, err
+	}
+	return p, nil
 }
 
 // FindVariant resolves a variant id to its variant and owning product.
@@ -92,27 +129,95 @@ func (ps ProductService) FindVariant(ctx context.Context, variantID string) (dom
 // quantity). All-or-nothing: returns ErrInsufficientStock if any variant is
 // short, leaving stock untouched.
 func (ps ProductService) Reserve(ctx context.Context, quantities map[string]int) error {
-	return ps.storage.Reserve(ctx, quantities)
+	ctx, span := tracer.Start(ctx, "Catalog.Reserve", trace.WithAttributes(
+		attribute.Int("stock.variants", len(quantities)),
+		attribute.Int("stock.total_units", sumQuantities(quantities)),
+	))
+	defer span.End()
+
+	if err := ps.storage.Reserve(ctx, quantities); err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+	return nil
 }
 
 // Release returns previously-reserved stock (e.g. after a failed payment).
 func (ps ProductService) Release(ctx context.Context, quantities map[string]int) error {
-	return ps.storage.Release(ctx, quantities)
+	ctx, span := tracer.Start(ctx, "Catalog.Release", trace.WithAttributes(
+		attribute.Int("stock.variants", len(quantities)),
+		attribute.Int("stock.total_units", sumQuantities(quantities)),
+	))
+	defer span.End()
+
+	if err := ps.storage.Release(ctx, quantities); err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+	return nil
 }
 
 // List returns the products matching the given listing-page query.
 func (ps ProductService) List(ctx context.Context, q ProductQuery) ([]domain.Product, error) {
-	return ps.storage.ListProducts(ctx, q)
+	ctx, span := tracer.Start(ctx, "Catalog.List", trace.WithAttributes(
+		attribute.String("catalog.category_slug", q.CategorySlug),
+		attribute.Bool("catalog.has_search", q.Search != ""),
+	))
+	defer span.End()
+
+	// Search-driven listings are the user-visible search count; non-search
+	// listings (category browsing) are intentionally NOT counted as
+	// searches.
+	if q.Search != "" {
+		observability.SearchQueriesInc(ctx)
+	}
+
+	products, err := ps.storage.ListProducts(ctx, q)
+	if err != nil {
+		recordSpanError(span, err)
+		return nil, err
+	}
+	span.SetAttributes(attribute.Int("catalog.result_count", len(products)))
+	return products, nil
 }
 
 // Categories returns all catalog categories in display order.
 func (ps ProductService) Categories(ctx context.Context) ([]domain.Category, error) {
-	return ps.storage.Categories(ctx)
+	ctx, span := tracer.Start(ctx, "Catalog.Categories")
+	defer span.End()
+
+	cs, err := ps.storage.Categories(ctx)
+	if err != nil {
+		recordSpanError(span, err)
+		return nil, err
+	}
+	return cs, nil
 }
 
 // Facets returns the available filter facets, optionally scoped to a category.
 func (ps ProductService) Facets(ctx context.Context, categorySlug string) ([]Facet, error) {
-	return ps.storage.Facets(ctx, categorySlug)
+	ctx, span := tracer.Start(ctx, "Catalog.Facets", trace.WithAttributes(
+		attribute.String("catalog.category_slug", categorySlug),
+	))
+	defer span.End()
+
+	fs, err := ps.storage.Facets(ctx, categorySlug)
+	if err != nil {
+		recordSpanError(span, err)
+		return nil, err
+	}
+	return fs, nil
+}
+
+// sumQuantities adds every value in the quantities map, used to label the
+// stock spans with the total number of variant-units involved without
+// leaking individual variant ids as metric labels.
+func sumQuantities(quantities map[string]int) int {
+	total := 0
+	for _, q := range quantities {
+		total += q
+	}
+	return total
 }
 
 // CreateCategory validates and persists a new category. The id equals the slug
@@ -359,14 +464,24 @@ func (ps ProductService) DeleteProduct(ctx context.Context, id string) error {
 // against the variant's current stock so the audit row reflects the actual
 // movement, not just the new level.
 func (ps ProductService) SetVariantStock(ctx context.Context, variantID string, stock int) error {
+	ctx, span := tracer.Start(ctx, "Catalog.SetVariantStock", trace.WithAttributes(
+		attribute.String("variant.id", variantID),
+		attribute.Int("stock.new_level", stock),
+	))
+	defer span.End()
+
 	if stock < 0 {
-		return fmt.Errorf("stock cannot be negative: %d", stock)
+		err := fmt.Errorf("stock cannot be negative: %d", stock)
+		recordSpanError(span, err)
+		return err
 	}
 	_, current, err := ps.storage.FindVariant(ctx, variantID)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if err := ps.storage.SetVariantStock(ctx, variantID, stock); err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	delta := stock - current.Stock()
@@ -383,7 +498,18 @@ func (ps ProductService) SetVariantStock(ctx context.Context, variantID string, 
 // the StockMovements seam for the checkout context (reserve / release /
 // refund flows).
 func (ps ProductService) Record(ctx context.Context, variantID string, delta int, reason, refOrderID string) error {
-	return ps.storage.InsertStockMovement(ctx, variantID, delta, reason, refOrderID)
+	ctx, span := tracer.Start(ctx, "Catalog.Record", trace.WithAttributes(
+		attribute.String("variant.id", variantID),
+		attribute.Int("stock.delta", delta),
+		attribute.String("stock.reason", reason),
+	))
+	defer span.End()
+
+	if err := ps.storage.InsertStockMovement(ctx, variantID, delta, reason, refOrderID); err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+	return nil
 }
 
 // ListStockMovements returns the most recent audit rows, optionally scoped

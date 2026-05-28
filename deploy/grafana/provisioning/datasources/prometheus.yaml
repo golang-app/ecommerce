@@ -1,0 +1,14 @@
+# Auto-provision the Prometheus datasource so the dev Grafana container
+# boots with a working data source. Dashboards intentionally aren't
+# provisioned yet — Phase B will add them.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    uid: prometheus
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true

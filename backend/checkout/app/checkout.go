@@ -11,7 +11,37 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
+
+// tracer is the package-level tracer for the checkout application service.
+// The parent Place span and its named child spans (cart.get, stock.reserve,
+// payment.charge, order.save, events.publish) all flow through this scope so
+// they share a single instrumentation name in the trace backend.
+var tracer = observability.Tracer("github.com/bkielbasa/go-ecommerce/backend/checkout/app")
+
+// recordSpanError marks the span errored and attaches the underlying error so
+// trace consumers can spot failed operations without poking through
+// attributes. Centralising the two-call idiom keeps the spans uniform.
+func recordSpanError(span trace.Span, err error) {
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+}
+
+// totalReservedUnits sums the quantity values in a reservation/release map.
+// Used to drive the gocommerce_stock_reserved_total / _released_total
+// counters in variant-units regardless of how many distinct variants the
+// order spans.
+func totalReservedUnits(quantities map[string]int) int64 {
+	var total int64
+	for _, q := range quantities {
+		total += int64(q)
+	}
+	return total
+}
 
 // CartReader returns the current cart for a session. It deliberately mirrors
 // the subset of cart.CartService that checkout needs so the dependency stays
@@ -148,14 +178,34 @@ func NewCheckoutService(
 // customerID may be empty for anonymous checkout; in that case the order is
 // recorded but will not appear in any customer's order history.
 func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo domain.Address, shipMethod domain.ShippingMethod, payMethod domain.PaymentMethod) (domain.Order, error) {
-	cart, err := s.cart.Get(ctx, sessID)
+	ctx, span := tracer.Start(ctx, "Checkout.Place", trace.WithAttributes(
+		attribute.String("cart.session_id", sessID),
+		attribute.String("customer.id", customerID),
+		attribute.String("payment.method", payMethod.Code()),
+		attribute.String("ship.method", shipMethod.Code()),
+	))
+	defer span.End()
+
+	// cart.get is a leaf child span so the trace clearly shows whether the
+	// hand-off into the cart context is the slow step.
+	cartCtx, cartSpan := tracer.Start(ctx, "cart.get", trace.WithAttributes(
+		attribute.String("cart.session_id", sessID),
+	))
+	cart, err := s.cart.Get(cartCtx, sessID)
 	if err != nil {
+		recordSpanError(cartSpan, err)
+		cartSpan.End()
 		if errors.Is(err, cartDomain.ErrCartNotFound) {
+			recordSpanError(span, domain.ErrCartEmpty)
 			return domain.Order{}, domain.ErrCartEmpty
 		}
+		recordSpanError(span, err)
 		return domain.Order{}, fmt.Errorf("get cart: %w", err)
 	}
+	cartSpan.SetAttributes(attribute.Int("cart.item_count", len(cart.Items())))
+	cartSpan.End()
 	if len(cart.Items()) == 0 {
+		recordSpanError(span, domain.ErrCartEmpty)
 		return domain.Order{}, domain.ErrCartEmpty
 	}
 
@@ -172,14 +222,27 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		quantities[item.Product().ID()] += item.Quantity()
 	}
 
+	reservedUnits := totalReservedUnits(quantities)
+
 	// Reserve stock up front, atomically. If anything is short the order is
 	// not placed at all — this is the guard against overselling under
 	// concurrent checkouts.
-	if err := s.stock.Reserve(ctx, quantities); err != nil {
+	reserveCtx, reserveSpan := tracer.Start(ctx, "stock.reserve", trace.WithAttributes(
+		attribute.Int("stock.variants", len(quantities)),
+		attribute.Int64("stock.total_units", reservedUnits),
+	))
+	if err := s.stock.Reserve(reserveCtx, quantities); err != nil {
+		recordSpanError(reserveSpan, err)
+		reserveSpan.End()
+		recordSpanError(span, err)
 		return domain.Order{}, fmt.Errorf("reserve stock: %w", err)
 	}
+	reserveSpan.End()
+	observability.StockReservedAdd(ctx, reservedUnits)
 
 	orderID := s.newID()
+	span.SetAttributes(attribute.String("order.id", orderID))
+
 	// Record reservation movements (best-effort: a failure here must not
 	// undo the reservation itself).
 	for vid, qty := range quantities {
@@ -194,6 +257,11 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		subtotal += ln.LineTotal()
 	}
 	tax, effectiveShipping := s.pricing.computeTaxAndShipping(subtotal, shipMethod)
+	span.SetAttributes(
+		attribute.Int64("order.subtotal", subtotal),
+		attribute.Int64("order.tax", tax),
+		attribute.Int64("order.shipping", effectiveShipping),
+	)
 
 	order, err := domain.PlaceOrder(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, tax, effectiveShipping, s.now())
 	if err != nil {
@@ -201,41 +269,94 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		for vid, qty := range quantities {
 			_ = s.movements.Record(ctx, vid, qty, "release-place-failed", orderID)
 		}
+		observability.StockReleasedAdd(ctx, reservedUnits)
+		recordSpanError(span, err)
 		return domain.Order{}, err
 	}
+	span.SetAttributes(
+		attribute.Int64("order.total", order.TotalAmount()),
+		attribute.String("order.currency", order.TotalCurrency()),
+	)
 
-	if chargeErr := s.payment.Charge(ctx, order.TotalAmount(), order.TotalCurrency(), cardNumber); chargeErr != nil {
+	// One placed-order counter increment per successful aggregate (before
+	// payment outcome): keeps Grafana's checkout-funnel view honest by
+	// separating "we attempted" from "we charged".
+	observability.OrdersPlacedInc(ctx, payMethod.Code(), shipMethod.Code())
+
+	chargeCtx, chargeSpan := tracer.Start(ctx, "payment.charge", trace.WithAttributes(
+		attribute.Int64("payment.amount", order.TotalAmount()),
+		attribute.String("payment.currency", order.TotalCurrency()),
+		attribute.String("payment.method", payMethod.Code()),
+	))
+	chargeErr := s.payment.Charge(chargeCtx, order.TotalAmount(), order.TotalCurrency(), cardNumber)
+	if chargeErr != nil {
+		recordSpanError(chargeSpan, chargeErr)
+		chargeSpan.End()
 		// Payment failed after reserving — give the stock back, record the
 		// failed attempt, and report the decline.
 		_ = s.stock.Release(ctx, quantities)
 		for vid, qty := range quantities {
 			_ = s.movements.Record(ctx, vid, qty, "release-failed-payment", orderID)
 		}
+		observability.PaymentsFailedInc(ctx)
+		observability.StockReleasedAdd(ctx, reservedUnits)
+		observability.OrdersFinalizedInc(ctx, string(domain.StatusFailed))
 		order.MarkFailed(chargeErr.Error(), s.now())
-		if err := s.storage.Save(ctx, order); err != nil {
+		saveCtx, saveSpan := tracer.Start(ctx, "order.save", trace.WithAttributes(
+			attribute.String("order.id", orderID),
+			attribute.String("order.status", string(domain.StatusFailed)),
+		))
+		if err := s.storage.Save(saveCtx, order); err != nil {
+			recordSpanError(saveSpan, err)
+			saveSpan.End()
+			recordSpanError(span, err)
 			return domain.Order{}, fmt.Errorf("save order: %w", err)
 		}
-		return *order, fmt.Errorf("payment declined: %w", chargeErr)
+		saveSpan.End()
+		err := fmt.Errorf("payment declined: %w", chargeErr)
+		recordSpanError(span, err)
+		return *order, err
 	}
+	chargeSpan.End()
+	observability.PaymentsChargedInc(ctx, order.TotalCurrency())
 
 	order.MarkPaid(s.now())
-	if err := s.storage.Save(ctx, order); err != nil {
+	saveCtx, saveSpan := tracer.Start(ctx, "order.save", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+		attribute.String("order.status", string(domain.StatusPaid)),
+	))
+	if err := s.storage.Save(saveCtx, order); err != nil {
+		recordSpanError(saveSpan, err)
+		saveSpan.End()
 		// Order couldn't be persisted; return the reservation.
 		_ = s.stock.Release(ctx, quantities)
 		for vid, qty := range quantities {
 			_ = s.movements.Record(ctx, vid, qty, "release-save-failed", orderID)
 		}
+		observability.StockReleasedAdd(ctx, reservedUnits)
+		recordSpanError(span, err)
 		return domain.Order{}, fmt.Errorf("save order: %w", err)
 	}
+	saveSpan.End()
+
+	// Revenue + paid-finalisation are recorded only after the save succeeds
+	// so a write failure doesn't double-book the totals.
+	observability.RevenueAdd(ctx, order.TotalAmount(), order.TotalCurrency())
+	observability.OrdersFinalizedInc(ctx, string(domain.StatusPaid))
 
 	// Announce the paid order. Subscribers (e.g. the cart context emptying the
 	// basket) react best-effort; their failures never block the confirmation.
-	s.events.Publish(ctx, integration.OrderPaid{
+	publishCtx, publishSpan := tracer.Start(ctx, "events.publish", trace.WithAttributes(
+		attribute.String("event.name", integration.OrderPaid{}.EventName()),
+		attribute.String("order.id", orderID),
+	))
+	s.events.Publish(publishCtx, integration.OrderPaid{
 		OrderID:    order.ID(),
 		SessionID:  sessID,
 		CustomerID: customerID,
 		At:         s.now(),
 	})
+	publishSpan.End()
 
 	return *order, nil
 }
@@ -247,15 +368,27 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 // Only the order's owner may cancel it; for any other customer the order is
 // reported as not found so its existence isn't leaked.
 func (s CheckoutService) Cancel(ctx context.Context, orderID, customerID string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.Cancel", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+		attribute.String("customer.id", customerID),
+	))
+	defer span.End()
+
 	order, err := s.storage.Load(ctx, orderID)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if customerID == "" || order.CustomerID() != customerID {
+		recordSpanError(span, domain.ErrOrderNotFound)
 		return domain.ErrOrderNotFound
 	}
 
-	return s.cancel(ctx, order, "cancelled by customer")
+	if err := s.cancel(ctx, order, "cancelled by customer"); err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+	return nil
 }
 
 // AdminCancel cancels any paid order on behalf of an administrator, without an
@@ -263,11 +396,21 @@ func (s CheckoutService) Cancel(ctx context.Context, orderID, customerID string)
 // ErrOrderNotCancellable for non-paid orders), persists the OrderCancelled
 // event, and returns the reserved stock to the catalogue.
 func (s CheckoutService) AdminCancel(ctx context.Context, orderID string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.AdminCancel", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+	))
+	defer span.End()
+
 	order, err := s.storage.Load(ctx, orderID)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
-	return s.cancel(ctx, order, "cancelled by admin")
+	if err := s.cancel(ctx, order, "cancelled by admin"); err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+	return nil
 }
 
 // cancel applies the Cancel command, persists it, and releases reserved stock
@@ -281,6 +424,9 @@ func (s CheckoutService) cancel(ctx context.Context, order *domain.Order, reason
 	}
 
 	s.releaseStock(ctx, order, "release-cancel")
+	// State transition counter: status=cancelled regardless of whether the
+	// trigger was a customer or admin command.
+	observability.OrdersFinalizedInc(ctx, string(domain.StatusCancelled))
 	return nil
 }
 
@@ -299,6 +445,7 @@ func (s CheckoutService) releaseStock(ctx context.Context, order *domain.Order, 
 	for vid, qty := range quantities {
 		_ = s.movements.Record(ctx, vid, qty, reason, order.ID())
 	}
+	observability.StockReleasedAdd(ctx, totalReservedUnits(quantities))
 }
 
 // ExpirePending fails a pending order whose reservation TTL has elapsed: it
@@ -308,18 +455,32 @@ func (s CheckoutService) releaseStock(ctx context.Context, order *domain.Order, 
 // the customer's payment finally landed) it returns nil without touching the
 // aggregate. Used by the reservation TTL sweeper.
 func (s CheckoutService) ExpirePending(ctx context.Context, orderID string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.ExpirePending", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+	))
+	defer span.End()
+
 	order, err := s.storage.Load(ctx, orderID)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if order.Status() != domain.StatusPending {
+		// Not an error path — another worker raced us or the customer
+		// just paid. Annotate the span so trace consumers see the
+		// no-op cleanly.
+		span.SetAttributes(attribute.String("expire.outcome", "noop"))
 		return nil
 	}
 	order.MarkFailed("reservation expired", s.now())
 	if err := s.storage.Save(ctx, order); err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("save expired order: %w", err)
 	}
 	s.releaseStock(ctx, order, "release-expired")
+	// State transition counter: an expired pending is a failed terminal
+	// state from the funnel's perspective.
+	observability.OrdersFinalizedInc(ctx, string(domain.StatusFailed))
 	return nil
 }
 
@@ -327,47 +488,77 @@ func (s CheckoutService) ExpirePending(ctx context.Context, orderID string) erro
 // carrier and tracking code. Admin-only — never wired into the customer
 // surface.
 func (s CheckoutService) MarkShipped(ctx context.Context, orderID, carrier, trackingCode string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.MarkShipped", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+		attribute.String("ship.carrier", carrier),
+	))
+	defer span.End()
+
 	order, err := s.storage.Load(ctx, orderID)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if err := order.MarkShipped(carrier, trackingCode, s.now()); err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if err := s.storage.Save(ctx, order); err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("save shipped: %w", err)
 	}
+	observability.OrdersFinalizedInc(ctx, string(domain.StatusShipped))
 	return nil
 }
 
 // MarkDelivered transitions a shipped order to delivered. Admin-only.
 func (s CheckoutService) MarkDelivered(ctx context.Context, orderID string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.MarkDelivered", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+	))
+	defer span.End()
+
 	order, err := s.storage.Load(ctx, orderID)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if err := order.MarkDelivered(s.now()); err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if err := s.storage.Save(ctx, order); err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("save delivered: %w", err)
 	}
+	observability.OrdersFinalizedInc(ctx, string(domain.StatusDelivered))
 	return nil
 }
 
 // Refund refunds a paid/shipped/delivered order and returns its stock to the
 // catalogue (refunds bring the goods back). Admin-only.
 func (s CheckoutService) Refund(ctx context.Context, orderID, reason string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.Refund", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+	))
+	defer span.End()
+
 	order, err := s.storage.Load(ctx, orderID)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if err := order.Refund(reason, s.now()); err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	if err := s.storage.Save(ctx, order); err != nil {
+		recordSpanError(span, err)
 		return fmt.Errorf("save refund: %w", err)
 	}
+	// releaseStock already increments the stock_released counter; the
+	// orders_finalized increment captures the refund as a terminal status.
 	s.releaseStock(ctx, order, "release-refund")
+	observability.OrdersFinalizedInc(ctx, string(domain.StatusRefunded))
 	return nil
 }

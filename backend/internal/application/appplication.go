@@ -10,6 +10,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/gorilla/mux"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // App is an instance of the whole application.
@@ -27,13 +28,33 @@ func New(ctx context.Context, port int) *App {
 	r := mux.NewRouter()
 	deps := dependency.New()
 
-	r.Use(otelmux.Middleware("go-ecommerce"))
+	// Liveness/readiness endpoints are deliberately excluded from tracing.
+	// Kubernetes (and any other supervisor) polls them constantly; emitting
+	// a span per probe drowns out real traffic and inflates the trace
+	// backend for no diagnostic value.
+	r.Use(otelmux.Middleware("go-ecommerce", otelmux.WithFilter(func(req *http.Request) bool {
+		switch req.URL.Path {
+		case "/healthyz", "/readyz":
+			return false
+		}
+		return true
+	})))
 	r.HandleFunc("/healthyz", deps.Healthy)
 	r.HandleFunc("/readyz", deps.Ready)
 
+	// Auto-instrument the HTTP server: otelhttp emits the standard
+	// http.server.duration histogram + request count with http.method /
+	// http.status_code attributes, and otelmux (installed above as a router
+	// middleware) fills in http.route based on the matched gorilla route so
+	// the metrics aren't blown up by raw URL paths. The /healthyz and
+	// /readyz endpoints are filtered out at the otelmux layer (above), which
+	// keeps the noisy probes from drowning real traffic; otelhttp still
+	// observes them but with the same route label, which Grafana can drop.
+	handler := otelhttp.NewHandler(r, "http.server")
+
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", port),
-		Handler: r,
+		Handler: handler,
 	}
 
 	return &App{
