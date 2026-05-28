@@ -20,12 +20,16 @@ type appService interface {
 	FindByToken(ctx context.Context, sessToken string) (*domain.Session, error)
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 	IsAdmin(ctx context.Context, email string) (bool, error)
+	MustChangePassword(ctx context.Context, email string) (bool, error)
+	RequestPasswordReset(ctx context.Context, email string) (string, error)
+	ResetPassword(ctx context.Context, rawToken, newPassword string) error
 }
 
 func New(db *sql.DB) (application.BoundedContext, appService) {
 	authStorage := adapter.NewPostgresAuthStorage(db)
 	sessStorage := adapter.NewPostgresSessionStorage(db)
-	appServ := app.NewAuth(authStorage, sessStorage)
+	resetStorage := adapter.NewPostgresPasswordResetStorage(db)
+	appServ := app.NewAuth(authStorage, sessStorage, resetStorage)
 
 	return &boundedContext{
 		httpHandler: port.NewHTTP(appServ),

@@ -87,3 +87,84 @@ func TestCancel_FailedOrderNotCancellable(t *testing.T) {
 		t.Errorf("cancel of failed order err = %v, want ErrOrderNotCancellable", err)
 	}
 }
+
+// TestPlaceOrder_AppliesTaxAndEffectiveShipping locks in the tax/shipping
+// math driven by the new PricingPolicy: the OrderPlaced event carries the
+// derived numbers and the rehydrated order's total reflects them.
+func TestPlaceOrder_AppliesTaxAndEffectiveShipping(t *testing.T) {
+	at := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
+	lines := []domain.Line{domain.NewLine("v1", "Mug", 4, 1000, "USD")}
+	method := domain.RebuildShippingMethod("courier", "Courier", 1500)
+
+	// Caller computed an 8.875% tax on 4000 = 355 and free shipping (threshold met).
+	o, err := domain.PlaceOrder("ord-3", "cart-1", "jane@example.com", domain.Address{}, method,
+		domain.RebuildPaymentMethod("card", "Card"), lines, 355, 0, at)
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	if o.TaxAmount() != 355 {
+		t.Errorf("tax = %d, want 355", o.TaxAmount())
+	}
+	if o.ShippingCost() != 0 {
+		t.Errorf("shipping = %d, want 0 (free)", o.ShippingCost())
+	}
+	// subtotal 4000 + tax 355 + shipping 0.
+	if o.TotalAmount() != 4355 {
+		t.Errorf("total = %d, want 4355", o.TotalAmount())
+	}
+}
+
+// TestFulfillmentTransitions exercises the paid → shipped → delivered
+// happy path plus the guards: shipping a pending order fails, delivering a
+// paid order fails, refunding a delivered order succeeds, and refunding a
+// cancelled order fails.
+func TestFulfillmentTransitions(t *testing.T) {
+	at := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
+
+	// Paid order: ship/deliver/refund all valid.
+	paid := domain.RehydrateOrder(paidOrderEvents())
+	if err := paid.MarkShipped("UPS", "1Z-XYZ", at); err != nil {
+		t.Fatalf("MarkShipped: %v", err)
+	}
+	if paid.Status() != domain.StatusShipped {
+		t.Errorf("after MarkShipped: status = %q, want shipped", paid.Status())
+	}
+	if paid.Carrier() != "UPS" || paid.TrackingCode() != "1Z-XYZ" {
+		t.Errorf("carrier/tracking not stored: %q / %q", paid.Carrier(), paid.TrackingCode())
+	}
+	if err := paid.MarkDelivered(at); err != nil {
+		t.Fatalf("MarkDelivered: %v", err)
+	}
+	if paid.Status() != domain.StatusDelivered {
+		t.Errorf("after MarkDelivered: status = %q, want delivered", paid.Status())
+	}
+	if err := paid.Refund("customer return", at); err != nil {
+		t.Fatalf("Refund on delivered: %v", err)
+	}
+	if paid.Status() != domain.StatusRefunded {
+		t.Errorf("after Refund: status = %q, want refunded", paid.Status())
+	}
+
+	// Pending order: not shippable.
+	pending := domain.RehydrateOrder([]domain.Event{
+		domain.OrderPlaced{OrderID: "ord-p", Lines: []domain.Line{domain.NewLine("v", "X", 1, 100, "USD")}, ShipMethod: domain.RebuildShippingMethod("pickup", "Pickup", 0), At: at},
+	})
+	if err := pending.MarkShipped("UPS", "", at); !errors.Is(err, domain.ErrOrderNotShippable) {
+		t.Errorf("MarkShipped on pending = %v, want ErrOrderNotShippable", err)
+	}
+
+	// Paid (not shipped) order: cannot be delivered yet.
+	paid2 := domain.RehydrateOrder(paidOrderEvents())
+	if err := paid2.MarkDelivered(at); !errors.Is(err, domain.ErrOrderNotDeliverable) {
+		t.Errorf("MarkDelivered on paid = %v, want ErrOrderNotDeliverable", err)
+	}
+
+	// Cancelled order: not refundable.
+	cancelled := domain.RehydrateOrder(paidOrderEvents())
+	if err := cancelled.Cancel("changed mind", at); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if err := cancelled.Refund("late", at); !errors.Is(err, domain.ErrOrderNotRefundable) {
+		t.Errorf("Refund on cancelled = %v, want ErrOrderNotRefundable", err)
+	}
+}

@@ -48,6 +48,8 @@ type productStorage interface {
 	UpdateAttributeSet(ctx context.Context, s domain.AttributeSet) error
 	DeleteAttributeSet(ctx context.Context, id string) error
 	SetAttributeSetItems(ctx context.Context, setID string, attributeTypeIDs []string) error
+	InsertStockMovement(ctx context.Context, variantID string, delta int, reason, refOrderID string) error
+	ListStockMovements(ctx context.Context, variantID string, limit int) ([]domain.StockMovement, error)
 }
 
 var storage productStorage

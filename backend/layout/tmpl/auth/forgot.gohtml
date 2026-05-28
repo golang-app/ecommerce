@@ -1,0 +1,20 @@
+{{define "title"}}Forgot password · {{.SiteName}}{{end}}
+{{define "description"}}Request a password reset link for your {{.SiteName}} account.{{end}}
+
+{{define "main"}}
+  <h1 class="page-title">forgot password</h1>
+
+  <p class="form__aside">Enter your account email and we'll send you a link to choose a new password.</p>
+
+  <form class="form" method="post" action="/auth/forgot">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <div class="field">
+      <label for="forgot-email">email</label>
+      <input id="forgot-email" type="email" name="email" autocomplete="email" required>
+    </div>
+
+    <button type="submit" class="btn btn--block">send reset link</button>
+
+    <p class="form__aside">remembered it? <a href="/auth/login">sign in</a></p>
+  </form>
+{{end}}

@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     depends_on:
       - migrate
+      - mailhog
     ports:
       - 8080:8080
     networks:
@@ -15,10 +16,37 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_HOST: postgres
       UPLOADS_DIR: /uploads
+      # MailHog is the dev SMTP catch-all (see the mailhog service below).
+      # The web UI at http://localhost:8025 shows every email the app
+      # sends — far easier than tailing logs for the LogMailer fallback.
+      SMTP_HOST: mailhog:1025
+      MAIL_FROM: no-reply@gocommerce.local
+      BASE_URL: http://localhost:8080
+      # Stock reservation TTL: orders still pending after this duration are
+      # marked failed by the background sweeper and their reserved stock is
+      # released. Defaults: 30m / 5m. Override here for dev/testing.
+      RESERVATION_TTL: ${RESERVATION_TTL:-30m}
+      RESERVATION_SWEEP_INTERVAL: ${RESERVATION_SWEEP_INTERVAL:-5m}
+      # Tax rate (percent, e.g. 8.875 for 8.875%) and the free-shipping
+      # threshold in MINOR units (cents). Both default to zero (disabled).
+      TAX_RATE_PERCENT: ${TAX_RATE_PERCENT:-0}
+      FREE_SHIPPING_THRESHOLD: ${FREE_SHIPPING_THRESHOLD:-0}
     volumes:
       # User-uploaded admin images are persisted on the host. The Dockerfile
       # creates /uploads owned by the app user (uid 10001).
       - ./data/uploads:/uploads
+  mailhog:
+    # MailHog is a single-binary SMTP sink with a built-in web inbox. It
+    # listens for SMTP on :1025 and exposes the captured messages over a
+    # browser UI on :8025 — exactly the right shape for local dev: the app
+    # sends real SMTP, MailHog catches it, no email ever leaves the host.
+    image: mailhog/mailhog
+    restart: unless-stopped
+    ports:
+      - 1025:1025
+      - 8025:8025
+    networks:
+      - ecommerce
   postgres:
     image: postgres
     restart: always

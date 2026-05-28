@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
@@ -1115,6 +1116,64 @@ func (db postgres) Facets(ctx context.Context, categorySlug string) ([]app.Facet
 		facets = append(facets, app.Facet{Type: t, Values: values})
 	}
 	return facets, nil
+}
+
+// InsertStockMovement appends a row to the inventory audit log. delta is the
+// signed change in stock units; reason describes the cause; refOrderID is the
+// triggering order id when the change came from checkout (empty for direct
+// admin edits).
+func (db postgres) InsertStockMovement(ctx context.Context, variantID string, delta int, reason, refOrderID string) error {
+	if _, err := db.db.ExecContext(ctx, `
+		INSERT INTO productcatalog_stock_movement (variant_id, delta, reason, ref_order_id)
+		VALUES ($1, $2, $3, $4)
+	`, variantID, delta, reason, refOrderID); err != nil {
+		return fmt.Errorf("insert stock movement: %w", err)
+	}
+	return nil
+}
+
+// ListStockMovements returns up to limit movements newest-first. When
+// variantID is empty the full log is returned (admin overview); otherwise
+// the log is scoped to a single variant. limit must be positive; the caller
+// (app layer) clamps zero/negative to a default.
+func (db postgres) ListStockMovements(ctx context.Context, variantID string, limit int) ([]domain.StockMovement, error) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if variantID == "" {
+		rows, err = db.db.QueryContext(ctx, `
+			SELECT id, variant_id, delta, reason, ref_order_id, at
+			FROM productcatalog_stock_movement
+			ORDER BY id DESC
+			LIMIT $1
+		`, limit)
+	} else {
+		rows, err = db.db.QueryContext(ctx, `
+			SELECT id, variant_id, delta, reason, ref_order_id, at
+			FROM productcatalog_stock_movement
+			WHERE variant_id = $1
+			ORDER BY id DESC
+			LIMIT $2
+		`, variantID, limit)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("query stock movements: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.StockMovement
+	for rows.Next() {
+		var id int64
+		var vID, reason, refOrderID string
+		var delta int
+		var at time.Time
+		if err := rows.Scan(&id, &vID, &delta, &reason, &refOrderID, &at); err != nil {
+			return nil, fmt.Errorf("scan stock movement: %w", err)
+		}
+		out = append(out, domain.NewStockMovement(id, vID, delta, reason, refOrderID, at))
+	}
+	return out, rows.Err()
 }
 
 // sortedKeys returns the map keys sorted, so generated SQL placeholders are

@@ -10,6 +10,7 @@
       <h2 class="account-card__title">edit address</h2>
 
       <form class="form" method="post" action="/account/addresses/{{.Address.ID}}">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
         <div class="field"><label for="a-name">full name</label><input id="a-name" name="name" value="{{.Address.Name}}" required></div>
         <div class="field"><label for="a-street1">street</label><input id="a-street1" name="street1" value="{{.Address.Street1}}" required></div>
         <div class="field"><label for="a-street2">street (line 2)</label><input id="a-street2" name="street2" value="{{.Address.Street2}}"></div>

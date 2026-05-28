@@ -381,10 +381,12 @@ input:focus, select:focus, textarea:focus {
 }
 .order-status--paid { background: #e3f5ea; color: #1f7a44; border-color: #b8e6c9; }
 .order-status--pending { background: #fef3e0; color: #9a6300; border-color: #f6d99e; }
-.order-status--shipped { background: #e6effd; color: #1f5bbf; border-color: #bcd6fb; }
+.order-status--shipped { background: #e3f5ea; color: #1f7a44; border-color: #b8e6c9; }
+.order-status--delivered { background: #ececec; color: #4a4a4a; border-color: #cccccc; }
+.order-status--failed { background: #fdecec; color: #a52f2f; border-color: #f3bcbc; }
 .order-status--cancelled,
 .order-status--canceled { background: #fdecec; color: #a52f2f; border-color: #f3bcbc; }
-.order-status--refunded { background: #efeafd; color: #5a3fbf; border-color: #d6cbf6; }
+.order-status--refunded { background: #fdefdc; color: #a26200; border-color: #f4d199; }
 
 /* --- Order detail -------------------------------------------------------- */
 .order__header { margin-bottom: 16px; }

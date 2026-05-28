@@ -18,9 +18,13 @@ const (
 	seedAdminPassword = "Admin123!"
 )
 
-const upsertAdmin = `INSERT INTO auth_customer (username, password_hash, is_admin)
-	VALUES ($1, $2, true)
-	ON CONFLICT (username) DO UPDATE SET is_admin = true`
+// upsertAdmin idempotently inserts the demo admin account or, on conflict,
+// re-asserts is_admin = true and forces must_change_password = true. Always
+// resetting must_change_password on re-seed makes the "change password on
+// first login" gate reliably testable when developers re-run `seeds`.
+const upsertAdmin = `INSERT INTO auth_customer (username, password_hash, is_admin, must_change_password)
+	VALUES ($1, $2, true, true)
+	ON CONFLICT (username) DO UPDATE SET is_admin = true, must_change_password = true`
 
 // seedAdminUser idempotently creates (or promotes) the demo admin account.
 func seedAdminUser(ctx context.Context, db *sql.DB) error {
@@ -456,9 +460,9 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values, admin user %s (password %s)\n",
+			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values, admin user %s (password reset required on first login)\n",
 				len(seedProducts), len(variantSeeds), len(attributeTypeSeeds), len(categorySeeds),
-				countCategoryAssignments(), len(productAttributeSeeds), seedAdminEmail, seedAdminPassword)
+				countCategoryAssignments(), len(productAttributeSeeds), seedAdminEmail)
 			return nil
 		},
 	}

@@ -1,0 +1,23 @@
+Thanks for your order.
+
+Order {{.Order.ID}} - placed {{.Order.PlacedAt.Format "Jan 2, 2006 15:04 MST"}}
+
+Items:
+{{range $line := .Order.Items}}- {{$line.ProductName}} x {{$line.Quantity}} @ {{$line.PriceDisplay}} {{$line.PriceCurrency}} = {{$line.LineTotalDisplay}} {{$line.PriceCurrency}}
+{{end}}
+Subtotal: {{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}
+{{if not .Order.ShippingMethod.IsZero}}Shipping ({{.Order.ShippingMethod.Label}}): {{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}
+{{end}}Total: {{.Order.TotalDisplay}} {{.Order.TotalCurrency}}
+
+{{if not .Order.PaymentMethod.IsZero}}Payment: {{.Order.PaymentMethod.Label}}
+{{end}}{{if eq .Order.ShippingMethod.Code "pickup"}}Collection: Personal pickup - collect in store.
+{{else if not .Order.ShipTo.IsZero}}Shipping to:
+  {{.Order.ShipTo.Name}}
+  {{.Order.ShipTo.Street1}}{{with .Order.ShipTo.Street2}}
+  {{.}}{{end}}
+  {{.Order.ShipTo.City}}, {{.Order.ShipTo.Zip}}
+  {{.Order.ShipTo.Country}}
+{{end}}
+View your order: {{.OrderURL}}
+
+If you did not place this order on {{.SiteName}}, please reply to let us know.

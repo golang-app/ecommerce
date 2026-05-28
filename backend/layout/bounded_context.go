@@ -10,6 +10,7 @@ import (
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
@@ -55,6 +56,8 @@ type catalogService interface {
 	CreateAttributeSet(ctx context.Context, name string, attributeTypeIDs []string) error
 	UpdateAttributeSet(ctx context.Context, id, name string, attributeTypeIDs []string) error
 	DeleteAttributeSet(ctx context.Context, id string) error
+
+	ListStockMovements(ctx context.Context, variantID string, limit int) ([]pcdomain.StockMovement, error)
 }
 
 type cartService interface {
@@ -69,6 +72,9 @@ type authService interface {
 	FindByToken(ctx context.Context, sessToken string) (*authDomain.Session, error)
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 	IsAdmin(ctx context.Context, email string) (bool, error)
+	MustChangePassword(ctx context.Context, email string) (bool, error)
+	RequestPasswordReset(ctx context.Context, email string) (string, error)
+	ResetPassword(ctx context.Context, rawToken, newPassword string) error
 }
 
 type shippingService interface {
@@ -86,6 +92,9 @@ type checkoutCommands interface {
 	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod) (checkoutDomain.Order, error)
 	Cancel(ctx context.Context, orderID, customerID string) error
 	AdminCancel(ctx context.Context, orderID string) error
+	MarkShipped(ctx context.Context, orderID, carrier, trackingCode string) error
+	MarkDelivered(ctx context.Context, orderID string) error
+	Refund(ctx context.Context, orderID, reason string) error
 }
 
 // checkoutQueries is the read side of the checkout context (CQRS); it returns
@@ -96,7 +105,17 @@ type checkoutQueries interface {
 	ListAll(ctx context.Context) ([]checkoutQuery.OrderSummary, error)
 }
 
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string) application.BoundedContext {
+// New wires the layout bounded context. It also initialises the process-wide
+// session cookie store from the supplied secret and Secure flag. Callers must
+// supply a non-empty sessionSecret; main.go enforces the production-vs-default
+// policy before calling here.
+//
+// csrfEnabled toggles the request-level CSRF check; production always wants
+// true, and only local debugging should ever flip it to false (see
+// cmd/web/config.go CSRFEnabled for the operator-facing knob).
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
+	store = newCookieStore(sessionSecret, cookieSecure)
+	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
 		handler: httpHandler{
 			cartSrv:     cartSrv,
@@ -106,6 +125,8 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			checkoutQry: checkoutQry,
 			shipSrv:     shipSrv,
 			imageStore:  imageStore,
+			mailer:      mailerSrv,
+			baseURL:     baseURL,
 			logger:      logger,
 		},
 		uploadsDir: uploadsDir,

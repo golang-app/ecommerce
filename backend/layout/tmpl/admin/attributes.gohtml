@@ -18,6 +18,7 @@
               <a href="/admin/attributes/{{$t.ID}}/edit">edit</a>
               <form method="post" action="/admin/attributes/{{$t.ID}}/delete"
                     onsubmit="return confirm('Delete this attribute type? Its product values will be removed.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
                 <button type="submit" class="linkbtn linkbtn--danger">delete</button>
               </form>
             </td>
@@ -32,6 +33,7 @@
   <section class="admin-form">
     <h3 class="account-card__title">add an attribute type</h3>
     <form class="form" method="post" action="/admin/attributes">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
       <div class="field"><label for="a-name">name</label><input id="a-name" name="name" required></div>
       <div class="field"><label for="a-unit">unit (optional)</label><input id="a-unit" name="unit"></div>
       <div class="field">

@@ -14,6 +14,16 @@ import (
 )
 
 func (handler httpHandler) AddToCart(w http.ResponseWriter, r *http.Request) {
+	// Per-IP rate limit: 30 cart-adds/minute. The legitimate flow is one
+	// click → one POST, so 30/min easily covers an enthusiastic shopper;
+	// anything beyond that smells like a scraper or a stuck retry loop and
+	// gets a clean 429 (HTMX surfaces it as a failed request without
+	// disturbing the rest of the page).
+	if !addToCartLimiter.Allow(clientIP(r)) {
+		http.Error(w, "too many requests, please slow down", http.StatusTooManyRequests)
+		return
+	}
+
 	cartID := cartIDFromCookies(w, r)
 	variantID := mux.Vars(r)["variantID"]
 

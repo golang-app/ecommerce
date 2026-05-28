@@ -3,6 +3,7 @@
   <h2 class="account-card__title">{{if .IsNew}}new attribute set{{else}}edit attribute set{{end}}</h2>
 
   <form class="form" method="post" action="{{if .IsNew}}/admin/attribute-sets{{else}}/admin/attribute-sets/{{.SetID}}{{end}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div class="field"><label for="s-name">name</label><input id="s-name" name="name" value="{{.SetName}}" required></div>
 
     <h3 class="account-card__title">members</h3>

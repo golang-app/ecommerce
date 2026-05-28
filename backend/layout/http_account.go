@@ -9,7 +9,28 @@ import (
 )
 
 // requireLogin resolves the current customer or redirects to the login page.
+// If the customer still has must_change_password set, the gate diverts them
+// to /auth/change-password so the forced reset cannot be skipped by visiting
+// /account/* directly. The change-password handlers themselves use
+// requireLoginAllowMustChange to avoid an infinite redirect loop.
 func (handler httpHandler) requireLogin(w http.ResponseWriter, r *http.Request) (string, bool) {
+	cid := handler.currentCustomerID(r)
+	if cid == "" {
+		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+		return "", false
+	}
+	if must, err := handler.authSrv.MustChangePassword(r.Context(), cid); err == nil && must {
+		http.Redirect(w, r, "/auth/change-password", http.StatusSeeOther)
+		return "", false
+	}
+	return cid, true
+}
+
+// requireLoginAllowMustChange is the variant used by the forced-reset page
+// itself: it confirms the caller is logged in but does NOT redirect when the
+// must_change_password flag is set (which is exactly the state in which the
+// caller is allowed to be on this page).
+func (handler httpHandler) requireLoginAllowMustChange(w http.ResponseWriter, r *http.Request) (string, bool) {
 	cid := handler.currentCustomerID(r)
 	if cid == "" {
 		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)

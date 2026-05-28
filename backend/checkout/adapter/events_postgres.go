@@ -85,13 +85,33 @@ func projectEventTx(ctx context.Context, tx *sql.Tx, e domain.Event) error {
 		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusFailed))
 	case domain.OrderCancelled:
 		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusCancelled))
+	case domain.OrderShipped:
+		return projectOrderShipped(ctx, tx, ev)
+	case domain.OrderDelivered:
+		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusDelivered))
+	case domain.OrderRefunded:
+		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusRefunded))
 	default:
 		return fmt.Errorf("no projection for event %s", e.EventType())
 	}
 }
 
+// projectOrderShipped updates the order status and stores the optional
+// carrier/tracking metadata on the read model row.
+func projectOrderShipped(ctx context.Context, tx *sql.Tx, ev domain.OrderShipped) error {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE checkout_order
+		SET status = $2, carrier = $3, tracking_code = $4
+		WHERE id = $1
+	`, ev.OrderID, string(domain.StatusShipped), ev.Carrier, ev.TrackingCode); err != nil {
+		return fmt.Errorf("project shipped: %w", err)
+	}
+	return nil
+}
+
 func projectOrderPlaced(ctx context.Context, tx *sql.Tx, ev domain.OrderPlaced) error {
-	// Fold the single event into an Order so we can reuse its derived totals.
+	// Fold the single event into an Order so we can reuse its derived totals
+	// (the aggregate already applies the threshold-aware shipping/tax math).
 	o := domain.RehydrateOrder([]domain.Event{ev})
 
 	var customerID sql.NullString
@@ -107,8 +127,8 @@ func projectOrderPlaced(ctx context.Context, tx *sql.Tx, ev domain.OrderPlaced) 
 			(id, user_id, customer_id, total_amount, total_currency, status, placed_at,
 			 ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country,
 			 ship_method_code, ship_method_label, ship_cost,
-			 payment_method_code, payment_method_label)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			 payment_method_code, payment_method_label, tax_amount)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		ON CONFLICT (id) DO UPDATE SET
 			user_id = EXCLUDED.user_id,
 			customer_id = EXCLUDED.customer_id,
@@ -125,13 +145,14 @@ func projectOrderPlaced(ctx context.Context, tx *sql.Tx, ev domain.OrderPlaced) 
 			ship_method_label = EXCLUDED.ship_method_label,
 			ship_cost = EXCLUDED.ship_cost,
 			payment_method_code = EXCLUDED.payment_method_code,
-			payment_method_label = EXCLUDED.payment_method_label
+			payment_method_label = EXCLUDED.payment_method_label,
+			tax_amount = EXCLUDED.tax_amount
 	`,
 		o.ID(), o.UserID(), customerID, o.TotalAmount(), o.TotalCurrency(),
 		string(o.Status()), o.PlacedAt(),
 		ship.Name(), ship.Street1(), ship.Street2(), ship.City(), ship.Zip(), ship.Country(),
-		method.Code(), method.Label(), method.Cost(),
-		pay.Code(), pay.Label(),
+		method.Code(), method.Label(), o.ShippingCost(),
+		pay.Code(), pay.Label(), o.TaxAmount(),
 	)
 	if err != nil {
 		return fmt.Errorf("project order: %w", err)

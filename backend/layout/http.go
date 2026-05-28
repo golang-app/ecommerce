@@ -9,29 +9,31 @@ import (
 	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	key   = []byte("go-ecommerce")
-	store = newCookieStore(key)
-)
+// store is the process-wide session cookie store. It is initialised once by
+// layout.New() (which reads SESSION_SECRET and COOKIE_SECURE from config) and
+// reused by every handler in this package. Keeping it package-level keeps the
+// existing `store.Get(r, "ecommerce")` call-sites unchanged; there is only
+// one layout boundedContext per process so a single shared store is fine.
+var store *sessions.CookieStore
 
 // newCookieStore returns a CookieStore whose Options work over plain HTTP
-// (localhost / docker compose) so the demo runs without TLS. gorilla
-// sessions defaults to Secure + SameSite=None which makes the cookie
-// invisible to non-HTTPS clients. Flip Secure to true when serving over
-// HTTPS for real.
-func newCookieStore(key []byte) *sessions.CookieStore {
+// (localhost / docker compose) when secure=false; flip secure=true for
+// HTTPS deployments (COOKIE_SECURE=true). HttpOnly and SameSite=Lax are
+// always on.
+func newCookieStore(key []byte, secure bool) *sessions.CookieStore {
 	s := sessions.NewCookieStore(key)
 	s.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   86400 * 30,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
 	return s
@@ -45,6 +47,8 @@ type httpHandler struct {
 	checkoutQry checkoutQueries
 	shipSrv     shippingService
 	imageStore  imagestore.Store
+	mailer      mailer.Mailer
+	baseURL     string
 	logger      logrus.FieldLogger
 }
 
@@ -126,6 +130,12 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/auth/logout", observability.HTTPWrap(m.handler.HandleLogout, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.Register, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.HandleRegister, m.logger)).Methods("POST")
+	r.HandleFunc("/auth/change-password", observability.HTTPWrap(m.handler.ChangePasswordPage, m.logger)).Methods("GET")
+	r.HandleFunc("/auth/change-password", observability.HTTPWrap(m.handler.HandleChangePassword, m.logger)).Methods("POST")
+	r.HandleFunc("/auth/forgot", observability.HTTPWrap(m.handler.ForgotPasswordPage, m.logger)).Methods("GET")
+	r.HandleFunc("/auth/forgot", observability.HTTPWrap(m.handler.HandleForgotPassword, m.logger)).Methods("POST")
+	r.HandleFunc("/auth/reset", observability.HTTPWrap(m.handler.ResetPasswordPage, m.logger)).Methods("GET")
+	r.HandleFunc("/auth/reset", observability.HTTPWrap(m.handler.HandleResetPassword, m.logger)).Methods("POST")
 	r.HandleFunc("/auth/menuIcon", observability.HTTPWrap(m.handler.AuthMenuItem, m.logger)).Methods("GET", "OPTIONS")
 
 	r.HandleFunc("/checkout", observability.HTTPWrap(m.handler.Checkout, m.logger)).Methods("GET")
@@ -190,8 +200,15 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/attribute-sets/{id}", observability.HTTPWrap(m.handler.AdminUpdateAttributeSet, m.logger)).Methods("POST")
 
 	r.HandleFunc("/admin/orders", observability.HTTPWrap(m.handler.AdminOrders, m.logger)).Methods("GET")
+	// Specific fulfillment sub-paths must be registered before the
+	// /admin/orders/{orderID} catch-all so they don't get shadowed.
 	r.HandleFunc("/admin/orders/{orderID}/cancel", observability.HTTPWrap(m.handler.AdminCancelOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}/ship", observability.HTTPWrap(m.handler.AdminShipOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}/deliver", observability.HTTPWrap(m.handler.AdminDeliverOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}/refund", observability.HTTPWrap(m.handler.AdminRefundOrder, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/orders/{orderID}", observability.HTTPWrap(m.handler.AdminOrderDetail, m.logger)).Methods("GET")
+
+	r.HandleFunc("/admin/inventory", observability.HTTPWrap(m.handler.AdminInventory, m.logger)).Methods("GET")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
@@ -216,6 +233,21 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
+	// CSRFToken is injected into every page so:
+	//   * hidden <input name="csrf_token"> fields in <form method="post"> get a
+	//     fresh value on each render, and
+	//   * the htmx:configRequest snippet in layout.gohtml can stamp the same
+	//     value onto the X-CSRF-Token header for HTMX-driven POSTs.
+	// issueCSRFToken shares the request-scoped gorilla/sessions registry, so
+	// it mutates the same `session` pointer; the flash reads and the
+	// session.Save below therefore see the just-minted token.
+	csrfToken, err := issueCSRFToken(r, w)
+	if err != nil {
+		handler.logger.WithError(err).Error("cannot issue CSRF token")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	data["CSRFToken"] = csrfToken
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
@@ -280,10 +312,20 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
+	// Same CSRF/htmx contract as renderTemplate — the admin shell also
+	// embeds the configRequest script that stamps X-CSRF-Token on every
+	// HTMX request, and admin templates emit a hidden csrf_token input.
+	csrfToken, err := issueCSRFToken(r, w)
+	if err != nil {
+		handler.logger.WithError(err).Error("cannot issue CSRF token")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	data["CSRFToken"] = csrfToken
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["AdminEmail"] = handler.currentCustomerID(r)
-	err := session.Save(r, w)
+	err = session.Save(r, w)
 	if err != nil {
 		handler.logger.WithError(err).Error("cannot save session")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

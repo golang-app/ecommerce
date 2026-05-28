@@ -3,6 +3,7 @@
   <h2 class="account-card__title">create a variant product</h2>
 
   <form class="form" method="post" action="/admin/products/new-variant" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <section class="admin-section">
       <h3 class="admin-section__title">product</h3>
       <div class="field"><label for="p-id">id (slug)</label><input id="p-id" name="id" required placeholder="lowercase-with-hyphens"></div>

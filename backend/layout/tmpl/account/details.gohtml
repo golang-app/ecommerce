@@ -16,6 +16,7 @@
       <section class="addr-add">
         <h3 class="account-card__title">change password</h3>
         <form class="form" method="post" action="/account/details/password">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <div class="field">
             <label for="cur">current password</label>
             <input id="cur" type="password" name="current_password" autocomplete="current-password" required>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
@@ -24,6 +25,12 @@ type inMemory struct {
 	// attribute sets: the set row plus its ordered member attribute type ids.
 	attrSets     map[string]attrSetRow
 	attrSetItems map[string][]string
+	// movements is the in-memory inventory audit log, kept oldest-first; the
+	// adapter slices/sorts it newest-first when returning.
+	movements []domain.StockMovement
+	// nextMovementID is the auto-increment cursor mirroring the postgres
+	// bigserial column.
+	nextMovementID int64
 }
 
 // attrSetRow holds an attribute set's own fields (members are tracked
@@ -462,6 +469,31 @@ func (im *inMemory) SetAttributeSetItems(ctx context.Context, setID string, attr
 	copy(items, attributeTypeIDs)
 	im.attrSetItems[setID] = items
 	return nil
+}
+
+// InsertStockMovement appends an audit-log entry. IDs are assigned in
+// insertion order, mirroring the postgres bigserial column.
+func (im *inMemory) InsertStockMovement(ctx context.Context, variantID string, delta int, reason, refOrderID string) error {
+	im.nextMovementID++
+	im.movements = append(im.movements, domain.NewStockMovement(im.nextMovementID, variantID, delta, reason, refOrderID, time.Now().UTC()))
+	return nil
+}
+
+// ListStockMovements returns up to limit movements newest-first; when
+// variantID is empty the full log is returned.
+func (im *inMemory) ListStockMovements(ctx context.Context, variantID string, limit int) ([]domain.StockMovement, error) {
+	filtered := make([]domain.StockMovement, 0, len(im.movements))
+	for i := len(im.movements) - 1; i >= 0; i-- {
+		m := im.movements[i]
+		if variantID != "" && m.VariantID != variantID {
+			continue
+		}
+		filtered = append(filtered, m)
+		if len(filtered) >= limit {
+			break
+		}
+	}
+	return filtered, nil
 }
 
 func (im *inMemory) inCategory(productID, slug string) bool {

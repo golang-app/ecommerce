@@ -13,12 +13,18 @@ const (
 	StatusPaid      Status = "paid"
 	StatusFailed    Status = "failed"
 	StatusCancelled Status = "cancelled"
+	StatusShipped   Status = "shipped"
+	StatusDelivered Status = "delivered"
+	StatusRefunded  Status = "refunded"
 )
 
 var (
 	ErrOrderNotFound       = errors.New("order not found")
 	ErrCartEmpty           = errors.New("cannot place order from an empty cart")
 	ErrOrderNotCancellable = errors.New("order cannot be cancelled")
+	ErrOrderNotShippable   = errors.New("order cannot be shipped")
+	ErrOrderNotDeliverable = errors.New("order cannot be delivered")
+	ErrOrderNotRefundable  = errors.New("order cannot be refunded")
 )
 
 // Order is a placed (or attempted) checkout. Once created, line items are a
@@ -30,18 +36,22 @@ var (
 // orders placed without logging in. Only orders with a non-empty
 // customerID show up in the per-user order history.
 type Order struct {
-	id          string
-	userID      string
-	customerID  string
-	shipTo      Address
-	shipMethod  ShippingMethod
-	payMethod   PaymentMethod
-	items       []Line
-	subtotalAmt int64
-	totalAmt    int64
-	totalCcy    string
-	status      Status
-	placedAt    time.Time
+	id           string
+	userID       string
+	customerID   string
+	shipTo       Address
+	shipMethod   ShippingMethod
+	payMethod    PaymentMethod
+	items        []Line
+	subtotalAmt  int64
+	taxAmt       int64
+	shipCostAmt  int64
+	totalAmt     int64
+	totalCcy     string
+	status       Status
+	placedAt     time.Time
+	carrier      string
+	trackingCode string
 
 	version       int
 	pendingEvents []Event
@@ -99,6 +109,7 @@ func NewOrder(id, userID, customerID string, shipTo Address, shipMethod Shipping
 		payMethod:   payMethod,
 		items:       items,
 		subtotalAmt: subtotal,
+		shipCostAmt: shipMethod.Cost(),
 		totalAmt:    subtotal + shipMethod.Cost(),
 		totalCcy:    ccy,
 		status:      status,
@@ -114,33 +125,44 @@ func (o Order) ShippingMethod() ShippingMethod { return o.shipMethod }
 func (o Order) PaymentMethod() PaymentMethod   { return o.payMethod }
 func (o Order) Subtotal() int64                { return o.subtotalAmt }
 func (o Order) SubtotalDisplay() string        { return money(o.subtotalAmt) }
-func (o Order) ShippingCost() int64            { return o.shipMethod.Cost() }
-func (o Order) ShippingCostDisplay() string    { return money(o.shipMethod.Cost()) }
+func (o Order) ShippingCost() int64            { return o.shipCostAmt }
+func (o Order) ShippingCostDisplay() string    { return money(o.shipCostAmt) }
+func (o Order) TaxAmount() int64               { return o.taxAmt }
+func (o Order) TaxDisplay() string             { return money(o.taxAmt) }
 func (o Order) Items() []Line         { return o.items }
 func (o Order) Status() Status        { return o.status }
 func (o Order) PlacedAt() time.Time   { return o.placedAt }
 func (o Order) TotalAmount() int64    { return o.totalAmt }
 func (o Order) TotalCurrency() string { return o.totalCcy }
 func (o Order) TotalDisplay() string  { return money(o.totalAmt) }
+func (o Order) Carrier() string       { return o.carrier }
+func (o Order) TrackingCode() string  { return o.trackingCode }
 
 // --- event-sourced write side ---
 
 // PlaceOrder is the command that creates a new order from a cart snapshot
 // and the customer's checkout choices. It emits an OrderPlaced event.
-func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, lines []Line, at time.Time) (*Order, error) {
+//
+// tax is the tax amount in minor units already computed by the caller
+// (CheckoutService) from the configured rate. effectiveShipping is the
+// shipping price actually charged — equal to shipMethod.Cost() in the normal
+// case, but 0 when a configured free-shipping threshold knocked it down.
+func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, lines []Line, tax, effectiveShipping int64, at time.Time) (*Order, error) {
 	if len(lines) == 0 {
 		return nil, ErrCartEmpty
 	}
 	o := &Order{}
 	o.raise(OrderPlaced{
-		OrderID:    id,
-		UserID:     userID,
-		CustomerID: customerID,
-		ShipTo:     shipTo,
-		ShipMethod: shipMethod,
-		PayMethod:  payMethod,
-		Lines:      lines,
-		At:         at,
+		OrderID:      id,
+		UserID:       userID,
+		CustomerID:   customerID,
+		ShipTo:       shipTo,
+		ShipMethod:   shipMethod,
+		PayMethod:    payMethod,
+		Lines:        lines,
+		Tax:          tax,
+		ShippingCost: effectiveShipping,
+		At:           at,
 	})
 	return o, nil
 }
@@ -180,7 +202,16 @@ func (o *Order) apply(e Event) {
 			}
 		}
 		o.subtotalAmt = subtotal
-		o.totalAmt = subtotal + ev.ShipMethod.Cost()
+		o.taxAmt = ev.Tax
+		// Historical events written before the tax/shipping fields existed
+		// will have ShippingCost == 0 and Tax == 0; fall back to the method
+		// cost so those orders still display their original total.
+		if ev.ShippingCost == 0 && ev.Tax == 0 {
+			o.shipCostAmt = ev.ShipMethod.Cost()
+		} else {
+			o.shipCostAmt = ev.ShippingCost
+		}
+		o.totalAmt = subtotal + o.taxAmt + o.shipCostAmt
 		o.totalCcy = ccy
 		o.status = StatusPending
 		o.placedAt = ev.At
@@ -190,6 +221,14 @@ func (o *Order) apply(e Event) {
 		o.status = StatusFailed
 	case OrderCancelled:
 		o.status = StatusCancelled
+	case OrderShipped:
+		o.status = StatusShipped
+		o.carrier = ev.Carrier
+		o.trackingCode = ev.TrackingCode
+	case OrderDelivered:
+		o.status = StatusDelivered
+	case OrderRefunded:
+		o.status = StatusRefunded
 	}
 	o.version++
 }
@@ -201,6 +240,41 @@ func (o *Order) Cancel(reason string, at time.Time) error {
 		return ErrOrderNotCancellable
 	}
 	o.raise(OrderCancelled{OrderID: o.id, Reason: reason, At: at})
+	return nil
+}
+
+// MarkShipped records that the warehouse dispatched a paid order. Carrier
+// and trackingCode are optional metadata (empty strings are allowed). The
+// transition is only permitted from StatusPaid.
+func (o *Order) MarkShipped(carrier, trackingCode string, at time.Time) error {
+	if o.status != StatusPaid {
+		return ErrOrderNotShippable
+	}
+	o.raise(OrderShipped{OrderID: o.id, Carrier: carrier, TrackingCode: trackingCode, At: at})
+	return nil
+}
+
+// MarkDelivered records that a shipped order reached the customer. Only
+// shipped orders can be marked delivered.
+func (o *Order) MarkDelivered(at time.Time) error {
+	if o.status != StatusShipped {
+		return ErrOrderNotDeliverable
+	}
+	o.raise(OrderDelivered{OrderID: o.id, At: at})
+	return nil
+}
+
+// Refund records that an admin reversed the charge on the order; refunds are
+// allowed for paid, shipped or delivered orders (returning customers get
+// their money back regardless of where the shipment is).
+func (o *Order) Refund(reason string, at time.Time) error {
+	switch o.status {
+	case StatusPaid, StatusShipped, StatusDelivered:
+		// allowed
+	default:
+		return ErrOrderNotRefundable
+	}
+	o.raise(OrderRefunded{OrderID: o.id, Reason: reason, At: at})
 	return nil
 }
 

@@ -23,9 +23,9 @@
               <div class="addr-card__actions">
                 <a href="/account/addresses/{{$a.ID}}/edit">edit</a>
                 {{if not $a.IsDefault}}
-                  <form method="post" action="/account/addresses/{{$a.ID}}/default"><button type="submit" class="linkbtn">make default</button></form>
+                  <form method="post" action="/account/addresses/{{$a.ID}}/default"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit" class="linkbtn">make default</button></form>
                 {{end}}
-                <form method="post" action="/account/addresses/{{$a.ID}}/delete"><button type="submit" class="linkbtn linkbtn--danger">delete</button></form>
+                <form method="post" action="/account/addresses/{{$a.ID}}/delete"><input type="hidden" name="csrf_token" value="{{$.CSRFToken}}"><button type="submit" class="linkbtn linkbtn--danger">delete</button></form>
               </div>
             </article>
           {{end}}
@@ -37,6 +37,7 @@
       <section class="addr-add">
         <h3 class="account-card__title">add an address</h3>
         <form class="form" method="post" action="/account/addresses">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <div class="field"><label for="a-name">full name</label><input id="a-name" name="name" required></div>
           <div class="field"><label for="a-street1">street</label><input id="a-street1" name="street1" required></div>
           <div class="field"><label for="a-street2">street (line 2)</label><input id="a-street2" name="street2"></div>

@@ -63,7 +63,8 @@ func (p Postgres) Find(ctx context.Context, id string) (query.OrderView, error) 
 	var shipName, shipStreet1, shipStreet2, shipCity, shipZip, shipCountry sql.NullString
 	var shipMethodCode, shipMethodLabel sql.NullString
 	var payMethodCode, payMethodLabel sql.NullString
-	var shipCost int64
+	var shipCost, taxAmt int64
+	var carrier, trackingCode string
 	var totalAmt int64
 	var placedAt time.Time
 
@@ -71,12 +72,14 @@ func (p Postgres) Find(ctx context.Context, id string) (query.OrderView, error) 
 		SELECT user_id, customer_id, total_amount, total_currency, status, placed_at,
 		       ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country,
 		       ship_method_code, ship_method_label, ship_cost,
-		       payment_method_code, payment_method_label
+		       payment_method_code, payment_method_label,
+		       tax_amount, carrier, tracking_code
 		FROM checkout_order WHERE id = $1
 	`, id).Scan(&userID, &customerID, &totalAmt, &currency, &status, &placedAt,
 		&shipName, &shipStreet1, &shipStreet2, &shipCity, &shipZip, &shipCountry,
 		&shipMethodCode, &shipMethodLabel, &shipCost,
-		&payMethodCode, &payMethodLabel)
+		&payMethodCode, &payMethodLabel,
+		&taxAmt, &carrier, &trackingCode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return query.OrderView{}, domain.ErrOrderNotFound
 	}
@@ -115,10 +118,12 @@ func (p Postgres) Find(ctx context.Context, id string) (query.OrderView, error) 
 	shipMethod := domain.RebuildShippingMethod(shipMethodCode.String, shipMethodLabel.String, shipCost)
 	payMethod := domain.RebuildPaymentMethod(payMethodCode.String, payMethodLabel.String)
 
+	subtotal := totalAmt - shipCost - taxAmt
 	return query.NewOrderView(
 		id, customerID.String, domain.Status(status), placedAt,
 		lines, shipTo, shipMethod, payMethod,
-		totalAmt-shipCost, totalAmt, currency,
+		subtotal, taxAmt, shipCost, totalAmt, currency,
+		carrier, trackingCode,
 	), nil
 }
 
@@ -158,6 +163,35 @@ func (p Postgres) ListByCustomer(ctx context.Context, customerID string) ([]quer
 		return nil, fmt.Errorf("rows: %w", err)
 	}
 	return summaries, nil
+}
+
+// ListExpiredPending returns the ids of orders still in the pending status
+// whose placed_at is strictly older than olderThan. The reservation TTL
+// sweeper uses this list to release orphaned stock reservations.
+func (p Postgres) ListExpiredPending(ctx context.Context, olderThan time.Time) ([]string, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT id
+		FROM checkout_order
+		WHERE status = $1 AND placed_at < $2
+		ORDER BY placed_at
+	`, string(domain.StatusPending), olderThan)
+	if err != nil {
+		return nil, fmt.Errorf("query expired pending: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan expired pending: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return ids, nil
 }
 
 // ListAll returns every order newest-first as list summaries, regardless of

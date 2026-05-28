@@ -41,17 +41,21 @@ func (s OrderSummary) TotalCurrency() string { return s.currency }
 
 // OrderView is the read model for the order detail page.
 type OrderView struct {
-	id         string
-	customerID string
-	status     domain.Status
-	placedAt   time.Time
-	items      []domain.Line
-	shipTo     domain.Address
-	shipMethod domain.ShippingMethod
-	payMethod  domain.PaymentMethod
-	subtotal   int64
-	total      int64
-	currency   string
+	id           string
+	customerID   string
+	status       domain.Status
+	placedAt     time.Time
+	items        []domain.Line
+	shipTo       domain.Address
+	shipMethod   domain.ShippingMethod
+	payMethod    domain.PaymentMethod
+	subtotal     int64
+	tax          int64
+	shipCost     int64
+	total        int64
+	currency     string
+	carrier      string
+	trackingCode string
 }
 
 func NewOrderView(
@@ -62,13 +66,15 @@ func NewOrderView(
 	shipTo domain.Address,
 	shipMethod domain.ShippingMethod,
 	payMethod domain.PaymentMethod,
-	subtotal, total int64,
+	subtotal, tax, shipCost, total int64,
 	currency string,
+	carrier, trackingCode string,
 ) OrderView {
 	return OrderView{
 		id: id, customerID: customerID, status: status, placedAt: placedAt,
 		items: items, shipTo: shipTo, shipMethod: shipMethod, payMethod: payMethod,
-		subtotal: subtotal, total: total, currency: currency,
+		subtotal: subtotal, tax: tax, shipCost: shipCost, total: total, currency: currency,
+		carrier: carrier, trackingCode: trackingCode,
 	}
 }
 
@@ -81,6 +87,11 @@ func (v OrderView) ShipTo() domain.Address                { return v.shipTo }
 func (v OrderView) ShippingMethod() domain.ShippingMethod { return v.shipMethod }
 func (v OrderView) PaymentMethod() domain.PaymentMethod   { return v.payMethod }
 func (v OrderView) SubtotalDisplay() string               { return money(v.subtotal) }
-func (v OrderView) ShippingCostDisplay() string           { return money(v.shipMethod.Cost()) }
+func (v OrderView) ShippingCost() int64                   { return v.shipCost }
+func (v OrderView) ShippingCostDisplay() string           { return money(v.shipCost) }
+func (v OrderView) TaxAmount() int64                      { return v.tax }
+func (v OrderView) TaxDisplay() string                    { return money(v.tax) }
 func (v OrderView) TotalDisplay() string                  { return money(v.total) }
 func (v OrderView) TotalCurrency() string                 { return v.currency }
+func (v OrderView) Carrier() string                       { return v.carrier }
+func (v OrderView) TrackingCode() string                  { return v.trackingCode }

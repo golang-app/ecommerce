@@ -35,10 +35,18 @@
               <td colspan="3">subtotal</td>
               <td class="col-total">{{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}</td>
             </tr>
+            {{if gt .Order.TaxAmount 0}}
+              <tr>
+                <td colspan="3">tax</td>
+                <td class="col-total">{{.Order.TaxDisplay}} {{.Order.TotalCurrency}}</td>
+              </tr>
+            {{end}}
             {{if not .Order.ShippingMethod.IsZero}}
               <tr>
                 <td colspan="3">shipping &middot; {{.Order.ShippingMethod.Label}}</td>
-                <td class="col-total">{{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}</td>
+                <td class="col-total">
+                  {{if eq .Order.ShippingCost 0}}free{{else}}{{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}{{end}}
+                </td>
               </tr>
             {{end}}
             <tr>
@@ -66,6 +74,17 @@
           </section>
         {{end}}
 
+        {{if or .Order.Carrier .Order.TrackingCode}}
+          <section class="order__ship">
+            <h2 class="order__ship-heading">fulfillment</h2>
+            <p>
+              {{with .Order.Carrier}}carrier: {{.}}{{end}}
+              {{if and .Order.Carrier .Order.TrackingCode}} &middot; {{end}}
+              {{with .Order.TrackingCode}}tracking: <code>{{.}}</code>{{end}}
+            </p>
+          </section>
+        {{end}}
+
         {{if not .Order.PaymentMethod.IsZero}}
           <section class="order__ship">
             <h2 class="order__ship-heading">payment</h2>
@@ -75,10 +94,33 @@
 
         <div class="order__actions">
           <a href="/admin/orders" class="btn btn--ghost">back to orders</a>
+          {{if .CanShip}}
+            <form method="post" action="/admin/orders/{{.Order.ID}}/ship" class="order__action-form">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <input type="text" name="carrier" placeholder="carrier (optional)" class="order__action-input">
+              <input type="text" name="tracking_code" placeholder="tracking code (optional)" class="order__action-input">
+              <button type="submit" class="btn">mark shipped</button>
+            </form>
+          {{end}}
+          {{if .CanDeliver}}
+            <form method="post" action="/admin/orders/{{.Order.ID}}/deliver">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <button type="submit" class="btn">mark delivered</button>
+            </form>
+          {{end}}
           {{if .CanCancel}}
             <form method="post" action="/admin/orders/{{.Order.ID}}/cancel"
                   onsubmit="return confirm('Cancel this order as admin? Reserved stock will be released.');">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
               <button type="submit" class="linkbtn linkbtn--danger">cancel order</button>
+            </form>
+          {{end}}
+          {{if .CanRefund}}
+            <form method="post" action="/admin/orders/{{.Order.ID}}/refund" class="order__action-form"
+                  onsubmit="return confirm('Refund this order? Reserved stock will be returned to the catalogue.');">
+              <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+              <textarea name="reason" placeholder="refund reason (optional)" class="order__action-input" rows="2"></textarea>
+              <button type="submit" class="linkbtn linkbtn--danger">refund</button>
             </form>
           {{end}}
     </div>
