@@ -46,6 +46,7 @@ type httpHandler struct {
 	checkoutSrv checkoutCommands
 	checkoutQry checkoutQueries
 	shipSrv     shippingService
+	reviewsSrv  reviewsService
 	imageStore  imagestore.Store
 	mailer      mailer.Mailer
 	baseURL     string
@@ -124,6 +125,7 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/api/v1/products", observability.HTTPWrap(m.handler.AllProducts, m.logger))
 	r.HandleFunc("/product/{productID}", observability.HTTPWrap(m.handler.Product, m.logger)).Methods("GET")
 	r.HandleFunc("/product/{productID}/variant", observability.HTTPWrap(m.handler.ProductVariant, m.logger)).Methods("GET")
+	r.HandleFunc("/product/{productID}/review", observability.HTTPWrap(m.handler.SubmitReview, m.logger)).Methods("POST")
 
 	r.HandleFunc("/auth/login", observability.HTTPWrap(m.handler.Login, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/login", observability.HTTPWrap(m.handler.HandleLogin, m.logger)).Methods("POST")
@@ -209,6 +211,9 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/orders/{orderID}", observability.HTTPWrap(m.handler.AdminOrderDetail, m.logger)).Methods("GET")
 
 	r.HandleFunc("/admin/inventory", observability.HTTPWrap(m.handler.AdminInventory, m.logger)).Methods("GET")
+
+	r.HandleFunc("/admin/reviews", observability.HTTPWrap(m.handler.AdminReviews, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/reviews/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteReview, m.logger)).Methods("POST")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {

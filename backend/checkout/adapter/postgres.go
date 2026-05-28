@@ -219,6 +219,37 @@ func (p Postgres) ListExpiredPending(ctx context.Context, olderThan time.Time) (
 	return ids, nil
 }
 
+// HasPurchasedProduct reports whether the customer has at least one
+// fulfilled order (paid / shipped / delivered) that contains any variant of
+// the given catalog product.
+//
+// Important nuance: the checkout_order_item.product_id column actually stores
+// the catalogue variant id (the cart adds variants, see
+// checkout/app/checkout.go Place where lines are built from item.Product().
+// ID()). To answer "did this customer buy this product?" we therefore join
+// the order line through productcatalog_variant to recover the parent
+// product id.
+func (p Postgres) HasPurchasedProduct(ctx context.Context, customerID, productID string) (bool, error) {
+	var dummy int
+	err := p.db.QueryRowContext(ctx, `
+		SELECT 1
+		FROM checkout_order_item oi
+		JOIN checkout_order o ON o.id = oi.order_id
+		JOIN productcatalog_variant v ON v.id = oi.product_id
+		WHERE o.customer_id = $1
+		  AND v.product_id = $2
+		  AND o.status IN ('paid', 'shipped', 'delivered')
+		LIMIT 1
+	`, customerID, productID).Scan(&dummy)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("has purchased product: %w", err)
+	}
+	return true, nil
+}
+
 // ListAll returns every order newest-first as list summaries, regardless of
 // customer (including anonymous orders with a NULL customer_id). It powers the
 // admin order list and uses the same grouped query as ListByCustomer without

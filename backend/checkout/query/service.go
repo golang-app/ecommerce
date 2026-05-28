@@ -16,6 +16,11 @@ type Repository interface {
 	// reservation TTL sweeper uses this to find orphaned reservations to
 	// release.
 	ListExpiredPending(ctx context.Context, olderThan time.Time) ([]string, error)
+	// HasPurchasedProduct reports whether the customer has at least one
+	// fulfilled order (paid / shipped / delivered) containing any variant
+	// of the catalog product. It exists to power the reviews context's
+	// verified-buyer gate; see the reviews bounded context for the use site.
+	HasPurchasedProduct(ctx context.Context, customerID, productID string) (bool, error)
 }
 
 // Service is the checkout query side. It is intentionally separate from the
@@ -53,4 +58,14 @@ func (s Service) ListAll(ctx context.Context) ([]OrderSummary, error) {
 // being confirmed or explicitly failed. Used by the reservation sweeper.
 func (s Service) ListExpiredPending(ctx context.Context, olderThan time.Time) ([]string, error) {
 	return s.repo.ListExpiredPending(ctx, olderThan)
+}
+
+// HasPurchasedProduct reports whether the customer has bought at least one
+// variant of the given catalog product in a paid/shipped/delivered order.
+// Returns false (no error) for anonymous (empty) customers.
+func (s Service) HasPurchasedProduct(ctx context.Context, customerID, productID string) (bool, error) {
+	if customerID == "" || productID == "" {
+		return false, nil
+	}
+	return s.repo.HasPurchasedProduct(ctx, customerID, productID)
 }

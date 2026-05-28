@@ -13,6 +13,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
 	"github.com/sirupsen/logrus"
 )
@@ -97,12 +98,27 @@ type checkoutCommands interface {
 	Refund(ctx context.Context, orderID, reason string) error
 }
 
+// reviewsService is the narrow seam the layout package needs from the
+// reviews bounded context: list / aggregate for the product page, submit /
+// has-reviewed for the customer-facing review form, and delete for the
+// admin moderation page. Mirrors *reviews/app.Service.
+type reviewsService interface {
+	ListForProduct(ctx context.Context, productID string, limit int) ([]reviewsDomain.Review, error)
+	AggregateForProducts(ctx context.Context, productIDs []string) (map[string]reviewsDomain.Aggregate, error)
+	HasReviewed(ctx context.Context, productID, customerID string) (bool, error)
+	Submit(ctx context.Context, productID, customerID, body string, rating int) error
+	Delete(ctx context.Context, id string) error
+}
+
 // checkoutQueries is the read side of the checkout context (CQRS); it returns
 // dedicated read models, not the write aggregate.
 type checkoutQueries interface {
 	Find(ctx context.Context, id string) (checkoutQuery.OrderView, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]checkoutQuery.OrderSummary, error)
 	ListAll(ctx context.Context) ([]checkoutQuery.OrderSummary, error)
+	// HasPurchasedProduct gates the verified-buyer rule for the reviews
+	// context; layout passes it through a tiny adapter when wiring reviews.
+	HasPurchasedProduct(ctx context.Context, customerID, productID string) (bool, error)
 }
 
 // New wires the layout bounded context. It also initialises the process-wide
@@ -113,7 +129,7 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -124,6 +140,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			checkoutSrv: checkoutSrv,
 			checkoutQry: checkoutQry,
 			shipSrv:     shipSrv,
+			reviewsSrv:  reviewsSrv,
 			imageStore:  imageStore,
 			mailer:      mailerSrv,
 			baseURL:     baseURL,

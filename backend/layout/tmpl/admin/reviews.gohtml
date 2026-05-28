@@ -1,0 +1,37 @@
+{{define "main"}}
+  <h2 class="account-card__title">reviews</h2>
+
+  {{if .Rows}}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>product</th>
+          <th>customer</th>
+          <th>rating</th>
+          <th>created</th>
+          <th>body</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $row := .Rows}}
+          <tr>
+            <td><a href="/product/{{$row.ProductID}}">{{$row.ProductName}}</a></td>
+            <td>{{$row.Review.CustomerID}}</td>
+            <td>{{$row.Review.Rating}} / 5</td>
+            <td>{{$row.Review.CreatedAt.Format "Jan 2, 2006 15:04"}}</td>
+            <td>{{$row.Review.Body}}</td>
+            <td>
+              <form method="post" action="/admin/reviews/{{$row.Review.ID}}/delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="btn btn--danger">delete</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no reviews yet.</p>
+  {{end}}
+{{end}}

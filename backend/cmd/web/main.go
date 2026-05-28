@@ -23,6 +23,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/bkielbasa/go-ecommerce/backend/reviews"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -128,6 +129,11 @@ func main() {
 	}
 	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, bus, catalogService, catalogService, pricing)
 	shipSrv := shippinginfo.New(db)
+	// Reviews context: depends on productcatalog (via FK in storage) and on
+	// checkout's HasPurchasedProduct (wired through a tiny ACL on the
+	// reviews side). Returns both the BoundedContext envelope and the
+	// concrete service which layout consumes.
+	reviewsBD, reviewsSrv := reviews.New(db, checkoutQry)
 
 	// Mailer is the outbound-email abstraction. When SMTP_HOST is empty
 	// (the dev default), New() returns a LogMailer that writes each email
@@ -179,7 +185,7 @@ func main() {
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
 	// CSRF protection wraps every route on the application router. It must be
 	// installed after layout.New has set up the session store (which the
 	// middleware reads from) but before app.Run() begins serving.
@@ -187,6 +193,7 @@ func main() {
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)
+	app.AddBoundedContext(reviewsBD)
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock

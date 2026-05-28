@@ -135,9 +135,51 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Reviews block: aggregate badge, list of recent reviews, and the
+	// CanReview / AlreadyReviewed flags that decide whether to render the
+	// submission form. All three calls degrade gracefully — a failure in
+	// the reviews service must never block the product page from loading.
+	productID := string(product.ID())
+	reviews, err := handler.reviewsSrv.ListForProduct(r.Context(), productID, 20)
+	if err != nil {
+		handler.logger.WithError(err).Warn("cannot list reviews for product")
+		reviews = nil
+	}
+	aggMap, err := handler.reviewsSrv.AggregateForProducts(r.Context(), []string{productID})
+	if err != nil {
+		handler.logger.WithError(err).Warn("cannot aggregate reviews for product")
+		aggMap = nil
+	}
+	aggregate := aggMap[productID]
+
+	customerID := handler.currentCustomerID(r)
+	canReview := false
+	alreadyReviewed := false
+	if customerID != "" {
+		// CanReview is "the buyer has purchased this product"; we ask the
+		// checkout query directly so the rendered hint matches the same
+		// check Submit enforces.
+		bought, qErr := handler.checkoutQry.HasPurchasedProduct(r.Context(), customerID, productID)
+		if qErr != nil {
+			handler.logger.WithError(qErr).Warn("cannot verify purchase for review form")
+		}
+		canReview = bought
+		if canReview {
+			done, hErr := handler.reviewsSrv.HasReviewed(r.Context(), productID, customerID)
+			if hErr != nil {
+				handler.logger.WithError(hErr).Warn("cannot check existing review")
+			}
+			alreadyReviewed = done
+		}
+	}
+
 	handler.renderTemplate(w, r, "productCatalog/show", map[string]any{
-		"Product": product,
-		"Variant": variant,
+		"Product":         product,
+		"Variant":         variant,
+		"Reviews":         reviews,
+		"Aggregate":       aggregate,
+		"CanReview":       canReview,
+		"AlreadyReviewed": alreadyReviewed,
 	})
 }
 
