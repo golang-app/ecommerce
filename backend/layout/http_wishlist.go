@@ -49,7 +49,7 @@ func (handler httpHandler) WishlistToggle(w http.ResponseWriter, r *http.Request
 	// they came from — typically the wishlist page itself, so the
 	// just-removed row disappears.
 	if r.Header.Get("HX-Request") == "true" {
-		renderWishlistButton(w, variantID, added, true)
+		handler.renderWishlistButton(w, r, variantID, added, true)
 		return
 	}
 	dest := r.Referer()
@@ -110,10 +110,17 @@ func (handler httpHandler) AccountWishlist(w http.ResponseWriter, r *http.Reques
 // swaps. The same fragment definition is invoked from the product-page
 // template (via the "wishlist-button" partial); routing the toggle
 // response through the same template keeps the two button states in sync.
-func renderWishlistButton(w http.ResponseWriter, variantID string, inWishlist bool, loggedIn bool) {
+//
+// We parse the whole partials glob (rather than just the wishlist-button
+// file) because the partials cross-reference each other; html/template
+// requires every {{ funcName }} mentioned in any parsed template to be
+// registered, so the `money` helper that variant-box.gohtml uses must
+// be wired here even though only the wishlist button executes.
+func (handler httpHandler) renderWishlistButton(w http.ResponseWriter, r *http.Request, variantID string, inWishlist bool, loggedIn bool) {
 	files, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
 	ts := template.Must(template.New("").Funcs(template.FuncMap{
-		"dict": templateDict,
+		"dict":  templateDict,
+		"money": moneyFunc(handler.rates, handler.currentCurrency(r)),
 	}).ParseFiles(files...))
 	if err := ts.ExecuteTemplate(w, "wishlist-button", map[string]any{
 		"VariantID":  variantID,

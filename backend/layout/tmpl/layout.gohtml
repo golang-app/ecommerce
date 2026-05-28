@@ -57,6 +57,24 @@
                  hx-swap="innerHTML"
                  hx-include="[name=category]">
         </form>
+        {{/*
+          Display-only currency picker. Only renders when the operator
+          configured more than one currency — otherwise the only option
+          is the default and the form would be a no-op. The select
+          submits its parent form on change so the customer never needs
+          to hunt for a separate "go" button. Conversion is a render
+          transformation: orders are placed in the storage currency
+          (USD); see internal/fx.
+        */}}
+        {{if gt (len .Currencies) 1}}
+          <form class="currency-switch" method="post" action="/currency">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <label for="currency-select" class="visually-hidden">Currency</label>
+            <select id="currency-select" name="currency" onchange="this.form.submit()">
+              {{range .Currencies}}<option value="{{.}}"{{if eq . $.Currency}} selected{{end}}>{{.}}</option>{{end}}
+            </select>
+          </form>
+        {{end}}
         <nav aria-label="Primary">
           <ul class="nav">
             <li><a href="/products">shop</a></li>

@@ -9,6 +9,7 @@ import (
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
@@ -155,7 +156,7 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -172,6 +173,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			imageStore:  imageStore,
 			mailer:      mailerSrv,
 			baseURL:     baseURL,
+			rates:       rates,
 			logger:      logger,
 		},
 		uploadsDir: uploadsDir,

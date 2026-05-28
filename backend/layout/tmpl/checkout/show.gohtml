@@ -20,17 +20,25 @@
             <tr>
               <td>{{$item.Product.Name}}</td>
               <td class="col-qty">{{$item.Quantity}}</td>
-              <td class="col-total">{{$item.Product.Price.Display}} {{$item.Product.Price.Currency}}</td>
+              <td class="col-total">{{ money $item.Product.Price.Amount }}</td>
             </tr>
           {{end}}
         </tbody>
         <tfoot>
           <tr>
             <td colspan="2">total</td>
-            <td class="col-total">{{.Cart.TotalPrice.Display}} {{.Cart.TotalPrice.Currency}}</td>
+            <td class="col-total">{{ money .Cart.TotalPrice.Amount }}</td>
           </tr>
         </tfoot>
       </table>
+      {{/*
+        Display-only disclosure: shoppers viewing the cart in a non-USD
+        currency need to know the charge is still in USD. The note stays
+        understated (.muted) so it doesn't drown the summary.
+      */}}
+      {{if ne .Currency "USD"}}
+        <p class="muted checkout__note">Prices shown in {{.Currency}}; orders are placed in USD.</p>
+      {{end}}
     </section>
 
     <section class="checkout__payment">
@@ -55,7 +63,7 @@
             <label class="radio">
               <input type="radio" name="ship_method" value="{{.Code}}" {{if eq .Code "flat"}}checked{{end}}>
               <span class="radio__label">{{.Label}}</span>
-              <span class="radio__cost muted">{{.CostDisplay}} {{$.Cart.TotalPrice.Currency}}</span>
+              <span class="radio__cost muted">{{ money .Cost }}</span>
             </label>
           {{end}}
         </fieldset>

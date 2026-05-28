@@ -3,7 +3,7 @@
   {{if .Variant.IsZero}}
     <p class="product__price muted">that combination isn't available</p>
   {{else}}
-    <p class="product__price">{{.Variant.Price.Display}} {{.Variant.Price.Currency}}</p>
+    <p class="product__price">{{ money .Variant.Price.Amount }}</p>
     {{if .Variant.InStock}}
       {{if .Variant.LowStock}}
         <p class="stock stock--low">only {{.Variant.Stock}} left</p>

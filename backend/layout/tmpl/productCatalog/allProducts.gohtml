@@ -10,7 +10,7 @@
                width="800" height="800">
         {{end}}
         <h2 class="product-card__name">{{.Name}}</h2>
-        <p class="product-card__price">{{if .HasPriceRange}}from {{end}}{{.PriceFrom.Display}} {{.PriceFrom.Currency}}</p>
+        <p class="product-card__price">{{if .HasPriceRange}}from {{end}}{{ money .PriceFrom.Amount }}</p>
       </a>
     {{end}}
   </div>

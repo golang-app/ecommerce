@@ -1,3 +1,8 @@
+{{/*
+  Order confirmation always renders the stored order amount (USD).
+  The storefront's display-only multi-currency picker does NOT apply
+  here — the email reflects the actual amount charged.
+*/ -}}
 Thanks for your order.
 
 Order {{.Order.ID}} - placed {{.Order.PlacedAt.Format "Jan 2, 2006 15:04 MST"}}

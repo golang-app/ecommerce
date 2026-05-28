@@ -19,15 +19,15 @@
           <tr>
             <td><a href="/product/{{$item.Product.ID}}">{{$item.Product.Name}}</a></td>
             <td class="col-qty">{{$item.Quantity}}</td>
-            <td class="col-price">{{$item.Product.Price.Display}} {{$item.Product.Price.Currency}}</td>
-            <td class="col-total">{{$item.Product.Price.Display}} {{$item.Product.Price.Currency}}</td>
+            <td class="col-price">{{ money $item.Product.Price.Amount }}</td>
+            <td class="col-total">{{ money $item.Product.Price.Amount }}</td>
           </tr>
         {{end}}
       </tbody>
       <tfoot>
         <tr>
           <td colspan="3">total</td>
-          <td class="col-total">{{.Cart.TotalPrice.Display}} {{.Cart.TotalPrice.Currency}}</td>
+          <td class="col-total">{{ money .Cart.TotalPrice.Amount }}</td>
         </tr>
       </tfoot>
     </table>

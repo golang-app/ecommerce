@@ -18,6 +18,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
@@ -196,7 +197,13 @@ func main() {
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, promoSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
+	// fxRates are static, operator-configured. They are NOT a live feed —
+	// upgrading to a real provider only requires a different implementation
+	// of fx.Rates. The conversion is purely a render transformation: orders
+	// remain stored and charged in DefaultCurrency (USD).
+	fxRates := fx.New(cfg.DefaultCurrency, cfg.SupportedCurrencies, cfg.FXRates, logger)
+
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, promoSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
 	// CSRF protection wraps every route on the application router. It must be
 	// installed after layout.New has set up the session store (which the
 	// middleware reads from) but before app.Run() begins serving.

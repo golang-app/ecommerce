@@ -20,7 +20,7 @@
                        width="800" height="800">
                 {{end}}
                 <h3 class="product-card__name">{{$e.ProductName}}</h3>
-                <p class="product-card__price">{{$e.Price.Display}} {{$e.Price.Currency}}</p>
+                <p class="product-card__price">{{ money $e.Price.Amount }}</p>
               </a>
               {{- /* The remove form POSTs to the same toggle endpoint the
                      product page uses: since the item is currently in the

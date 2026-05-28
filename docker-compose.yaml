@@ -32,6 +32,12 @@ services:
       # threshold in MINOR units (cents). Both default to zero (disabled).
       TAX_RATE_PERCENT: ${TAX_RATE_PERCENT:-0}
       FREE_SHIPPING_THRESHOLD: ${FREE_SHIPPING_THRESHOLD:-0}
+      # Display-only multi-currency. The picker in the header is shown only
+      # when SUPPORTED_CURRENCIES has more than one entry. FX_RATES are
+      # operator-configured (NOT a live feed).
+      DEFAULT_CURRENCY: ${DEFAULT_CURRENCY:-USD}
+      SUPPORTED_CURRENCIES: ${SUPPORTED_CURRENCIES:-USD}
+      FX_RATES: ${FX_RATES:-}
       # OpenTelemetry: ship traces / metrics / logs to the local collector.
       # Empty / unset values disable each exporter — observability.Init*
       # functions detect this and skip exporter setup so the app still

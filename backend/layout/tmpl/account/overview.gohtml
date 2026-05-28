@@ -13,7 +13,7 @@
           <h2 class="account-card__title">latest order</h2>
           {{if .LatestOrder.ID}}
             <p><a href="/order/{{.LatestOrder.ID}}" class="order-row__id">{{.LatestOrder.ID}}</a></p>
-            <p class="muted">{{.LatestOrder.PlacedAt.Format "Jan 2, 2006"}} &middot; {{.LatestOrder.TotalDisplay}} {{.LatestOrder.TotalCurrency}} &middot; {{.LatestOrder.Status}}</p>
+            <p class="muted">{{.LatestOrder.PlacedAt.Format "Jan 2, 2006"}} &middot; {{ money .LatestOrder.TotalAmount }} &middot; {{.LatestOrder.Status}}</p>
             <p><a href="/account/orders">all orders &rarr;</a></p>
           {{else}}
             <p class="muted">no orders yet. <a href="/">browse products</a></p>

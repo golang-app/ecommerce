@@ -85,6 +85,10 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 		"./layout/tmpl/productCatalog/allProducts.gohtml",
 	}
 
+	// The grid fragment uses {{ money .PriceFrom.Amount }} to render the
+	// price in the customer's selected display currency. We bind the
+	// same FuncMap renderTemplate installs so the HTMX-only grid keeps
+	// parity with the full-page render path.
 	var ts = template.Must(template.New("").Funcs(template.FuncMap{
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
@@ -92,6 +96,7 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 		"add": func(a, b string) float64 {
 			return 666
 		},
+		"money": moneyFunc(handler.rates, handler.currentCurrency(r)),
 	}).ParseFiles(files...))
 	err = ts.ExecuteTemplate(w, "allProducts.gohtml", resp)
 	if err != nil {
@@ -228,8 +233,14 @@ func (handler httpHandler) ProductVariant(w http.ResponseWriter, r *http.Request
 		inWishlist = saved
 	}
 
+	// The variant-response fragment embeds the variant-box partial, which
+	// renders the price via {{ money .Variant.Price.Amount }}. We have to
+	// install the same currency-aware helper renderTemplate uses so the
+	// HTMX swap doesn't fail with an "undefined function: money" parse
+	// error at execute time.
 	ts := template.Must(template.New("").Funcs(template.FuncMap{
-		"dict": templateDict,
+		"dict":  templateDict,
+		"money": moneyFunc(handler.rates, handler.currentCurrency(r)),
 	}).ParseGlob("./layout/tmpl/partials/*.gohtml"))
 	if err := ts.ExecuteTemplate(w, "variant-response", map[string]any{
 		"Variant":     variant,

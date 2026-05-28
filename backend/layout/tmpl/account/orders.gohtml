@@ -26,7 +26,7 @@
                 </td>
                 <td class="muted">{{$order.PlacedAt.Format "Jan 2, 2006"}}</td>
                 <td><span class="order-status order-status--{{$order.Status}}">{{$order.Status}}</span></td>
-                <td class="col-total">{{$order.TotalDisplay}} {{$order.TotalCurrency}}</td>
+                <td class="col-total">{{ money $order.TotalAmount }}</td>
               </tr>
             {{end}}
           </tbody>

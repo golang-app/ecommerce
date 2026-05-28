@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
@@ -52,7 +53,13 @@ type httpHandler struct {
 	imageStore  imagestore.Store
 	mailer      mailer.Mailer
 	baseURL     string
-	logger      logrus.FieldLogger
+	// rates is the static, operator-configured FX table. It is shared
+	// across every render through the `money` template helper and is
+	// also exposed to the picker via the Currencies / Currency template
+	// variables. The conversion is purely a display transformation:
+	// orders stay priced in rates.Default() (USD).
+	rates  fx.Rates
+	logger logrus.FieldLogger
 }
 
 // HomePage renders the storefront landing page: a "new arrivals" grid of the
@@ -119,6 +126,10 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/", m.handler.HomePage)
 	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
 	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
+	// Display-only currency picker. Stores the chosen ISO code on the
+	// gorilla session; conversion happens at render time through the
+	// `money` template helper. CSRF-protected by the global middleware.
+	r.HandleFunc("/currency", observability.HTTPWrap(m.handler.HandleSetCurrency, m.logger)).Methods("POST")
 
 	r.HandleFunc("/cart", observability.HTTPWrap(m.handler.Cart, m.logger)).Methods("GET")
 	r.HandleFunc("/cart/{variantID}", observability.HTTPWrap(m.handler.AddToCart, m.logger)).Methods("POST")
@@ -243,6 +254,12 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	partials, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
 	files = append(files, partials...)
 
+	// Active display currency is captured once per request and closed over
+	// by the `money` helper below; that way every {{ money .X }} call
+	// inside a single render uses the same currency without the template
+	// having to thread it through every partial.
+	currency := handler.currentCurrency(r)
+
 	var ts = template.Must(template.New("").Funcs(template.FuncMap{
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
@@ -250,6 +267,11 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		"add":      func(a, b int) int { return a + b },
 		"truncate": truncateForMeta,
 		"dict":     templateDict,
+		// money converts a minor-unit amount stored in the default
+		// currency (USD) to the customer's active display currency and
+		// formats it as "X.YY CCY". The amount stays in USD inside the
+		// database; only the rendered HTML changes.
+		"money": moneyFunc(handler.rates, currency),
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
@@ -286,6 +308,12 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		navCategories = nil
 	}
 	data["NavCategories"] = navCategories
+	// Currency selection: Currency is the customer's active display
+	// currency (defaults to rates.Default()), Currencies is the list the
+	// header picker offers. Admin renders do NOT set these (they always
+	// show USD); see renderAdminTemplate.
+	data["Currency"] = currency
+	data["Currencies"] = handler.rates.Supported()
 	// SearchQuery is the value the header search input shows. It defaults to
 	// "" so every page renders the box; the search/catalog pages override it
 	// from the URL `q`.
@@ -323,13 +351,22 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	partials, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
 	files = append(files, partials...)
 
+	// The partials glob pulls in storefront partials (e.g. variant-box)
+	// that reference the `money` helper. Admin pages never invoke those
+	// partials, but html/template still needs every function mentioned
+	// in any parsed template to be registered at parse time — so we
+	// install a USD-fixed `money` here. The admin section is deliberately
+	// pinned to the storage currency: operators see the amount that will
+	// actually be charged, not a converted display value.
+	adminMoney := moneyFunc(handler.rates, handler.rates.Default())
 	var ts = template.Must(template.New("").Funcs(template.FuncMap{
 		"html": func(value interface{}) template.HTML {
 			return template.HTML(fmt.Sprint(value))
 		},
-		"add":  func(a, b int) int { return a + b },
-		"join": func(sep string, items []string) string { return strings.Join(items, sep) },
-		"dict": templateDict,
+		"add":   func(a, b int) int { return a + b },
+		"join":  func(sep string, items []string) string { return strings.Join(items, sep) },
+		"dict":  templateDict,
+		"money": adminMoney,
 	}).ParseFiles(files...))
 
 	session, _ := store.Get(r, "ecommerce")
