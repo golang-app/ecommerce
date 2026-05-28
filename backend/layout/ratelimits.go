@@ -27,6 +27,13 @@ var (
 	loginLimiter     = ratelimit.New(5.0/60.0, 5)
 	registerLimiter  = ratelimit.New(3.0/3600.0, 3)
 	addToCartLimiter = ratelimit.New(30.0/60.0, 30)
+	// forgotPasswordLimiter caps the password-reset request rate at 3/hour
+	// per IP. Reset emails are an asymmetric workload (one cheap form post
+	// triggers a full SMTP send), and they double as an enumeration vector
+	// (timing differences between "exists" and "doesn't exist" code paths
+	// can leak signal); the same per-IP throttle that protects /auth/
+	// register fits here for the same reasons.
+	forgotPasswordLimiter = ratelimit.New(3.0/3600.0, 3)
 )
 
 // clientIP returns a best-effort source IP for rate-limiting decisions.

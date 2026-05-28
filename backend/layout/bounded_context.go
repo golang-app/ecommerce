@@ -10,6 +10,7 @@ import (
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
@@ -70,6 +71,8 @@ type authService interface {
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 	IsAdmin(ctx context.Context, email string) (bool, error)
 	MustChangePassword(ctx context.Context, email string) (bool, error)
+	RequestPasswordReset(ctx context.Context, email string) (string, error)
+	ResetPassword(ctx context.Context, rawToken, newPassword string) error
 }
 
 type shippingService interface {
@@ -105,7 +108,7 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -117,6 +120,8 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			checkoutQry: checkoutQry,
 			shipSrv:     shipSrv,
 			imageStore:  imageStore,
+			mailer:      mailerSrv,
+			baseURL:     baseURL,
 			logger:      logger,
 		},
 		uploadsDir: uploadsDir,

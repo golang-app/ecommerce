@@ -19,6 +19,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
@@ -98,17 +99,57 @@ func main() {
 	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, bus, catalogService)
 	shipSrv := shippinginfo.New(db)
 
+	// Mailer is the outbound-email abstraction. When SMTP_HOST is empty
+	// (the dev default), New() returns a LogMailer that writes each email
+	// to the structured log instead of dialling — keeping the app bootable
+	// with no MailHog/SMTP relay running. Production always sets SMTP_HOST.
+	mailerSrv := mailer.New(mailer.Config{
+		Host:     cfg.SMTPHost,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		From:     cfg.MailFrom,
+	}, logger)
+
 	// Cross-context integration: when checkout reports an order paid, the cart
 	// context empties the basket it was placed from.
 	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
 		return cartSrv.Clear(ctx, e.(checkoutintegration.OrderPaid).SessionID)
 	})
 
+	// Second OrderPaid subscriber: render and dispatch the order
+	// confirmation email. Anonymous orders (CustomerID == "") are
+	// skipped — there is no inbox to mail. Any failure inside the
+	// subscriber is returned (and logged by the bus) but never aborts
+	// the publisher's own transaction; the cart-clearing subscriber
+	// above is unaffected.
+	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
+		paid := e.(checkoutintegration.OrderPaid)
+		if paid.CustomerID == "" {
+			return nil
+		}
+		view, err := checkoutQry.Find(ctx, paid.OrderID)
+		if err != nil {
+			return fmt.Errorf("order confirmation: load view: %w", err)
+		}
+		msg, err := layout.RenderOrderConfirmation(view, cfg.BaseURL)
+		if err != nil {
+			return fmt.Errorf("order confirmation: render: %w", err)
+		}
+		// Make sure the recipient is the actual customer email even
+		// if RenderOrderConfirmation derived it from the view; the
+		// integration event is the authoritative source.
+		msg.To = paid.CustomerID
+		if err := mailerSrv.Send(ctx, msg); err != nil {
+			return fmt.Errorf("order confirmation: send: %w", err)
+		}
+		return nil
+	})
+
 	app.AddBoundedContext(cartBD)
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
 	// CSRF protection wraps every route on the application router. It must be
 	// installed after layout.New has set up the session store (which the
 	// middleware reads from) but before app.Run() begins serving.

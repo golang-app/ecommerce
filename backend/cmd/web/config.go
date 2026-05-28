@@ -28,6 +28,26 @@ type config struct {
 	// want to curl/wget unsafe endpoints without minting a token first; do
 	// NOT ship a deployment with this disabled.
 	CSRFEnabled bool `conf:"default:true"`
+	// SMTPHost is the host:port of the outbound SMTP relay (e.g. mailhog:1025
+	// in dev, an SES/SendGrid SMTP endpoint in production). Leave blank to
+	// disable real delivery — the app then falls back to a LogMailer that
+	// writes the rendered email to the structured log. The fallback emits a
+	// loud WARN at boot so a forgotten SMTP_HOST in staging cannot go
+	// unnoticed.
+	SMTPHost string
+	// SMTPUsername / SMTPPassword authenticate against the relay. When
+	// Username is empty, no auth is sent (MailHog accepts unauthenticated
+	// SMTP). The password is masked in `conf` usage output.
+	SMTPUsername string
+	SMTPPassword string `conf:"mask"`
+	// MailFrom is the default From: header on outbound mail. Caller-supplied
+	// Message.From overrides it; otherwise every email is sent as MailFrom.
+	MailFrom string `conf:"default:no-reply@gocommerce.local"`
+	// BaseURL is the absolute base URL of the storefront, used to render
+	// absolute links inside emails (the order detail link, the password
+	// reset link). Defaulting to localhost:8080 keeps `docker compose up`
+	// working out of the box; production deployments MUST override.
+	BaseURL string `conf:"default:http://localhost:8080"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep

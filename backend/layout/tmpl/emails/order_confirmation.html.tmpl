@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Order {{.Order.ID}} confirmed</title>
+</head>
+<body style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #1d1d1f; line-height: 1.5; max-width: 560px; margin: 24px auto; padding: 0 16px;">
+  <h1 style="font-size: 22px; font-weight: 600;">Thanks for your order.</h1>
+  <p>Order <strong>{{.Order.ID}}</strong> &middot; placed {{.Order.PlacedAt.Format "Jan 2, 2006 15:04 MST"}}.</p>
+
+  <table cellspacing="0" cellpadding="6" style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+    <thead>
+      <tr style="text-align: left; border-bottom: 1px solid #d2d2d7;">
+        <th>Item</th>
+        <th style="text-align: right;">Qty</th>
+        <th style="text-align: right;">Unit</th>
+        <th style="text-align: right;">Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range $line := .Order.Items}}
+        <tr style="border-bottom: 1px solid #f0f0f0;">
+          <td>{{$line.ProductName}}</td>
+          <td style="text-align: right;">{{$line.Quantity}}</td>
+          <td style="text-align: right;">{{$line.PriceDisplay}} {{$line.PriceCurrency}}</td>
+          <td style="text-align: right;">{{$line.LineTotalDisplay}} {{$line.PriceCurrency}}</td>
+        </tr>
+      {{end}}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" style="text-align: right;">Subtotal</td>
+        <td style="text-align: right;">{{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}</td>
+      </tr>
+      {{if not .Order.ShippingMethod.IsZero}}
+        <tr>
+          <td colspan="3" style="text-align: right;">Shipping &middot; {{.Order.ShippingMethod.Label}}</td>
+          <td style="text-align: right;">{{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}</td>
+        </tr>
+      {{end}}
+      <tr style="font-weight: 600; border-top: 1px solid #d2d2d7;">
+        <td colspan="3" style="text-align: right;">Total</td>
+        <td style="text-align: right;">{{.Order.TotalDisplay}} {{.Order.TotalCurrency}}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  {{if not .Order.PaymentMethod.IsZero}}
+    <p style="margin-top: 16px;"><strong>Payment:</strong> {{.Order.PaymentMethod.Label}}</p>
+  {{end}}
+
+  {{if eq .Order.ShippingMethod.Code "pickup"}}
+    <p><strong>Collection:</strong> Personal pickup — collect in store.</p>
+  {{else if not .Order.ShipTo.IsZero}}
+    <p style="margin-top: 8px;"><strong>Shipping to</strong></p>
+    <p style="margin: 0;">
+      {{.Order.ShipTo.Name}}<br>
+      {{.Order.ShipTo.Street1}}<br>
+      {{with .Order.ShipTo.Street2}}{{.}}<br>{{end}}
+      {{.Order.ShipTo.City}}, {{.Order.ShipTo.Zip}}<br>
+      {{.Order.ShipTo.Country}}
+    </p>
+  {{end}}
+
+  <p style="margin-top: 24px;">
+    <a href="{{.OrderURL}}" style="background: #1d1d1f; color: #fff; padding: 10px 16px; border-radius: 6px; text-decoration: none;">View your order</a>
+  </p>
+
+  <p style="color: #6e6e73; font-size: 12px; margin-top: 32px;">This email confirms an order on {{.SiteName}}. If you did not place this order, please reply to let us know.</p>
+</body>
+</html>

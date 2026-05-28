@@ -1,0 +1,25 @@
+{{define "title"}}Choose a new password · {{.SiteName}}{{end}}
+{{define "description"}}Set a new password for your {{.SiteName}} account.{{end}}
+
+{{define "main"}}
+  <h1 class="page-title">choose a new password</h1>
+
+  <form class="form" method="post" action="/auth/reset">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="token" value="{{.Token}}">
+
+    <div class="field">
+      <label for="reset-password">new password</label>
+      <input id="reset-password" type="password" name="new_password" autocomplete="new-password" required>
+    </div>
+
+    <div class="field">
+      <label for="reset-password-confirm">confirm new password</label>
+      <input id="reset-password-confirm" type="password" name="confirm_password" autocomplete="new-password" required>
+    </div>
+
+    <button type="submit" class="btn btn--block">update password</button>
+
+    <p class="form__aside">need a fresh link? <a href="/auth/forgot">request another</a></p>
+  </form>
+{{end}}

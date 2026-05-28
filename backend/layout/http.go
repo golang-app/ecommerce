@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
@@ -46,6 +47,8 @@ type httpHandler struct {
 	checkoutQry checkoutQueries
 	shipSrv     shippingService
 	imageStore  imagestore.Store
+	mailer      mailer.Mailer
+	baseURL     string
 	logger      logrus.FieldLogger
 }
 
@@ -129,6 +132,10 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.HandleRegister, m.logger)).Methods("POST")
 	r.HandleFunc("/auth/change-password", observability.HTTPWrap(m.handler.ChangePasswordPage, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/change-password", observability.HTTPWrap(m.handler.HandleChangePassword, m.logger)).Methods("POST")
+	r.HandleFunc("/auth/forgot", observability.HTTPWrap(m.handler.ForgotPasswordPage, m.logger)).Methods("GET")
+	r.HandleFunc("/auth/forgot", observability.HTTPWrap(m.handler.HandleForgotPassword, m.logger)).Methods("POST")
+	r.HandleFunc("/auth/reset", observability.HTTPWrap(m.handler.ResetPasswordPage, m.logger)).Methods("GET")
+	r.HandleFunc("/auth/reset", observability.HTTPWrap(m.handler.HandleResetPassword, m.logger)).Methods("POST")
 	r.HandleFunc("/auth/menuIcon", observability.HTTPWrap(m.handler.AuthMenuItem, m.logger)).Methods("GET", "OPTIONS")
 
 	r.HandleFunc("/checkout", observability.HTTPWrap(m.handler.Checkout, m.logger)).Methods("GET")
