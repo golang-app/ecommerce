@@ -453,3 +453,49 @@ input:focus, select:focus, textarea:focus {
 .form--inline input { width: auto; flex: 1 1 90px; min-width: 70px; }
 .form--inline input[type="number"] { flex: 0 0 80px; }
 .btn--small { padding: 5px 12px; font-size: 0.82rem; }
+
+/* --- Page header action row --------------------------------------------- */
+.admin-page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.admin-page-head__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* --- Tabs (product edit) ------------------------------------------------ */
+.admin-tabs {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--a-border);
+  margin: 6px 0 18px;
+}
+.admin-tabs__btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 10px 16px;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 500;
+  color: var(--a-muted);
+  cursor: pointer;
+  letter-spacing: 0.01em;
+}
+.admin-tabs__btn:hover { color: var(--a-text); }
+.admin-tabs__btn.is-active {
+  color: var(--a-text);
+  font-weight: 700;
+  border-bottom-color: var(--a-accent);
+}
+.admin-tab { margin-top: 18px; }

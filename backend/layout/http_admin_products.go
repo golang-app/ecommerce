@@ -39,14 +39,27 @@ func (handler httpHandler) AdminProducts(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		products = nil
 	}
+	handler.renderAdminTemplate(w, r, "admin/products", map[string]any{
+		"Active":   "products",
+		"Email":    email,
+		"Products": products,
+	})
+}
+
+// AdminNewProductForm renders the standalone "add a simple product" page.
+// The form POSTs to /admin/products (handled by AdminCreateProduct).
+func (handler httpHandler) AdminNewProductForm(w http.ResponseWriter, r *http.Request) {
+	email, ok := handler.requireAdmin(w, r)
+	if !ok {
+		return
+	}
 	attrSets, err := handler.catalogSrv.AttributeSets(r.Context())
 	if err != nil {
 		attrSets = nil
 	}
-	handler.renderAdminTemplate(w, r, "admin/products", map[string]any{
+	handler.renderAdminTemplate(w, r, "admin/product_new", map[string]any{
 		"Active":        "products",
 		"Email":         email,
-		"Products":      products,
 		"AttributeSets": attrSets,
 	})
 }

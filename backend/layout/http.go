@@ -142,6 +142,7 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	// captured by the /admin/products/{id} catch-all below.
 	r.HandleFunc("/admin/products/new-variant", observability.HTTPWrap(m.handler.AdminNewVariantProductForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/products/new-variant", observability.HTTPWrap(m.handler.AdminCreateVariantProduct, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/products/new", observability.HTTPWrap(m.handler.AdminNewProductForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/products/{id}/variants/{variantID}/delete", observability.HTTPWrap(m.handler.AdminDeleteVariant, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/variants/{variantID}", observability.HTTPWrap(m.handler.AdminUpdateVariant, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/products/{id}/variants", observability.HTTPWrap(m.handler.AdminAddVariant, m.logger)).Methods("POST")
