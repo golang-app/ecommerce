@@ -41,21 +41,23 @@ func (s OrderSummary) TotalCurrency() string { return s.currency }
 
 // OrderView is the read model for the order detail page.
 type OrderView struct {
-	id           string
-	customerID   string
-	status       domain.Status
-	placedAt     time.Time
-	items        []domain.Line
-	shipTo       domain.Address
-	shipMethod   domain.ShippingMethod
-	payMethod    domain.PaymentMethod
-	subtotal     int64
-	tax          int64
-	shipCost     int64
-	total        int64
-	currency     string
-	carrier      string
-	trackingCode string
+	id             string
+	customerID     string
+	status         domain.Status
+	placedAt       time.Time
+	items          []domain.Line
+	shipTo         domain.Address
+	shipMethod     domain.ShippingMethod
+	payMethod      domain.PaymentMethod
+	subtotal       int64
+	tax            int64
+	shipCost       int64
+	total          int64
+	currency       string
+	carrier        string
+	trackingCode   string
+	discountCode   string
+	discountAmount int64
 }
 
 func NewOrderView(
@@ -69,12 +71,15 @@ func NewOrderView(
 	subtotal, tax, shipCost, total int64,
 	currency string,
 	carrier, trackingCode string,
+	discountCode string,
+	discountAmount int64,
 ) OrderView {
 	return OrderView{
 		id: id, customerID: customerID, status: status, placedAt: placedAt,
 		items: items, shipTo: shipTo, shipMethod: shipMethod, payMethod: payMethod,
 		subtotal: subtotal, tax: tax, shipCost: shipCost, total: total, currency: currency,
 		carrier: carrier, trackingCode: trackingCode,
+		discountCode: discountCode, discountAmount: discountAmount,
 	}
 }
 
@@ -95,3 +100,23 @@ func (v OrderView) TotalDisplay() string                  { return money(v.total
 func (v OrderView) TotalCurrency() string                 { return v.currency }
 func (v OrderView) Carrier() string                       { return v.carrier }
 func (v OrderView) TrackingCode() string                  { return v.trackingCode }
+
+// DiscountCode is the literal promo code applied at place time (empty when
+// none was used).
+func (v OrderView) DiscountCode() string { return v.discountCode }
+
+// DiscountAmount is the discount in minor units that was subtracted from
+// the subtotal before tax (0 when none).
+func (v OrderView) DiscountAmount() int64 { return v.discountAmount }
+
+// DiscountDisplay renders the discount amount as the templates' totals
+// row shows it (e.g. "5.00"). Templates add the negative sign / the code
+// label themselves so the conditional formatting stays in the view.
+func (v OrderView) DiscountDisplay() string { return money(v.discountAmount) }
+
+// FreeShipping reports whether the order's shipping was zero AND a
+// discount code was applied — useful in templates to label the discount
+// row as "free shipping (CODE)" instead of a money amount.
+func (v OrderView) FreeShipping() bool {
+	return v.discountCode != "" && v.shipCost == 0 && v.discountAmount == 0
+}

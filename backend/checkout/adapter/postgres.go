@@ -88,7 +88,8 @@ func (p Postgres) Find(ctx context.Context, id string) (query.OrderView, error) 
 	var shipName, shipStreet1, shipStreet2, shipCity, shipZip, shipCountry sql.NullString
 	var shipMethodCode, shipMethodLabel sql.NullString
 	var payMethodCode, payMethodLabel sql.NullString
-	var shipCost, taxAmt int64
+	var shipCost, taxAmt, discountAmt int64
+	var discountCode string
 	var carrier, trackingCode string
 	var totalAmt int64
 	var placedAt time.Time
@@ -98,13 +99,15 @@ func (p Postgres) Find(ctx context.Context, id string) (query.OrderView, error) 
 		       ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country,
 		       ship_method_code, ship_method_label, ship_cost,
 		       payment_method_code, payment_method_label,
-		       tax_amount, carrier, tracking_code
+		       tax_amount, carrier, tracking_code,
+		       discount_code, discount_amount
 		FROM checkout_order WHERE id = $1
 	`, id).Scan(&userID, &customerID, &totalAmt, &currency, &status, &placedAt,
 		&shipName, &shipStreet1, &shipStreet2, &shipCity, &shipZip, &shipCountry,
 		&shipMethodCode, &shipMethodLabel, &shipCost,
 		&payMethodCode, &payMethodLabel,
-		&taxAmt, &carrier, &trackingCode)
+		&taxAmt, &carrier, &trackingCode,
+		&discountCode, &discountAmt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return query.OrderView{}, domain.ErrOrderNotFound
 	}
@@ -143,12 +146,16 @@ func (p Postgres) Find(ctx context.Context, id string) (query.OrderView, error) 
 	shipMethod := domain.RebuildShippingMethod(shipMethodCode.String, shipMethodLabel.String, shipCost)
 	payMethod := domain.RebuildPaymentMethod(payMethodCode.String, payMethodLabel.String)
 
-	subtotal := totalAmt - shipCost - taxAmt
+	// Reconstruct the subtotal so the read model reports the pre-discount
+	// figure: total = (subtotal - discount) + tax + shipping, therefore
+	// subtotal = total - tax - shipping + discount.
+	subtotal := totalAmt - shipCost - taxAmt + discountAmt
 	return query.NewOrderView(
 		id, customerID.String, domain.Status(status), placedAt,
 		lines, shipTo, shipMethod, payMethod,
 		subtotal, taxAmt, shipCost, totalAmt, currency,
 		carrier, trackingCode,
+		discountCode, discountAmt,
 	), nil
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
 	wishlistDomain "github.com/bkielbasa/go-ecommerce/backend/wishlist/domain"
@@ -92,12 +93,24 @@ type shippingService interface {
 
 // checkoutCommands is the write side of the checkout context (CQRS).
 type checkoutCommands interface {
-	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod) (checkoutDomain.Order, error)
+	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod, discount promodomain.Discount) (checkoutDomain.Order, error)
 	Cancel(ctx context.Context, orderID, customerID string) error
 	AdminCancel(ctx context.Context, orderID string) error
 	MarkShipped(ctx context.Context, orderID, carrier, trackingCode string) error
 	MarkDelivered(ctx context.Context, orderID string) error
 	Refund(ctx context.Context, orderID, reason string) error
+}
+
+// promoService is the narrow seam the layout package needs from the
+// promo bounded context. Resolve runs the live validity / per-customer
+// checks for the checkout form; the CRUD methods power the admin pages.
+type promoService interface {
+	Resolve(ctx context.Context, code, customerID string, subtotal, shippingCost int64) (promodomain.Discount, error)
+	Create(ctx context.Context, c promodomain.Code) error
+	Update(ctx context.Context, c promodomain.Code) error
+	Delete(ctx context.Context, code string) error
+	Find(ctx context.Context, code string) (promodomain.Code, error)
+	ListAll(ctx context.Context) ([]promodomain.Code, error)
 }
 
 // reviewsService is the narrow seam the layout package needs from the
@@ -142,7 +155,7 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -155,6 +168,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			shipSrv:     shipSrv,
 			reviewsSrv:  reviewsSrv,
 			wishlistSrv: wishlistSrv,
+			promoSrv:    promoSrv,
 			imageStore:  imageStore,
 			mailer:      mailerSrv,
 			baseURL:     baseURL,

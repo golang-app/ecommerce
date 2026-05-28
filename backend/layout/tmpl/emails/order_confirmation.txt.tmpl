@@ -6,7 +6,8 @@ Items:
 {{range $line := .Order.Items}}- {{$line.ProductName}} x {{$line.Quantity}} @ {{$line.PriceDisplay}} {{$line.PriceCurrency}} = {{$line.LineTotalDisplay}} {{$line.PriceCurrency}}
 {{end}}
 Subtotal: {{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}
-{{if not .Order.ShippingMethod.IsZero}}Shipping ({{.Order.ShippingMethod.Label}}): {{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}
+{{if or (gt .Order.DiscountAmount 0) .Order.DiscountCode}}Discount{{with .Order.DiscountCode}} ({{.}}){{end}}: {{if gt .Order.DiscountAmount 0}}-{{.Order.DiscountDisplay}} {{.Order.TotalCurrency}}{{else}}free shipping{{end}}
+{{end}}{{if not .Order.ShippingMethod.IsZero}}Shipping ({{.Order.ShippingMethod.Label}}): {{.Order.ShippingCostDisplay}} {{.Order.TotalCurrency}}
 {{end}}Total: {{.Order.TotalDisplay}} {{.Order.TotalCurrency}}
 
 {{if not .Order.PaymentMethod.IsZero}}Payment: {{.Order.PaymentMethod.Label}}

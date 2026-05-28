@@ -161,8 +161,9 @@ func projectOrderPlaced(ctx context.Context, tx *sql.Tx, ev domain.OrderPlaced) 
 			(id, user_id, customer_id, total_amount, total_currency, status, placed_at,
 			 ship_name, ship_street1, ship_street2, ship_city, ship_zip, ship_country,
 			 ship_method_code, ship_method_label, ship_cost,
-			 payment_method_code, payment_method_label, tax_amount)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+			 payment_method_code, payment_method_label, tax_amount,
+			 discount_code, discount_amount)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		ON CONFLICT (id) DO UPDATE SET
 			user_id = EXCLUDED.user_id,
 			customer_id = EXCLUDED.customer_id,
@@ -180,13 +181,16 @@ func projectOrderPlaced(ctx context.Context, tx *sql.Tx, ev domain.OrderPlaced) 
 			ship_cost = EXCLUDED.ship_cost,
 			payment_method_code = EXCLUDED.payment_method_code,
 			payment_method_label = EXCLUDED.payment_method_label,
-			tax_amount = EXCLUDED.tax_amount
+			tax_amount = EXCLUDED.tax_amount,
+			discount_code = EXCLUDED.discount_code,
+			discount_amount = EXCLUDED.discount_amount
 	`,
 		o.ID(), o.UserID(), customerID, o.TotalAmount(), o.TotalCurrency(),
 		string(o.Status()), o.PlacedAt(),
 		ship.Name(), ship.Street1(), ship.Street2(), ship.City(), ship.Zip(), ship.Country(),
 		method.Code(), method.Label(), o.ShippingCost(),
 		pay.Code(), pay.Label(), o.TaxAmount(),
+		o.DiscountCode(), o.DiscountAmount(),
 	)
 	if err != nil {
 		return fmt.Errorf("project order: %w", err)

@@ -48,6 +48,7 @@ type httpHandler struct {
 	shipSrv     shippingService
 	reviewsSrv  reviewsService
 	wishlistSrv wishlistService
+	promoSrv    promoService
 	imageStore  imagestore.Store
 	mailer      mailer.Mailer
 	baseURL     string
@@ -218,6 +219,15 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 
 	r.HandleFunc("/admin/reviews", observability.HTTPWrap(m.handler.AdminReviews, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/reviews/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteReview, m.logger)).Methods("POST")
+
+	// Promo codes admin: list + inline create on /admin/promo-codes; the
+	// /{code}/edit and /{code}/delete sub-paths are registered before the
+	// /{code} catch-all so the latter doesn't shadow them.
+	r.HandleFunc("/admin/promo-codes", observability.HTTPWrap(m.handler.AdminPromoCodes, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/promo-codes", observability.HTTPWrap(m.handler.AdminCreatePromoCode, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/promo-codes/{code}/edit", observability.HTTPWrap(m.handler.AdminEditPromoCodeForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/promo-codes/{code}/delete", observability.HTTPWrap(m.handler.AdminDeletePromoCode, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/promo-codes/{code}", observability.HTTPWrap(m.handler.AdminUpdatePromoCode, m.logger)).Methods("POST")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {

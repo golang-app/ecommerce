@@ -88,6 +88,30 @@ func TestCancel_FailedOrderNotCancellable(t *testing.T) {
 	}
 }
 
+// TestPlaceOrder_AppliesDiscount locks in the discount-before-tax pricing
+// math: the OrderPlaced event carries the resolved discount and the
+// rehydrated order's total reflects (subtotal - discount) + tax + shipping.
+func TestPlaceOrder_AppliesDiscount(t *testing.T) {
+	at := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
+	lines := []domain.Line{domain.NewLine("v1", "Mug", 4, 1000, "USD")} // subtotal 4000
+	method := domain.RebuildShippingMethod("courier", "Courier", 1500)
+
+	// Caller resolved a 10% code: discount=400 on subtotal 4000;
+	// discounted subtotal = 3600; caller computed tax 320 on it and kept
+	// shipping at 1500. Total = 3600 + 320 + 1500 = 5420.
+	o, err := domain.PlaceOrder("ord-d", "cart-1", "jane@example.com", domain.Address{}, method,
+		domain.RebuildPaymentMethod("card", "Card"), lines, 320, 1500, "SAVE10", 400, at)
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	if o.DiscountCode() != "SAVE10" || o.DiscountAmount() != 400 {
+		t.Errorf("discount fields lost: code=%q amount=%d", o.DiscountCode(), o.DiscountAmount())
+	}
+	if o.TotalAmount() != 5420 {
+		t.Errorf("total = %d, want 5420 (3600 discounted subtotal + 320 tax + 1500 shipping)", o.TotalAmount())
+	}
+}
+
 // TestPlaceOrder_AppliesTaxAndEffectiveShipping locks in the tax/shipping
 // math driven by the new PricingPolicy: the OrderPlaced event carries the
 // derived numbers and the rehydrated order's total reflects them.
@@ -98,7 +122,7 @@ func TestPlaceOrder_AppliesTaxAndEffectiveShipping(t *testing.T) {
 
 	// Caller computed an 8.875% tax on 4000 = 355 and free shipping (threshold met).
 	o, err := domain.PlaceOrder("ord-3", "cart-1", "jane@example.com", domain.Address{}, method,
-		domain.RebuildPaymentMethod("card", "Card"), lines, 355, 0, at)
+		domain.RebuildPaymentMethod("card", "Card"), lines, 355, 0, "", 0, at)
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}

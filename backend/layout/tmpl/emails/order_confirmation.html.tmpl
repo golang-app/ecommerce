@@ -32,6 +32,12 @@
         <td colspan="3" style="text-align: right;">Subtotal</td>
         <td style="text-align: right;">{{.Order.SubtotalDisplay}} {{.Order.TotalCurrency}}</td>
       </tr>
+      {{if or (gt .Order.DiscountAmount 0) .Order.DiscountCode}}
+        <tr>
+          <td colspan="3" style="text-align: right;">Discount{{with .Order.DiscountCode}} ({{.}}){{end}}</td>
+          <td style="text-align: right;">{{if gt .Order.DiscountAmount 0}}-{{.Order.DiscountDisplay}} {{.Order.TotalCurrency}}{{else}}free shipping{{end}}</td>
+        </tr>
+      {{end}}
       {{if not .Order.ShippingMethod.IsZero}}
         <tr>
           <td colspan="3" style="text-align: right;">Shipping &middot; {{.Order.ShippingMethod.Label}}</td>

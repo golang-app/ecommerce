@@ -39,6 +39,16 @@
 
       <form class="form" method="post" action="/checkout">
         <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+        <fieldset class="fieldset">
+          <legend class="fieldset__legend">promo code</legend>
+          <p class="muted checkout__note">have a code? enter it here — anonymous customers must sign in to redeem.</p>
+          <div class="field">
+            <label for="promo-code">code</label>
+            <input id="promo-code" type="text" name="promo_code" autocomplete="off" placeholder="SAVE10" value="{{with .PromoCode}}{{.}}{{end}}">
+          </div>
+        </fieldset>
+
         <fieldset class="fieldset">
           <legend class="fieldset__legend">shipping method</legend>
           {{range .ShippingMethods}}

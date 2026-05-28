@@ -42,16 +42,18 @@ type lineDTO struct {
 }
 
 type orderPlacedDTO struct {
-	OrderID      string            `json:"order_id"`
-	UserID       string            `json:"user_id"`
-	CustomerID   string            `json:"customer_id"`
-	ShipTo       addressDTO        `json:"ship_to"`
-	ShipMethod   shippingMethodDTO `json:"ship_method"`
-	PayMethod    paymentMethodDTO  `json:"pay_method"`
-	Lines        []lineDTO         `json:"lines"`
-	Tax          int64             `json:"tax,omitempty"`
-	ShippingCost int64             `json:"shipping_cost,omitempty"`
-	At           time.Time         `json:"at"`
+	OrderID        string            `json:"order_id"`
+	UserID         string            `json:"user_id"`
+	CustomerID     string            `json:"customer_id"`
+	ShipTo         addressDTO        `json:"ship_to"`
+	ShipMethod     shippingMethodDTO `json:"ship_method"`
+	PayMethod      paymentMethodDTO  `json:"pay_method"`
+	Lines          []lineDTO         `json:"lines"`
+	Tax            int64             `json:"tax,omitempty"`
+	ShippingCost   int64             `json:"shipping_cost,omitempty"`
+	DiscountCode   string            `json:"discount_code,omitempty"`
+	DiscountAmount int64             `json:"discount_amount,omitempty"`
+	At             time.Time         `json:"at"`
 }
 
 type paymentSucceededDTO struct {
@@ -105,16 +107,18 @@ func marshalEvent(e domain.Event) (string, []byte, error) {
 			})
 		}
 		payload = orderPlacedDTO{
-			OrderID:      ev.OrderID,
-			UserID:       ev.UserID,
-			CustomerID:   ev.CustomerID,
-			ShipTo:       toAddressDTO(ev.ShipTo),
-			ShipMethod:   shippingMethodDTO{Code: ev.ShipMethod.Code(), Label: ev.ShipMethod.Label(), Cost: ev.ShipMethod.Cost()},
-			PayMethod:    paymentMethodDTO{Code: ev.PayMethod.Code(), Label: ev.PayMethod.Label()},
-			Lines:        lines,
-			Tax:          ev.Tax,
-			ShippingCost: ev.ShippingCost,
-			At:           ev.At,
+			OrderID:        ev.OrderID,
+			UserID:         ev.UserID,
+			CustomerID:     ev.CustomerID,
+			ShipTo:         toAddressDTO(ev.ShipTo),
+			ShipMethod:     shippingMethodDTO{Code: ev.ShipMethod.Code(), Label: ev.ShipMethod.Label(), Cost: ev.ShipMethod.Cost()},
+			PayMethod:      paymentMethodDTO{Code: ev.PayMethod.Code(), Label: ev.PayMethod.Label()},
+			Lines:          lines,
+			Tax:            ev.Tax,
+			ShippingCost:   ev.ShippingCost,
+			DiscountCode:   ev.DiscountCode,
+			DiscountAmount: ev.DiscountAmount,
+			At:             ev.At,
 		}
 	case domain.PaymentSucceeded:
 		payload = paymentSucceededDTO{OrderID: ev.OrderID, At: ev.At}
@@ -152,16 +156,18 @@ func unmarshalEvent(eventType string, payload []byte) (domain.Event, error) {
 			lines = append(lines, domain.NewLine(l.ProductID, l.ProductName, l.Qty, l.PriceAmount, l.PriceCurrency))
 		}
 		return domain.OrderPlaced{
-			OrderID:      dto.OrderID,
-			UserID:       dto.UserID,
-			CustomerID:   dto.CustomerID,
-			ShipTo:       domain.RebuildAddress(dto.ShipTo.Name, dto.ShipTo.Street1, dto.ShipTo.Street2, dto.ShipTo.City, dto.ShipTo.Zip, dto.ShipTo.Country),
-			ShipMethod:   domain.RebuildShippingMethod(dto.ShipMethod.Code, dto.ShipMethod.Label, dto.ShipMethod.Cost),
-			PayMethod:   domain.RebuildPaymentMethod(dto.PayMethod.Code, dto.PayMethod.Label),
-			Lines:        lines,
-			Tax:          dto.Tax,
-			ShippingCost: dto.ShippingCost,
-			At:           dto.At,
+			OrderID:        dto.OrderID,
+			UserID:         dto.UserID,
+			CustomerID:     dto.CustomerID,
+			ShipTo:         domain.RebuildAddress(dto.ShipTo.Name, dto.ShipTo.Street1, dto.ShipTo.Street2, dto.ShipTo.City, dto.ShipTo.Zip, dto.ShipTo.Country),
+			ShipMethod:     domain.RebuildShippingMethod(dto.ShipMethod.Code, dto.ShipMethod.Label, dto.ShipMethod.Cost),
+			PayMethod:      domain.RebuildPaymentMethod(dto.PayMethod.Code, dto.PayMethod.Label),
+			Lines:          lines,
+			Tax:            dto.Tax,
+			ShippingCost:   dto.ShippingCost,
+			DiscountCode:   dto.DiscountCode,
+			DiscountAmount: dto.DiscountAmount,
+			At:             dto.At,
 		}, nil
 	case "PaymentSucceeded":
 		var dto paymentSucceededDTO

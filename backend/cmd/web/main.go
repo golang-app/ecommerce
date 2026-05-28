@@ -23,6 +23,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	"github.com/bkielbasa/go-ecommerce/backend/promo"
 	"github.com/bkielbasa/go-ecommerce/backend/reviews"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
 	"github.com/bkielbasa/go-ecommerce/backend/wishlist"
@@ -129,6 +130,11 @@ func main() {
 		FreeShippingThreshold: cfg.FreeShippingThreshold,
 	}
 	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, bus, catalogService, catalogService, pricing)
+	// Promo bounded context: owns promo_code + promo_redemption. The
+	// checkout service redeems through its narrow PromoRedeemer seam so
+	// the math stays inside checkout while the ledger lives here.
+	promoBD, promoSrv := promo.New(db)
+	checkoutSrv = checkoutSrv.WithPromoRedeemer(promoSrv)
 	shipSrv := shippinginfo.New(db)
 	// Reviews context: depends on productcatalog (via FK in storage) and on
 	// checkout's HasPurchasedProduct (wired through a tiny ACL on the
@@ -190,7 +196,7 @@ func main() {
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, promoSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL))
 	// CSRF protection wraps every route on the application router. It must be
 	// installed after layout.New has set up the session store (which the
 	// middleware reads from) but before app.Run() begins serving.
@@ -200,6 +206,7 @@ func main() {
 	app.AddBoundedContext(checkoutBD)
 	app.AddBoundedContext(reviewsBD)
 	app.AddBoundedContext(wishlistBD)
+	app.AddBoundedContext(promoBD)
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock

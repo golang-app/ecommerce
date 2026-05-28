@@ -17,19 +17,28 @@ type Event interface {
 //
 // Tax is the tax amount in minor units computed at place time from the
 // configured tax rate; ShippingCost is the EFFECTIVE shipping price at place
-// time (which may be 0 if the configured free-shipping threshold was met,
-// overriding the catalogue method's Cost()).
+// time (which may be 0 if the configured free-shipping threshold was met OR
+// because a free-shipping promo code was applied, overriding the catalogue
+// method's Cost()).
+//
+// DiscountCode is the literal text of the promo code that was applied (empty
+// when no code was used). DiscountAmount is the resolved discount in minor
+// units that was subtracted from the subtotal before computing tax. For
+// free_shipping codes DiscountAmount stays 0 — the saving is reflected in
+// ShippingCost=0, not in the subtotal.
 type OrderPlaced struct {
-	OrderID      string
-	UserID       string
-	CustomerID   string
-	ShipTo       Address
-	ShipMethod   ShippingMethod
-	PayMethod    PaymentMethod
-	Lines        []Line
-	Tax          int64
-	ShippingCost int64
-	At           time.Time
+	OrderID        string
+	UserID         string
+	CustomerID     string
+	ShipTo         Address
+	ShipMethod     ShippingMethod
+	PayMethod      PaymentMethod
+	Lines          []Line
+	Tax            int64
+	ShippingCost   int64
+	DiscountCode   string
+	DiscountAmount int64
+	At             time.Time
 }
 
 func (e OrderPlaced) EventType() string     { return "OrderPlaced" }

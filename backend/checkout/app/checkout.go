@@ -12,6 +12,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -131,6 +132,22 @@ func (p PricingPolicy) computeTaxAndShipping(subtotal int64, method domain.Shipp
 // deterministic generator.
 type IDGenerator func() string
 
+// PromoRedeemer is the seam to the promo bounded context. Place calls
+// Redeem AFTER the order's events are committed so the redemption ledger
+// only grows for orders that actually exist. A nil PromoRedeemer disables
+// the integration; the in-memory wiring used by tests doesn't need it.
+type PromoRedeemer interface {
+	Redeem(ctx context.Context, code, orderID, customerID string, discount promodomain.Discount) error
+}
+
+// nopPromoRedeemer is the default when no promo integration is wired —
+// keeps the service constructible without a promo dependency.
+type nopPromoRedeemer struct{}
+
+func (nopPromoRedeemer) Redeem(context.Context, string, string, string, promodomain.Discount) error {
+	return nil
+}
+
 type CheckoutService struct {
 	cart      CartReader
 	storage   OrderStorage
@@ -138,6 +155,7 @@ type CheckoutService struct {
 	stock     StockReserver
 	movements StockMovements
 	events    EventPublisher
+	promo     PromoRedeemer
 	newID     IDGenerator
 	now       func() time.Time
 	pricing   PricingPolicy
@@ -163,10 +181,22 @@ func NewCheckoutService(
 		stock:     stock,
 		movements: movements,
 		events:    events,
+		promo:     nopPromoRedeemer{},
 		newID:     newID,
 		now:       func() time.Time { return time.Now().UTC() },
 		pricing:   pricing,
 	}
+}
+
+// WithPromoRedeemer wires the promo redemption seam — only the
+// composition root in cmd/web calls this so the historical zero-promo
+// wiring stays untouched in tests.
+func (s CheckoutService) WithPromoRedeemer(p PromoRedeemer) CheckoutService {
+	if p == nil {
+		p = nopPromoRedeemer{}
+	}
+	s.promo = p
+	return s
 }
 
 // Place runs the checkout command: it snapshots the cart into a new order
@@ -177,7 +207,19 @@ func NewCheckoutService(
 //
 // customerID may be empty for anonymous checkout; in that case the order is
 // recorded but will not appear in any customer's order history.
-func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo domain.Address, shipMethod domain.ShippingMethod, payMethod domain.PaymentMethod) (domain.Order, error) {
+//
+// discount carries an already-resolved promo code (see promo/app.Service.
+// Resolve). Pricing math applies it BEFORE tax:
+//
+//	discountedSubtotal = subtotal - discount.AmountMinor
+//	tax                = round(discountedSubtotal * cfg.TaxRate / 100)
+//	effectiveShipping  = 0 if discount.FreeShipping
+//	                     else (free-shipping-threshold logic on discountedSubtotal)
+//	total              = discountedSubtotal + tax + effectiveShipping
+//
+// An empty Discount value (no code applied) is the same arithmetic as
+// before promo codes existed.
+func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo domain.Address, shipMethod domain.ShippingMethod, payMethod domain.PaymentMethod, discount promodomain.Discount) (domain.Order, error) {
 	ctx, span := tracer.Start(ctx, "Checkout.Place", trace.WithAttributes(
 		attribute.String("cart.session_id", sessID),
 		attribute.String("customer.id", customerID),
@@ -249,21 +291,40 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		_ = s.movements.Record(ctx, vid, -qty, "reserve", orderID)
 	}
 
-	// Apply the configured tax + free-shipping threshold to derive what the
-	// customer is actually charged. Both default to 0 so an unconfigured
-	// app behaves exactly like before this change.
+	// Pricing math, in order:
+	//   1. sum line totals → subtotal
+	//   2. subtract discount.AmountMinor (capped to 0) → discountedSubtotal
+	//   3. compute tax on discountedSubtotal so the saving carries through
+	//      the tax line (avoids charging tax on a discount the customer
+	//      never paid)
+	//   4. compute shipping from discountedSubtotal via the free-shipping
+	//      threshold; a free-shipping promo overrides that to 0 outright
+	//   5. total = discountedSubtotal + tax + effectiveShipping
 	var subtotal int64
 	for _, ln := range lines {
 		subtotal += ln.LineTotal()
 	}
-	tax, effectiveShipping := s.pricing.computeTaxAndShipping(subtotal, shipMethod)
+	discountAmount := discount.AmountMinor()
+	if discountAmount < 0 {
+		discountAmount = 0
+	}
+	if discountAmount > subtotal {
+		discountAmount = subtotal
+	}
+	discountedSubtotal := subtotal - discountAmount
+	tax, effectiveShipping := s.pricing.computeTaxAndShipping(discountedSubtotal, shipMethod)
+	if discount.FreeShipping() {
+		effectiveShipping = 0
+	}
 	span.SetAttributes(
 		attribute.Int64("order.subtotal", subtotal),
+		attribute.Int64("order.discount", discountAmount),
+		attribute.String("order.discount_code", discount.Code()),
 		attribute.Int64("order.tax", tax),
 		attribute.Int64("order.shipping", effectiveShipping),
 	)
 
-	order, err := domain.PlaceOrder(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, tax, effectiveShipping, s.now())
+	order, err := domain.PlaceOrder(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, tax, effectiveShipping, discount.Code(), discountAmount, s.now())
 	if err != nil {
 		_ = s.stock.Release(ctx, quantities)
 		for vid, qty := range quantities {
@@ -343,6 +404,19 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	// so a write failure doesn't double-book the totals.
 	observability.RevenueAdd(ctx, order.TotalAmount(), order.TotalCurrency())
 	observability.OrdersFinalizedInc(ctx, string(domain.StatusPaid))
+
+	// Record the promo redemption (best-effort, like the cart-clear): the
+	// order is now committed so a failed redemption ledger insertion must
+	// not roll the order back. The (code, order_id) PK on
+	// promo_redemption keeps the call idempotent if a retry lands.
+	if discount.Code() != "" {
+		if err := s.promo.Redeem(ctx, discount.Code(), order.ID(), customerID, discount); err != nil {
+			span.AddEvent("promo.redeem.failed", trace.WithAttributes(
+				attribute.String("promo.code", discount.Code()),
+				attribute.String("error", err.Error()),
+			))
+		}
+	}
 
 	// Announce the paid order. Subscribers (e.g. the cart context emptying the
 	// basket) react best-effort; their failures never block the confirmation.

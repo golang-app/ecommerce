@@ -9,6 +9,8 @@ import (
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	promoapp "github.com/bkielbasa/go-ecommerce/backend/promo/app"
+	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	"github.com/gorilla/mux"
 )
 
@@ -119,7 +121,31 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber, shipTo, method, payMethod)
+	// Resolve the promo code (if any) BEFORE calling Place. We deliberately
+	// re-read the cart here to derive the live subtotal — the checkout
+	// service will read it again, but the promo Resolve call needs the
+	// subtotal NOW to compute the discount amount for the eventual
+	// OrderPlaced event. A rejected code never reaches checkoutSrv.Place;
+	// the customer gets a flash message and the form re-renders.
+	discount := promodomain.Discount{}
+	promoCode := strings.TrimSpace(r.FormValue("promo_code"))
+	if promoCode != "" {
+		cart, cartErr := handler.cartSrv.Get(r.Context(), sessID)
+		if cartErr != nil || cart == nil || len(cart.Items()) == 0 {
+			http.Redirect(w, r, "/cart", http.StatusSeeOther)
+			return
+		}
+		subtotal := cart.TotalPrice().Amount()
+		d, perr := handler.promoSrv.Resolve(r.Context(), promoCode, customerID, subtotal, method.Cost())
+		if perr != nil {
+			handler.flash(w, r, promoCodeErrorMessage(perr), "error")
+			http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+			return
+		}
+		discount = d
+	}
+
+	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber, shipTo, method, payMethod, discount)
 	if errors.Is(err, checkoutDomain.ErrCartEmpty) {
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return
@@ -181,6 +207,26 @@ func (handler httpHandler) Order(w http.ResponseWriter, r *http.Request) {
 		"Order":     order,
 		"CanCancel": canCancel,
 	})
+}
+
+// promoCodeErrorMessage turns a promo/app sentinel error into a
+// customer-facing flash. Anything we don't recognise falls back to a
+// neutral "invalid promo code" so internal storage errors do not leak.
+func promoCodeErrorMessage(err error) string {
+	switch {
+	case errors.Is(err, promoapp.ErrCodeNotFound):
+		return "That promo code isn't recognised."
+	case errors.Is(err, promoapp.ErrCodeExpired):
+		return "That promo code is not currently active."
+	case errors.Is(err, promoapp.ErrCodeMaxUsesReached):
+		return "That promo code has reached its redemption limit."
+	case errors.Is(err, promoapp.ErrCodeCustomerLimit):
+		return "You've already used that promo code."
+	case errors.Is(err, promoapp.ErrCodeAnonymous):
+		return "Please sign in before using a promo code."
+	default:
+		return "That promo code couldn't be applied."
+	}
 }
 
 func (handler httpHandler) CancelOrder(w http.ResponseWriter, r *http.Request) {
