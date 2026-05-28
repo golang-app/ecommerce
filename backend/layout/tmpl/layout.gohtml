@@ -33,6 +33,17 @@
     <header class="site-header">
       <div class="shell site-header__inner">
         <a href="/" class="brand">Ecommerce</a>
+        <form class="site-search" role="search" action="/search" method="get">
+          <label class="visually-hidden" for="site-search-q">Search</label>
+          <input id="site-search-q" type="search" name="q"
+                 placeholder="Search&hellip;"
+                 value="{{.SearchQuery}}"
+                 hx-get="/api/v1/products"
+                 hx-trigger="keyup changed delay:300ms"
+                 hx-target="#product-grid"
+                 hx-swap="innerHTML"
+                 hx-include="[name=category]">
+        </form>
         <nav aria-label="Primary">
           <ul class="nav">
             <li><a href="/products">shop</a></li>

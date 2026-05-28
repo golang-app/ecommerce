@@ -94,6 +94,7 @@ func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Req
 		"Categories":     categories,
 		"Facets":         facets,
 		"ActiveCategory": activeCategory,
+		"Search":         "",
 	})
 }
 
@@ -106,6 +107,8 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	// shadowed by the home page route. Both are public (no admin gate).
 	r.HandleFunc("/robots.txt", observability.HTTPWrap(m.handler.Robots, m.logger)).Methods("GET")
 	r.HandleFunc("/sitemap.xml", observability.HTTPWrap(m.handler.Sitemap, m.logger)).Methods("GET")
+	// Public search page. Registered before the "/" catch-all.
+	r.HandleFunc("/search", observability.HTTPWrap(m.handler.SearchPage, m.logger)).Methods("GET")
 	r.HandleFunc("/", m.handler.HomePage)
 	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
 	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
@@ -231,6 +234,12 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		navCategories = nil
 	}
 	data["NavCategories"] = navCategories
+	// SearchQuery is the value the header search input shows. It defaults to
+	// "" so every page renders the box; the search/catalog pages override it
+	// from the URL `q`.
+	if _, ok := data["SearchQuery"]; !ok {
+		data["SearchQuery"] = ""
+	}
 	err = session.Save(r, w)
 	if err != nil {
 		handler.logger.WithError(err).Error("cannot save session")

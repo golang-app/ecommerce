@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
@@ -21,11 +22,13 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 	category := q.Get("category")
+	search := strings.TrimSpace(q.Get("q"))
 
 	query := pcapp.ProductQuery{
 		CategorySlug:   category,
 		NumericRanges:  map[string]pcapp.Range{},
 		EnumSelections: map[string][]string{},
+		Search:         search,
 	}
 
 	// Use the facets for this scope to know which params are numeric vs enum.
@@ -75,6 +78,7 @@ func (handler httpHandler) AllProducts(w http.ResponseWriter, r *http.Request) {
 
 	resp := map[string]any{
 		"Products": products,
+		"Search":   search,
 	}
 
 	files := []string{

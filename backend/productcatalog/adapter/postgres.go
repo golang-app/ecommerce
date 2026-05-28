@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
@@ -985,6 +986,11 @@ func (db postgres) ListProducts(ctx context.Context, q app.ProductQuery) ([]doma
 		query += fmt.Sprintf(` AND EXISTS (
 			SELECT 1 FROM productcatalog_product_attribute pa
 			WHERE pa.product_id = p.id AND pa.attribute_type_id = %s AND pa.text_value = ANY(%s))`, idPH, valPH)
+	}
+
+	if s := strings.TrimSpace(q.Search); s != "" {
+		ph := set("%" + s + "%")
+		query += fmt.Sprintf(` AND (p.name ILIKE %s OR p.description ILIKE %s)`, ph, ph)
 	}
 
 	query += ` ORDER BY p.id`
