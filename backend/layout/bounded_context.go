@@ -3,11 +3,13 @@ package layout
 import (
 	"context"
 	_ "embed"
+	"time"
 
 	authDomain "github.com/bkielbasa/go-ecommerce/backend/auth/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
+	fulfillmentDomain "github.com/bkielbasa/go-ecommerce/backend/fulfillment/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
@@ -95,13 +97,29 @@ type shippingService interface {
 }
 
 // checkoutCommands is the write side of the checkout context (CQRS).
+// MarkShipped / MarkDelivered / Refund used to live here too; they
+// moved to the fulfillment Process Manager (fulfillmentService below)
+// because shipping/delivery/refund are operational concerns, not
+// commercial ones. The Order aggregate's matching methods stay on the
+// domain for replay/back-compat but the admin UI no longer drives them
+// directly.
 type checkoutCommands interface {
 	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod, discount promodomain.Discount) (checkoutDomain.Order, error)
 	Cancel(ctx context.Context, orderID, customerID string) error
 	AdminCancel(ctx context.Context, orderID string) error
-	MarkShipped(ctx context.Context, orderID, carrier, trackingCode string) error
-	MarkDelivered(ctx context.Context, orderID string) error
+}
+
+// fulfillmentService is the narrow seam onto the fulfillment Process
+// Manager. The admin's "ship/deliver/refund" controls drive it
+// directly; the customer order page reads ByOrder to render the
+// fulfillment summary alongside the commercial status.
+type fulfillmentService interface {
+	OnOrderPaid(ctx context.Context, orderID string, at time.Time) error
+	Label(ctx context.Context, orderID, carrier, trackingCode string) error
+	Ship(ctx context.Context, orderID string) error
+	Deliver(ctx context.Context, orderID string) error
 	Refund(ctx context.Context, orderID, reason string) error
+	ByOrder(ctx context.Context, orderID string) (fulfillmentDomain.Fulfillment, error)
 }
 
 // promoService is the narrow seam the layout package needs from the
@@ -187,27 +205,28 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
 		handler: httpHandler{
-			cartSrv:     cartSrv,
-			catalogSrv:  catalogSrv,
-			authSrv:     authSrv,
-			checkoutSrv: checkoutSrv,
-			checkoutQry: checkoutQry,
-			shipSrv:     shipSrv,
-			reviewsSrv:  reviewsSrv,
-			wishlistSrv: wishlistSrv,
-			promoSrv:    promoSrv,
-			searchSrv:   searchSrv,
-			storeSrv:    storeSrv,
-			imageStore:  imageStore,
-			mailer:      mailerSrv,
-			baseURL:     baseURL,
-			rates:       rates,
-			logger:      logger,
+			cartSrv:        cartSrv,
+			catalogSrv:     catalogSrv,
+			authSrv:        authSrv,
+			checkoutSrv:    checkoutSrv,
+			checkoutQry:    checkoutQry,
+			fulfillmentSrv: fulfillmentSrv,
+			shipSrv:        shipSrv,
+			reviewsSrv:     reviewsSrv,
+			wishlistSrv:    wishlistSrv,
+			promoSrv:       promoSrv,
+			searchSrv:      searchSrv,
+			storeSrv:       storeSrv,
+			imageStore:     imageStore,
+			mailer:         mailerSrv,
+			baseURL:        baseURL,
+			rates:          rates,
+			logger:         logger,
 		},
 		uploadsDir: uploadsDir,
 		logger:     logger,

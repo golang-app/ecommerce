@@ -41,20 +41,21 @@ func newCookieStore(key []byte, secure bool) *sessions.CookieStore {
 }
 
 type httpHandler struct {
-	cartSrv     cartService
-	catalogSrv  catalogService
-	authSrv     authService
-	checkoutSrv checkoutCommands
-	checkoutQry checkoutQueries
-	shipSrv     shippingService
-	reviewsSrv  reviewsService
-	wishlistSrv wishlistService
-	promoSrv    promoService
-	searchSrv   searchService
-	storeSrv    storeService
-	imageStore  imagestore.Store
-	mailer      mailer.Mailer
-	baseURL     string
+	cartSrv        cartService
+	catalogSrv     catalogService
+	authSrv        authService
+	checkoutSrv    checkoutCommands
+	checkoutQry    checkoutQueries
+	fulfillmentSrv fulfillmentService
+	shipSrv        shippingService
+	reviewsSrv     reviewsService
+	wishlistSrv    wishlistService
+	promoSrv       promoService
+	searchSrv      searchService
+	storeSrv       storeService
+	imageStore     imagestore.Store
+	mailer         mailer.Mailer
+	baseURL        string
 	// rates is the static, operator-configured FX table. It is shared
 	// across every render through the `money` template helper. The
 	// active currency comes from the request-bound store, but the
