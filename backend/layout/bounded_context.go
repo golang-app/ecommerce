@@ -174,6 +174,9 @@ type checkoutQueries interface {
 	// HasPurchasedProduct gates the verified-buyer rule for the reviews
 	// context; layout passes it through a tiny adapter when wiring reviews.
 	HasPurchasedProduct(ctx context.Context, customerID, productID string) (bool, error)
+	// TodaysSales returns the per-currency analytics_daily_sales row for
+	// today (UTC); the admin dashboard renders the result as a small card.
+	TodaysSales(ctx context.Context) (map[string]checkoutQuery.DailySalesRow, error)
 }
 
 // New wires the layout bounded context. It also initialises the process-wide

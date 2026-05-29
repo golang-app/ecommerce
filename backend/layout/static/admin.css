@@ -226,6 +226,8 @@ code {
   color: var(--a-muted);
 }
 .admin-stat__link { font-size: 0.9rem; font-weight: 500; }
+.admin-stat__list { margin: 0; padding: 0; list-style: none; font-size: 0.95rem; }
+.admin-stat__list li { margin: 4px 0; }
 
 /* --- Tables -------------------------------------------------------------- */
 .admin-table,

@@ -320,6 +320,12 @@ func (o *Order) ClearPending() { o.pendingEvents = nil }
 // the sequence the first pending event must follow in the store.
 func (o *Order) ExpectedVersion() int { return o.version - len(o.pendingEvents) }
 
+// Version returns the aggregate's current sequence number — i.e. the
+// sequence of the last event that has been applied (events committed +
+// events still pending). The adapter uses it to decide when to persist a
+// snapshot.
+func (o *Order) Version() int { return o.version }
+
 // RehydrateOrder rebuilds an order by folding its full event history.
 func RehydrateOrder(events []Event) *Order {
 	o := &Order{}

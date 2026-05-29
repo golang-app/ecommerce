@@ -21,6 +21,10 @@ type Repository interface {
 	// of the catalog product. It exists to power the reviews context's
 	// verified-buyer gate; see the reviews bounded context for the use site.
 	HasPurchasedProduct(ctx context.Context, customerID, productID string) (bool, error)
+	// TodaysSales returns the analytics_daily_sales rows for "today" in UTC,
+	// keyed by currency. The map is empty when no paid orders have been
+	// recorded today; callers should treat that as "no card to render".
+	TodaysSales(ctx context.Context) (map[string]DailySalesRow, error)
 }
 
 // Service is the checkout query side. It is intentionally separate from the
@@ -68,4 +72,10 @@ func (s Service) HasPurchasedProduct(ctx context.Context, customerID, productID 
 		return false, nil
 	}
 	return s.repo.HasPurchasedProduct(ctx, customerID, productID)
+}
+
+// TodaysSales returns the analytics_daily_sales rows for today (UTC) by
+// currency. Powers the admin "today's revenue" card.
+func (s Service) TodaysSales(ctx context.Context) (map[string]DailySalesRow, error) {
+	return s.repo.TodaysSales(ctx)
 }

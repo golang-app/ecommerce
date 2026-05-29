@@ -17,5 +17,15 @@
       <h2 class="admin-stat__label">orders</h2>
       <a href="/admin/orders" class="admin-stat__link">manage &rarr;</a>
     </section>
+    {{if .TodaysSales}}
+    <section class="admin-stat">
+      <h2 class="admin-stat__label">today's revenue</h2>
+      <ul class="admin-stat__list">
+        {{range .TodaysSales}}
+          <li>{{.Currency}}: {{.OrdersCount}} orders, {{.RevenueDisplay}}</li>
+        {{end}}
+      </ul>
+    </section>
+    {{end}}
   </div>
 {{end}}

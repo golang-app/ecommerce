@@ -115,6 +115,22 @@ func (p Postgres) Save(ctx context.Context, order *domain.Order) error {
 	}
 
 	order.ClearPending()
+
+	// Snapshot policy: persist the folded aggregate state every N events.
+	// Best-effort, outside the tx — a snapshot failure should never block a
+	// successful command (the snapshot is an optimisation, not the source of
+	// truth). The version-guarded UPSERT in SaveSnapshot keeps a concurrent
+	// caller from regressing the pointer.
+	if v := order.Version(); v > 0 && v%SnapshotEvery == 0 {
+		payload, marshalErr := marshalSnapshot(domain.SnapshotOrder(order))
+		if marshalErr == nil {
+			if saveErr := p.SaveSnapshot(ctx, order.ID(), v, payload); saveErr != nil {
+				span.RecordError(saveErr)
+			}
+		} else {
+			span.RecordError(marshalErr)
+		}
+	}
 	return nil
 }
 
@@ -293,6 +309,40 @@ func (p Postgres) HasPurchasedProduct(ctx context.Context, customerID, productID
 		return false, fmt.Errorf("has purchased product: %w", err)
 	}
 	return true, nil
+}
+
+// TodaysSales returns the analytics_daily_sales rows for "today" in UTC,
+// keyed by currency. It reads the second projection (analytics_daily_sales),
+// which is fed by the same event stream as the checkout_order read model
+// but updated only on PaymentSucceeded. An empty map means no paid order
+// has been recorded today yet.
+func (p Postgres) TodaysSales(ctx context.Context) (map[string]query.DailySalesRow, error) {
+	today := time.Now().UTC().Truncate(24 * time.Hour)
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT currency, orders_count, revenue_minor
+		FROM analytics_daily_sales
+		WHERE day = $1
+		ORDER BY currency
+	`, today)
+	if err != nil {
+		return nil, fmt.Errorf("query todays sales: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := map[string]query.DailySalesRow{}
+	for rows.Next() {
+		var currency string
+		var ordersCount int
+		var revenue int64
+		if err := rows.Scan(&currency, &ordersCount, &revenue); err != nil {
+			return nil, fmt.Errorf("scan todays sales: %w", err)
+		}
+		out[currency] = query.DailySalesRow{Currency: currency, OrdersCount: ordersCount, RevenueMinor: revenue}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return out, nil
 }
 
 // ListAll returns every order newest-first as list summaries, regardless of

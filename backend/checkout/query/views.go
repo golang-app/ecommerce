@@ -137,3 +137,19 @@ func (v OrderView) DiscountDisplay() string { return money(v.discountAmount) }
 func (v OrderView) FreeShipping() bool {
 	return v.discountCode != "" && v.shipCost == 0 && v.discountAmount == 0
 }
+
+// DailySalesRow is one row of the analytics_daily_sales projection — a
+// per-currency tally of paid orders and revenue for a single day. The
+// projection lives on the same event stream as the order read model
+// (PaymentSucceeded), demonstrating that a CQRS read side can carry
+// multiple independent readers off the same source of truth.
+type DailySalesRow struct {
+	Currency     string
+	OrdersCount  int
+	RevenueMinor int64
+}
+
+// RevenueDisplay renders the row's revenue as a "X.YY" string in minor
+// units of the row's currency. Templates pair it with Currency to label
+// the value.
+func (r DailySalesRow) RevenueDisplay() string { return money(r.RevenueMinor) }
