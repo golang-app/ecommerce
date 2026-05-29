@@ -8,6 +8,12 @@
 // outright. Anonymous rejection is deliberate: per-customer caps need a
 // stable identity to be meaningful, so rather than invent a fragile
 // "anonymous bucket" we tell the user to log in. See ErrCodeAnonymous.
+//
+// The eligibility rules are implemented as composable Specifications in
+// spec.go. Service.Resolve evaluates a single composed spec
+// (defaultEligibility) so new eligibility policies can be assembled by
+// combining the exported specs (or adding new ones) without changing
+// Service.
 package app
 
 import (
@@ -113,19 +119,23 @@ func (s *Service) ListAll(ctx context.Context) ([]domain.Code, error) {
 
 // Resolve looks up the code, runs every business rule, and returns the
 // computed Discount the checkout pricing math can consume. The order is:
-//   - non-empty code text
+//   - non-empty code text (a precondition, not a spec)
 //   - customer must be signed in (anonymous use is rejected)
-//   - code exists in the catalogue
-//   - code is currently within its validity window
-//   - global max_uses not exceeded
-//   - per_customer_max not exceeded
+//   - code exists in the catalogue (a precondition: Find runs before specs)
+//   - eligibility specs: validity window, global max_uses, per_customer_max
 //   - finally, apply the code to the supplied subtotal / shipping
+//
+// The eligibility rules live in spec.go as composable Specifications. The
+// composed defaultEligibility short-circuits on the first failing rule so
+// the per-customer DB lookup is skipped when an earlier, cheaper check
+// already rejected the code.
 func (s *Service) Resolve(ctx context.Context, code, customerID string, subtotal, shippingCost int64) (domain.Discount, error) {
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return domain.Discount{}, ErrCodeNotFound
 	}
-	if strings.TrimSpace(customerID) == "" {
+	customerID = strings.TrimSpace(customerID)
+	if customerID == "" {
 		return domain.Discount{}, ErrCodeAnonymous
 	}
 
@@ -133,20 +143,24 @@ func (s *Service) Resolve(ctx context.Context, code, customerID string, subtotal
 	if err != nil {
 		return domain.Discount{}, err
 	}
-	if !c.IsActiveAt(s.now()) {
-		return domain.Discount{}, ErrCodeExpired
-	}
-	if c.MaxUsesReached() {
-		return domain.Discount{}, ErrCodeMaxUsesReached
+
+	eligibility := EligibilityContext{
+		Code:         c,
+		CustomerID:   customerID,
+		Subtotal:     subtotal,
+		ShippingCost: shippingCost,
+		Now:          s.now(),
 	}
 	if c.PerCustomerMax() > 0 {
 		used, err := s.storage.CountRedemptionsByCustomer(ctx, c.CodeText(), customerID)
 		if err != nil {
 			return domain.Discount{}, err
 		}
-		if used >= c.PerCustomerMax() {
-			return domain.Discount{}, ErrCodeCustomerLimit
-		}
+		eligibility.CustomerRedemptions = used
+	}
+
+	if err := defaultEligibility.IsSatisfiedBy(eligibility); err != nil {
+		return domain.Discount{}, err
 	}
 	return c.Apply(subtotal, shippingCost), nil
 }
