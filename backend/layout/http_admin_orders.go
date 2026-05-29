@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	fulfillmentApp "github.com/bkielbasa/go-ecommerce/backend/fulfillment/app"
+	fulfillmentDomain "github.com/bkielbasa/go-ecommerce/backend/fulfillment/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	"github.com/gorilla/mux"
 )
@@ -29,9 +31,11 @@ func (handler httpHandler) AdminOrders(w http.ResponseWriter, r *http.Request) {
 }
 
 // AdminOrderDetail renders a single order's detail with the admin
-// fulfillment controls — buttons appropriate to the order's current status
-// (cancel/ship for paid, mark-delivered for shipped, refund for any paid
-// or fulfilled order).
+// fulfillment controls — buttons appropriate to the fulfillment's
+// current operational status (ship for scheduled, deliver for shipped,
+// refund for any active state). Commercial state (paid / cancelled)
+// comes from the order; operational state comes from the fulfillment
+// record (which is spawned by the OnOrderPaid subscriber).
 func (handler httpHandler) AdminOrderDetail(w http.ResponseWriter, r *http.Request) {
 	email, ok := handler.requireAdmin(w, r)
 	if !ok {
@@ -47,18 +51,47 @@ func (handler httpHandler) AdminOrderDetail(w http.ResponseWriter, r *http.Reque
 		https.InternalError(w, "internal-error", err.Error())
 		return
 	}
-	status := order.Status()
-	canRefund := status == checkoutDomain.StatusPaid ||
-		status == checkoutDomain.StatusShipped ||
-		status == checkoutDomain.StatusDelivered
+
+	// Fulfillment is spawned by the OnOrderPaid subscriber; for orders
+	// that never paid (pending / failed / cancelled) there is no row
+	// yet, which is fine — the template renders the operational
+	// section conditionally.
+	var (
+		fulfillment    fulfillmentDomain.Fulfillment
+		hasFulfillment bool
+	)
+	if handler.fulfillmentSrv != nil {
+		ff, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
+		switch {
+		case errors.Is(ferr, fulfillmentApp.ErrNotFound):
+			// not paid yet / process manager hasn't reacted yet
+		case ferr != nil:
+			https.InternalError(w, "internal-error", ferr.Error())
+			return
+		default:
+			fulfillment = ff
+			hasFulfillment = true
+		}
+	}
+
+	commercial := order.Status()
+	canCancel := commercial == checkoutDomain.StatusPaid && !hasFulfillment
+	// Once a fulfillment exists, ship/deliver/refund are gated on its
+	// operational status rather than the order's commercial status.
+	canShip := hasFulfillment && fulfillment.Status() == fulfillmentDomain.StatusScheduled
+	canDeliver := hasFulfillment && fulfillment.Status() == fulfillmentDomain.StatusShipped
+	canRefund := hasFulfillment && fulfillment.Status() != fulfillmentDomain.StatusRefunded &&
+		fulfillment.Status() != fulfillmentDomain.StatusReturned
 	handler.renderAdminTemplate(w, r, "admin/order_detail", map[string]any{
-		"Active":       "orders",
-		"Email":        email,
-		"Order":        order,
-		"CanCancel":    status == checkoutDomain.StatusPaid,
-		"CanShip":      status == checkoutDomain.StatusPaid,
-		"CanDeliver":   status == checkoutDomain.StatusShipped,
-		"CanRefund":    canRefund,
+		"Active":         "orders",
+		"Email":          email,
+		"Order":          order,
+		"Fulfillment":    fulfillment,
+		"HasFulfillment": hasFulfillment,
+		"CanCancel":      canCancel,
+		"CanShip":        canShip,
+		"CanDeliver":     canDeliver,
+		"CanRefund":      canRefund,
 	})
 }
 
@@ -85,8 +118,12 @@ func (handler httpHandler) AdminCancelOrder(w http.ResponseWriter, r *http.Reque
 	http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
 }
 
-// AdminShipOrder marks a paid order as shipped, optionally recording the
-// carrier and tracking code submitted on the form.
+// AdminShipOrder drives the fulfillment Process Manager: it records
+// the carrier + tracking code on the scheduled fulfillment (Label)
+// and then transitions it to shipped (Ship). Two calls back-to-back
+// because the underlying state machine keeps Label and Ship distinct
+// — a future "labeled but not yet handed to carrier" pause can land
+// without changing this handler shape.
 func (handler httpHandler) AdminShipOrder(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
@@ -98,36 +135,48 @@ func (handler httpHandler) AdminShipOrder(w http.ResponseWriter, r *http.Request
 	orderID := mux.Vars(r)["orderID"]
 	carrier := r.FormValue("carrier")
 	tracking := r.FormValue("tracking_code")
-	err := handler.checkoutSrv.MarkShipped(r.Context(), orderID, carrier, tracking)
-	switch {
-	case errors.Is(err, checkoutDomain.ErrOrderNotFound):
-		handler.flash(w, r, "Order not found.", "error")
-		http.Redirect(w, r, "/admin/orders", http.StatusSeeOther)
-		return
-	case errors.Is(err, checkoutDomain.ErrOrderNotShippable):
-		handler.flash(w, r, "This order cannot be shipped from its current status.", "error")
-	case err != nil:
-		https.InternalError(w, "internal-error", err.Error())
-		return
-	default:
+	if err := handler.fulfillmentSrv.Label(r.Context(), orderID, carrier, tracking); err != nil {
+		switch {
+		case errors.Is(err, fulfillmentApp.ErrNotFound):
+			handler.flash(w, r, "Fulfillment not found for this order.", "error")
+			http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+			return
+		case errors.Is(err, fulfillmentDomain.ErrInvalidTransition):
+			handler.flash(w, r, "This order cannot be shipped from its current status.", "error")
+			http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+			return
+		default:
+			https.InternalError(w, "internal-error", err.Error())
+			return
+		}
+	}
+	if err := handler.fulfillmentSrv.Ship(r.Context(), orderID); err != nil {
+		switch {
+		case errors.Is(err, fulfillmentDomain.ErrInvalidTransition):
+			handler.flash(w, r, "This order cannot be shipped from its current status.", "error")
+		default:
+			https.InternalError(w, "internal-error", err.Error())
+			return
+		}
+	} else {
 		handler.flash(w, r, "Order marked as shipped.", "info")
 	}
 	http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
 }
 
-// AdminDeliverOrder marks a shipped order as delivered.
+// AdminDeliverOrder transitions a shipped fulfillment to delivered.
 func (handler httpHandler) AdminDeliverOrder(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
 	}
 	orderID := mux.Vars(r)["orderID"]
-	err := handler.checkoutSrv.MarkDelivered(r.Context(), orderID)
+	err := handler.fulfillmentSrv.Deliver(r.Context(), orderID)
 	switch {
-	case errors.Is(err, checkoutDomain.ErrOrderNotFound):
-		handler.flash(w, r, "Order not found.", "error")
+	case errors.Is(err, fulfillmentApp.ErrNotFound):
+		handler.flash(w, r, "Fulfillment not found for this order.", "error")
 		http.Redirect(w, r, "/admin/orders", http.StatusSeeOther)
 		return
-	case errors.Is(err, checkoutDomain.ErrOrderNotDeliverable):
+	case errors.Is(err, fulfillmentDomain.ErrInvalidTransition):
 		handler.flash(w, r, "This order cannot be marked delivered from its current status.", "error")
 	case err != nil:
 		https.InternalError(w, "internal-error", err.Error())
@@ -159,8 +208,9 @@ func (handler httpHandler) AdminInventory(w http.ResponseWriter, r *http.Request
 	})
 }
 
-// AdminRefundOrder refunds a paid/shipped/delivered order; the underlying
-// service also releases the reserved stock back to the catalogue.
+// AdminRefundOrder refunds the fulfillment for an order; the
+// fulfillment service also releases the reserved stock back to the
+// catalogue via the wired StockReleaser port.
 func (handler httpHandler) AdminRefundOrder(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
@@ -171,13 +221,13 @@ func (handler httpHandler) AdminRefundOrder(w http.ResponseWriter, r *http.Reque
 	}
 	orderID := mux.Vars(r)["orderID"]
 	reason := r.FormValue("reason")
-	err := handler.checkoutSrv.Refund(r.Context(), orderID, reason)
+	err := handler.fulfillmentSrv.Refund(r.Context(), orderID, reason)
 	switch {
-	case errors.Is(err, checkoutDomain.ErrOrderNotFound):
-		handler.flash(w, r, "Order not found.", "error")
+	case errors.Is(err, fulfillmentApp.ErrNotFound):
+		handler.flash(w, r, "Fulfillment not found for this order.", "error")
 		http.Redirect(w, r, "/admin/orders", http.StatusSeeOther)
 		return
-	case errors.Is(err, checkoutDomain.ErrOrderNotRefundable):
+	case errors.Is(err, fulfillmentDomain.ErrInvalidTransition):
 		handler.flash(w, r, "This order cannot be refunded from its current status.", "error")
 	case err != nil:
 		https.InternalError(w, "internal-error", err.Error())

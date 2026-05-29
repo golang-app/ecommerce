@@ -7,6 +7,8 @@ import (
 
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	fulfillmentApp "github.com/bkielbasa/go-ecommerce/backend/fulfillment/app"
+	fulfillmentDomain "github.com/bkielbasa/go-ecommerce/backend/fulfillment/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	promoapp "github.com/bkielbasa/go-ecommerce/backend/promo/app"
@@ -198,14 +200,43 @@ func (handler httpHandler) Order(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The owner may cancel a paid order.
+	// The owner may cancel a paid order. Cancellation is only sensible
+	// before the fulfillment Process Manager has shipped the parcel —
+	// the admin's refund flow takes over after that.
 	customerID := handler.currentCustomerID(r)
 	canCancel := order.Status() == checkoutDomain.StatusPaid &&
 		customerID != "" && order.CustomerID() == customerID
 
+	// Fulfillment summary: shown alongside the commercial status when
+	// the OnOrderPaid subscriber has spawned a record. Anonymous /
+	// unpaid orders simply have no fulfillment to display.
+	var (
+		fulfillment    fulfillmentDomain.Fulfillment
+		hasFulfillment bool
+	)
+	if handler.fulfillmentSrv != nil {
+		ff, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
+		switch {
+		case errors.Is(ferr, fulfillmentApp.ErrNotFound):
+			// not yet spawned
+		case ferr != nil:
+			handler.logger.WithError(ferr).Warn("cannot load fulfillment for order page")
+		default:
+			fulfillment = ff
+			hasFulfillment = true
+			// Once a shipment is in flight (labeled or later) the
+			// customer can no longer cancel from this page.
+			if fulfillment.Status() != fulfillmentDomain.StatusScheduled {
+				canCancel = false
+			}
+		}
+	}
+
 	handler.renderTemplate(w, r, "order/show", map[string]any{
-		"Order":     order,
-		"CanCancel": canCancel,
+		"Order":          order,
+		"Fulfillment":    fulfillment,
+		"HasFulfillment": hasFulfillment,
+		"CanCancel":      canCancel,
 	})
 }
 

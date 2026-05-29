@@ -105,7 +105,31 @@
       </section>
     {{end}}
 
-    {{if or (eq .Order.Status "shipped") (eq .Order.Status "delivered")}}
+    {{if .HasFulfillment}}
+      <section class="order__ship">
+        <h2 class="order__ship-heading">fulfillment</h2>
+        <p>
+          status: <span class="order-status order-status--{{.Fulfillment.Status}}">{{.Fulfillment.Status}}</span>
+        </p>
+        {{if eq (printf "%s" .Fulfillment.Status) "shipped"}}
+          <p>
+            {{with .Fulfillment.Carrier}}carrier: {{.}}{{end}}
+            {{if and .Fulfillment.Carrier .Fulfillment.TrackingCode}} &middot; {{end}}
+            {{with .Fulfillment.TrackingCode}}tracking: <code>{{.}}</code>{{end}}
+          </p>
+        {{else if eq (printf "%s" .Fulfillment.Status) "delivered"}}
+          <p>
+            {{with .Fulfillment.Carrier}}carrier: {{.}} &middot; {{end}}
+            {{with .Fulfillment.TrackingCode}}tracking: <code>{{.}}</code> &middot; {{end}}
+            delivered {{.Fulfillment.DeliveredAt.Format "Jan 2, 2006 15:04 MST"}}
+          </p>
+        {{else if eq (printf "%s" .Fulfillment.Status) "refunded"}}
+          <p>
+            refunded{{with .Fulfillment.RefundReason}} &middot; reason: {{.}}{{end}}
+          </p>
+        {{end}}
+      </section>
+    {{else if or (eq .Order.Status "shipped") (eq .Order.Status "delivered")}}
       <section class="order__ship">
         <h2 class="order__ship-heading">fulfillment</h2>
         <p>

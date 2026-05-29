@@ -549,81 +549,17 @@ func (s CheckoutService) ExpirePending(ctx context.Context, orderID string) erro
 	return nil
 }
 
-// MarkShipped transitions a paid order to shipped, optionally recording the
-// carrier and tracking code. Admin-only — never wired into the customer
-// surface.
-func (s CheckoutService) MarkShipped(ctx context.Context, orderID, carrier, trackingCode string) error {
-	ctx, span := tracer.Start(ctx, "Checkout.MarkShipped", trace.WithAttributes(
-		attribute.String("order.id", orderID),
-		attribute.String("ship.carrier", carrier),
-	))
-	defer span.End()
-
-	order, err := s.storage.Load(ctx, orderID)
-	if err != nil {
-		recordSpanError(span, err)
-		return err
-	}
-	if err := order.MarkShipped(carrier, trackingCode, s.now()); err != nil {
-		recordSpanError(span, err)
-		return err
-	}
-	if err := s.storage.Save(ctx, order); err != nil {
-		recordSpanError(span, err)
-		return fmt.Errorf("save shipped: %w", err)
-	}
-	observability.OrdersFinalizedInc(ctx, string(domain.StatusShipped))
-	return nil
-}
-
-// MarkDelivered transitions a shipped order to delivered. Admin-only.
-func (s CheckoutService) MarkDelivered(ctx context.Context, orderID string) error {
-	ctx, span := tracer.Start(ctx, "Checkout.MarkDelivered", trace.WithAttributes(
-		attribute.String("order.id", orderID),
-	))
-	defer span.End()
-
-	order, err := s.storage.Load(ctx, orderID)
-	if err != nil {
-		recordSpanError(span, err)
-		return err
-	}
-	if err := order.MarkDelivered(s.now()); err != nil {
-		recordSpanError(span, err)
-		return err
-	}
-	if err := s.storage.Save(ctx, order); err != nil {
-		recordSpanError(span, err)
-		return fmt.Errorf("save delivered: %w", err)
-	}
-	observability.OrdersFinalizedInc(ctx, string(domain.StatusDelivered))
-	return nil
-}
-
-// Refund refunds a paid/shipped/delivered order and returns its stock to the
-// catalogue (refunds bring the goods back). Admin-only.
-func (s CheckoutService) Refund(ctx context.Context, orderID, reason string) error {
-	ctx, span := tracer.Start(ctx, "Checkout.Refund", trace.WithAttributes(
-		attribute.String("order.id", orderID),
-	))
-	defer span.End()
-
-	order, err := s.storage.Load(ctx, orderID)
-	if err != nil {
-		recordSpanError(span, err)
-		return err
-	}
-	if err := order.Refund(reason, s.now()); err != nil {
-		recordSpanError(span, err)
-		return err
-	}
-	if err := s.storage.Save(ctx, order); err != nil {
-		recordSpanError(span, err)
-		return fmt.Errorf("save refund: %w", err)
-	}
-	// releaseStock already increments the stock_released counter; the
-	// orders_finalized increment captures the refund as a terminal status.
-	s.releaseStock(ctx, order, "release-refund")
-	observability.OrdersFinalizedInc(ctx, string(domain.StatusRefunded))
-	return nil
-}
+// MarkShipped / MarkDelivered / Refund used to live on this service:
+// they applied the matching domain commands on the Order aggregate
+// and (for Refund) released stock back to the catalogue. That
+// behaviour now lives in the fulfillment bounded context's Process
+// Manager (backend/fulfillment), where the operational lifecycle —
+// scheduled → labeled → shipped → delivered / refunded — is modelled
+// as its own state machine. See the package doc on
+// backend/fulfillment/domain for the rationale (commercial vs
+// operational state separation).
+//
+// The Order aggregate's MarkShipped / MarkDelivered / Refund methods
+// stay on checkout/domain for replay / back-compat: historical event
+// logs that include OrderShipped / OrderDelivered / OrderRefunded
+// still apply cleanly when rebuilding read models or aggregates.

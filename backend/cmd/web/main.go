@@ -15,7 +15,9 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/checkout"
 	checkoutapp "github.com/bkielbasa/go-ecommerce/backend/checkout/app"
 	checkoutintegration "github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
+	checkoutquery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/sweeper"
+	"github.com/bkielbasa/go-ecommerce/backend/fulfillment"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
@@ -144,6 +146,15 @@ func main() {
 		FreeShippingThreshold: cfg.FreeShippingThreshold,
 	}
 	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, outboxStore, catalogService, catalogService, pricing)
+	// Fulfillment Process Manager: subscribes to OrderPaid, spawns a
+	// state-stored Fulfillment, and owns the operational lifecycle
+	// (ship/deliver/refund). Stock release on refund goes through the
+	// productcatalog port wired below — same seam checkout used to
+	// call directly before that flow moved.
+	fulfillmentBD, fulfillmentSrv := fulfillment.New(db, bus)
+	fulfillmentSrv = fulfillmentSrv.
+		WithStockReleaser(catalogService).
+		WithOrderLines(orderLinesAdapter{q: checkoutQry})
 	// Promo bounded context: owns promo_code + promo_redemption. The
 	// checkout service redeems through its narrow PromoRedeemer seam so
 	// the math stays inside checkout while the ledger lives here.
@@ -180,6 +191,17 @@ func main() {
 	// context empties the basket it was placed from.
 	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
 		return cartSrv.Clear(ctx, e.(checkoutintegration.OrderPaid).SessionID)
+	})
+
+	// Third OrderPaid subscriber: the fulfillment Process Manager
+	// spawns a new Fulfillment record in StatusScheduled. The handler
+	// is idempotent (FindByOrder + ErrAlreadyExists no-op) so the
+	// outbox dispatcher's at-least-once redelivery cannot create
+	// duplicate fulfillments after a crash between publish and
+	// MarkSent.
+	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
+		paid := e.(checkoutintegration.OrderPaid)
+		return fulfillmentSrv.OnOrderPaid(ctx, paid.OrderID, paid.At)
 	})
 
 	// Second OrderPaid subscriber: render and dispatch the order
@@ -253,7 +275,7 @@ func main() {
 	// remain stored and charged in DefaultCurrency (USD).
 	fxRates := fx.New(cfg.DefaultCurrency, cfg.SupportedCurrencies, cfg.FXRates, logger)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, fulfillmentSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
 	// StoreMiddleware resolves the active store per request and binds
 	// it on the request context. It MUST run before the CSRF middleware
 	// so the store is available to every handler/template — including
@@ -266,6 +288,7 @@ func main() {
 	app.AddBoundedContext(pcBD)
 	app.AddBoundedContext(authBD)
 	app.AddBoundedContext(checkoutBD)
+	app.AddBoundedContext(fulfillmentBD)
 	app.AddBoundedContext(reviewsBD)
 	app.AddBoundedContext(wishlistBD)
 	app.AddBoundedContext(promoBD)
@@ -319,6 +342,29 @@ func main() {
 	}
 
 	logrus.Infof("application stopped")
+}
+
+// orderLinesAdapter bridges the checkout query service to the
+// fulfillment service's OrderLineSource port. Refund needs to know
+// which variants/quantities to release back to the catalogue; the
+// authoritative list lives on the order's read-side projection
+// (OrderView.Items).
+type orderLinesAdapter struct {
+	q interface {
+		Find(ctx context.Context, id string) (checkoutquery.OrderView, error)
+	}
+}
+
+func (a orderLinesAdapter) OrderQuantities(ctx context.Context, orderID string) (map[string]int, error) {
+	view, err := a.q.Find(ctx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]int{}
+	for _, ln := range view.Items() {
+		out[ln.ProductID()] += ln.Quantity()
+	}
+	return out, nil
 }
 
 // newLogger builds the process-wide structured logger.
