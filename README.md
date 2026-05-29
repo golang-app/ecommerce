@@ -73,6 +73,8 @@ path is an in-process event bus (`backend/internal/eventbus`): checkout publishe
 `OrderPaid` after a successful payment and the cart context subscribes to empty
 the basket, so checkout never calls the cart directly for that side effect.
 
+The shared vocabulary used across these contexts is collected in the [ubiquitous-language glossary](./docs/glossary.md).
+
 
 ## Quick start
 
