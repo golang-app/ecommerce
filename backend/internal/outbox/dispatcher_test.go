@@ -63,12 +63,14 @@ func (s *fakeStore) MarkSent(_ context.Context, id int64) error {
 type fakeBus struct {
 	mu        sync.Mutex
 	published []eventbus.Event
+	ids       []int64
 }
 
-func (b *fakeBus) Publish(_ context.Context, e eventbus.Event) {
+func (b *fakeBus) PublishWithID(_ context.Context, eventID int64, e eventbus.Event) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.published = append(b.published, e)
+	b.ids = append(b.ids, eventID)
 }
 
 func discardLogger() logrus.FieldLogger {
@@ -97,6 +99,9 @@ func TestDispatchOnce_PublishesAndMarksSent(t *testing.T) {
 	is.Equal(len(bus.published), 2)
 	is.Equal(bus.published[0].(testEvent).ID, "one")
 	is.Equal(bus.published[1].(testEvent).ID, "two")
+	// The dispatcher threads the outbox row id through to the bus so
+	// id-aware subscribers (internal/inbox.Wrap) can dedupe on it.
+	is.Equal(bus.ids, []int64{1, 2})
 	is.Equal(store.sent, []int64{1, 2})
 	is.Equal(len(store.rows), 0)
 }
