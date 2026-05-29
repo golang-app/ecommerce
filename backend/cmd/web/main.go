@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/ardanlabs/conf"
@@ -22,6 +24,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/outbox"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/bkielbasa/go-ecommerce/backend/promo"
@@ -125,6 +128,10 @@ func main() {
 
 	app.AddDependency(dependency.NewSQL(db))
 	bus := eventbus.New(logger)
+	// Transactional Outbox store: same DB, used both as the writer (the
+	// checkout adapter calls AppendTx inside its own tx) and as the
+	// dispatcher's source of unsent rows.
+	outboxStore := outbox.NewPostgres(db)
 	// Search OHS: published-language storage + service. The same *app.Service
 	// instance is wired as both productcatalog's SearchIndexer (write side)
 	// and layout's searchService (read side) — one struct, two roles.
@@ -136,7 +143,7 @@ func main() {
 		TaxRatePercent:        cfg.TaxRatePercent,
 		FreeShippingThreshold: cfg.FreeShippingThreshold,
 	}
-	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, bus, catalogService, catalogService, pricing)
+	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, outboxStore, catalogService, catalogService, pricing)
 	// Promo bounded context: owns promo_code + promo_redemption. The
 	// checkout service redeems through its narrow PromoRedeemer seam so
 	// the math stays inside checkout while the ledger lives here.
@@ -181,11 +188,43 @@ func main() {
 	// subscriber is returned (and logged by the bus) but never aborts
 	// the publisher's own transaction; the cart-clearing subscriber
 	// above is unaffected.
+	//
+	// IDEMPOTENCY. The outbox dispatcher delivers integration events
+	// at-least-once: a process crash between Publish and MarkSent will
+	// republish the same OrderPaid on the next tick, and we'd send the
+	// confirmation email twice. Sending Clear() twice on a cart is a
+	// no-op so the cart-clear handler above is naturally safe, but
+	// duplicate emails are user-visible spam. The in-memory dedupe
+	// below remembers recently-seen OrderIDs and drops the duplicate
+	// publish.
+	//
+	// TRADE-OFF. This dedupe only survives within a single process —
+	// a restart wipes the map. That is acceptable for a demo because
+	// the outbox dispatcher won't republish a sent row (sent_at is
+	// set) once MarkSent has committed. The narrow remaining window
+	// is: crash AFTER publish, BEFORE MarkSent, then restart — in
+	// which case the row republishes and the in-memory dedupe is
+	// empty, so a duplicate email goes out. A real implementation
+	// would replace this with a persistent dedupe key (a
+	// sent_emails(order_id, kind) table, or wiring the order's
+	// confirmation_email_sent_at via a domain command) so the
+	// duplicate is suppressed across restarts too.
+	var (
+		sentEmailsMu sync.Mutex
+		sentEmails   = map[string]struct{}{}
+	)
 	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
 		paid := e.(checkoutintegration.OrderPaid)
 		if paid.CustomerID == "" {
 			return nil
 		}
+		sentEmailsMu.Lock()
+		if _, dup := sentEmails[paid.OrderID]; dup {
+			sentEmailsMu.Unlock()
+			return nil
+		}
+		sentEmails[paid.OrderID] = struct{}{}
+		sentEmailsMu.Unlock()
 		view, err := checkoutQry.Find(ctx, paid.OrderID)
 		if err != nil {
 			return fmt.Errorf("order confirmation: load view: %w", err)
@@ -239,6 +278,25 @@ func main() {
 	// context; cancel triggers a clean exit.
 	reservationSweeper := sweeper.New(checkoutQry, checkoutSrv, cfg.ReservationTTL, cfg.ReservationSweepInterval, logger)
 	go reservationSweeper.Run(ctx)
+
+	// Transactional Outbox dispatcher. The decode closure is the
+	// content-aware bridge from a stored (kind, payload) row back to
+	// the integration event the bus's subscribers consume — the
+	// outbox package itself stays type-agnostic so it can serve any
+	// bounded context without imports.
+	decode := func(kind string, payload []byte) (eventbus.Event, error) {
+		switch kind {
+		case checkoutintegration.OrderPaid{}.EventName():
+			var e checkoutintegration.OrderPaid
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderPaid: %w", err)
+			}
+			return e, nil
+		}
+		return nil, fmt.Errorf("unknown outbox kind: %s", kind)
+	}
+	outboxDispatcher := outbox.NewDispatcher(outboxStore, bus, decode, logger, cfg.OutboxInterval)
+	go outboxDispatcher.Run(ctx)
 
 	go func() {
 		_ = app.Run()

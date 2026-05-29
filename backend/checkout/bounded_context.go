@@ -11,7 +11,6 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/app"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
-	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
 )
 
 // CartReader and CartClearer let New accept the cart service from the cart
@@ -37,18 +36,26 @@ type StockMovements interface {
 
 // New wires the checkout context and returns its command service (write side,
 // event-sourced) and query service (read side, projection-backed) separately,
-// keeping the CQRS split explicit at the composition root. Cross-context side
-// effects (e.g. clearing the cart) are driven by integration events published
-// on bus, not by direct calls.
+// keeping the CQRS split explicit at the composition root.
+//
+// Cross-context side effects (e.g. clearing the cart, sending the order
+// confirmation email) are driven by integration events published via the
+// Transactional Outbox: Save stages them into outbox_event inside the same
+// transaction that commits the domain events, and the outbox dispatcher
+// (wired in cmd/web) republishes them onto the in-process bus.
+//
+// outbox is the seam through which the adapter stages those rows; pass nil
+// to disable the integration entirely (matches the previous behaviour and
+// what older tests expect).
 //
 // movements may be nil — checkout then runs without writing audit rows, which
 // is the historical behaviour. pricing carries tax + free-shipping config; a
 // zero-value PricingPolicy disables both, again matching the historical
 // behaviour.
-func New(db *sql.DB, cart CartReader, bus *eventbus.Bus, stock StockReserver, movements StockMovements, pricing app.PricingPolicy) (application.BoundedContext, app.CheckoutService, query.Service) {
-	storage := adapter.NewPostgres(db)
+func New(db *sql.DB, cart CartReader, outbox adapter.OutboxAppender, stock StockReserver, movements StockMovements, pricing app.PricingPolicy) (application.BoundedContext, app.CheckoutService, query.Service) {
+	storage := adapter.NewPostgres(db, outbox)
 	payment := adapter.NewFakePayment()
-	cmd := app.NewCheckoutService(cart, storage, payment, stock, movements, bus, newOrderID, pricing)
+	cmd := app.NewCheckoutService(cart, storage, payment, stock, movements, newOrderID, pricing)
 	queries := query.NewService(storage)
 	return &boundedContext{}, cmd, queries
 }
