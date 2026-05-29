@@ -2,6 +2,9 @@ package layout
 
 import (
 	"net/http"
+	"sort"
+
+	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 )
 
 // requireAdmin is the access gate for every admin page. It resolves the
@@ -72,6 +75,18 @@ func (handler httpHandler) AdminDashboard(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		orders = nil
 	}
+	// TodaysSales reads the analytics_daily_sales projection — the second
+	// reader on the checkout event stream. A lookup error is swallowed
+	// (the card is best-effort) and the dashboard simply omits the card.
+	sales, err := handler.checkoutQry.TodaysSales(r.Context())
+	if err != nil {
+		sales = nil
+	}
+	todays := make([]checkoutQuery.DailySalesRow, 0, len(sales))
+	for _, row := range sales {
+		todays = append(todays, row)
+	}
+	sort.Slice(todays, func(i, j int) bool { return todays[i].Currency < todays[j].Currency })
 
 	handler.renderAdminTemplate(w, r, "admin/dashboard", map[string]any{
 		"Active":        "dashboard",
@@ -79,5 +94,6 @@ func (handler httpHandler) AdminDashboard(w http.ResponseWriter, r *http.Request
 		"ProductCount":  len(products),
 		"CategoryCount": len(categories),
 		"OrderCount":    len(orders),
+		"TodaysSales":   todays,
 	})
 }
