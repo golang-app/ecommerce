@@ -1,0 +1,59 @@
+{{define "main"}}
+  <h2 class="account-card__title">stores</h2>
+  <p class="muted">Each request is mapped to a store by Host header; the store's currency drives the display layer. Exactly one store is the default fallback when no host matches.</p>
+
+  {{if .Stores}}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>name</th>
+          <th>slug</th>
+          <th>currency</th>
+          <th>host</th>
+          <th>default</th>
+          <th>position</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $s := .Stores}}
+          <tr>
+            <td>{{$s.Name}}</td>
+            <td><code>{{$s.Slug}}</code></td>
+            <td>{{$s.Currency}}</td>
+            <td><code>{{$s.Host}}</code></td>
+            <td>{{if $s.IsDefault}}yes{{else}}—{{end}}</td>
+            <td>{{$s.Position}}</td>
+            <td class="admin-table__actions">
+              <a href="/admin/stores/{{$s.ID}}/edit">edit</a>
+              <form method="post" action="/admin/stores/{{$s.ID}}/delete"
+                    onsubmit="return confirm('Delete this store? Requests landing on its host will fall back to the default store.');">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no stores yet.</p>
+  {{end}}
+
+  <section class="admin-form">
+    <h3 class="account-card__title">create a store</h3>
+    <form class="form" method="post" action="/admin/stores">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field"><label for="s-id">id</label><input id="s-id" name="id" required placeholder="us"></div>
+      <div class="field"><label for="s-slug">slug</label><input id="s-slug" name="slug" required placeholder="us" pattern="[a-z0-9-]+"></div>
+      <div class="field"><label for="s-name">name</label><input id="s-name" name="name" required placeholder="GoCommerce US"></div>
+      <div class="field"><label for="s-ccy">currency (ISO-4217)</label><input id="s-ccy" name="currency" required maxlength="3" placeholder="USD"></div>
+      <div class="field"><label for="s-host">host</label><input id="s-host" name="host" required placeholder="localhost:8080"></div>
+      <div class="field field--check">
+        <label><input type="checkbox" name="is_default" value="1"> mark as default</label>
+      </div>
+      <div class="field"><label for="s-pos">position</label><input id="s-pos" name="position" type="number" value="0" min="0"></div>
+      <button type="submit" class="btn">create store</button>
+    </form>
+  </section>
+{{end}}

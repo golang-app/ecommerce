@@ -51,14 +51,15 @@ type httpHandler struct {
 	wishlistSrv wishlistService
 	promoSrv    promoService
 	searchSrv   searchService
+	storeSrv    storeService
 	imageStore  imagestore.Store
 	mailer      mailer.Mailer
 	baseURL     string
 	// rates is the static, operator-configured FX table. It is shared
-	// across every render through the `money` template helper and is
-	// also exposed to the picker via the Currencies / Currency template
-	// variables. The conversion is purely a display transformation:
-	// orders stay priced in rates.Default() (USD).
+	// across every render through the `money` template helper. The
+	// active currency comes from the request-bound store, but the
+	// rates table itself is shared by every store (it just knows how
+	// to convert FROM USD TO each supported display currency).
 	rates  fx.Rates
 	logger logrus.FieldLogger
 }
@@ -127,10 +128,12 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/", m.handler.HomePage)
 	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
 	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
-	// Display-only currency picker. Stores the chosen ISO code on the
-	// gorilla session; conversion happens at render time through the
-	// `money` template helper. CSRF-protected by the global middleware.
-	r.HandleFunc("/currency", observability.HTTPWrap(m.handler.HandleSetCurrency, m.logger)).Methods("POST")
+	// Footer-driven store switcher. Lists every configured store with
+	// a link that drops the visitor onto the same path on the other
+	// store's host. Replaces the previous per-customer currency picker
+	// (which has been removed) — the display currency now follows the
+	// active store, not a per-shopper preference.
+	r.HandleFunc("/stores", observability.HTTPWrap(m.handler.StoresPage, m.logger)).Methods("GET")
 
 	r.HandleFunc("/cart", observability.HTTPWrap(m.handler.Cart, m.logger)).Methods("GET")
 	r.HandleFunc("/cart/{variantID}", observability.HTTPWrap(m.handler.AddToCart, m.logger)).Methods("POST")
@@ -240,6 +243,15 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/promo-codes/{code}/edit", observability.HTTPWrap(m.handler.AdminEditPromoCodeForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/promo-codes/{code}/delete", observability.HTTPWrap(m.handler.AdminDeletePromoCode, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/promo-codes/{code}", observability.HTTPWrap(m.handler.AdminUpdatePromoCode, m.logger)).Methods("POST")
+
+	// Stores admin: list + inline create on /admin/stores; the
+	// /{id}/edit and /{id}/delete sub-paths are registered before the
+	// /{id} catch-all so the latter doesn't shadow them.
+	r.HandleFunc("/admin/stores", observability.HTTPWrap(m.handler.AdminStores, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/stores", observability.HTTPWrap(m.handler.AdminCreateStore, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/stores/{id}/edit", observability.HTTPWrap(m.handler.AdminEditStoreForm, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/stores/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteStore, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/stores/{id}", observability.HTTPWrap(m.handler.AdminUpdateStore, m.logger)).Methods("POST")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
@@ -309,12 +321,24 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		navCategories = nil
 	}
 	data["NavCategories"] = navCategories
-	// Currency selection: Currency is the customer's active display
-	// currency (defaults to rates.Default()), Currencies is the list the
-	// header picker offers. Admin renders do NOT set these (they always
+	// Currency is the active display currency for the request, sourced
+	// from the request-bound Store (see http_store.go currentCurrency).
+	// ActiveStore is the resolved Store value object so templates can
+	// reference its name/slug; Stores is the full list the footer
+	// switcher renders. Admin renders do NOT set these (they always
 	// show USD); see renderAdminTemplate.
 	data["Currency"] = currency
-	data["Currencies"] = handler.rates.Supported()
+	data["ActiveStore"] = storeFromCtx(r)
+	if handler.storeSrv != nil {
+		stores, sErr := handler.storeSrv.ListAll(r.Context())
+		if sErr != nil {
+			handler.logger.WithError(sErr).Warn("cannot list stores for footer switcher")
+			stores = nil
+		}
+		data["Stores"] = stores
+	} else {
+		data["Stores"] = nil
+	}
 	// SearchQuery is the value the header search input shows. It defaults to
 	// "" so every page renders the box; the search/catalog pages override it
 	// from the URL `q`.

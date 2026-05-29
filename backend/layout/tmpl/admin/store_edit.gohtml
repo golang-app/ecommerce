@@ -1,0 +1,18 @@
+{{define "main"}}
+  <p class="crumbs"><a href="/admin/stores">stores</a> / edit</p>
+  <h2 class="account-card__title">edit store <code>{{.Store.ID}}</code></h2>
+
+  <form class="form" method="post" action="/admin/stores/{{.Store.ID}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <div class="field"><label for="s-slug">slug</label><input id="s-slug" name="slug" required value="{{.Store.Slug}}" pattern="[a-z0-9-]+"></div>
+    <div class="field"><label for="s-name">name</label><input id="s-name" name="name" required value="{{.Store.Name}}"></div>
+    <div class="field"><label for="s-ccy">currency (ISO-4217)</label><input id="s-ccy" name="currency" required maxlength="3" value="{{.Store.Currency}}"></div>
+    <div class="field"><label for="s-host">host</label><input id="s-host" name="host" required value="{{.Store.Host}}"></div>
+    <div class="field field--check">
+      <label><input type="checkbox" name="is_default" value="1" {{if .Store.IsDefault}}checked{{end}}> mark as default</label>
+    </div>
+    <div class="field"><label for="s-pos">position</label><input id="s-pos" name="position" type="number" value="{{.Store.Position}}" min="0"></div>
+    <button type="submit" class="btn">save changes</button>
+    <p class="form__aside"><a href="/admin/stores">&larr; back to stores</a></p>
+  </form>
+{{end}}

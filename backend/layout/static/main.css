@@ -152,32 +152,55 @@ main {
   outline: 0;
 }
 
-/* ---------- header: currency picker ---------- */
+/* ---------- footer: store switcher link ---------- */
 /*
-  Display-only multi-currency selector. The <select> mimics the search
-  input's understated underline-only style so it doesn't compete with
-  the brand mark or the primary nav. JS-free submit on change keeps
-  the experience a single click.
+  Replaces the (removed) per-customer currency picker. The active
+  store's currency now drives the display, so the only switching
+  surface is a footer link that lists every store alongside a link to
+  the same path on each one's host. Keep it understated — it's a
+  navigation affordance, not a primary action.
 */
-.currency-switch {
-  margin: 0;
-}
-.currency-switch select {
-  border: 0;
+.store-link {
   border-bottom: 1px solid var(--rule);
-  background: transparent;
-  color: var(--fg-muted);
-  font: inherit;
-  padding: var(--space-1) 0;
+  text-transform: lowercase;
   letter-spacing: .02em;
-  text-transform: uppercase;
-  cursor: pointer;
 }
-.currency-switch select:focus,
-.currency-switch select:focus-visible {
-  border-bottom-color: var(--fg);
-  color: var(--fg);
-  outline: 0;
+.store-link:hover { border-bottom-color: var(--fg); }
+
+/* ---------- stores page ---------- */
+.stores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.stores-card {
+  border-top: 1px solid var(--rule);
+  padding-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.stores-card__name {
+  font-family: var(--serif);
+  font-size: var(--step-1);
+  text-transform: lowercase;
+  letter-spacing: -.01em;
+}
+.stores-card__ccy {
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.stores-card__link { border: 0; }
+.stores-card__link:hover { border-bottom: 1px solid var(--fg); }
+.stores-card--active .stores-card__name { color: var(--fg); }
+.stores-card--active .stores-card__badge {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--fg-muted);
 }
 
 /* ---------- accessibility: visually-hidden ---------- */

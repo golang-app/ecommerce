@@ -292,6 +292,26 @@ var productAttributeSeeds = []productAttributeSeed{
 	{productID: "linen-apron", attributeTypeID: "material", text: "linen"},
 }
 
+// storeSeed describes a predefined storefront facade. The two seeded
+// stores model a US storefront on the canonical localhost host and a EU
+// storefront on a subdomain alias — operators are expected to point an
+// `eu.localhost` /etc/hosts entry at 127.0.0.1 during local dev. The
+// rows are idempotent on re-seed via ON CONFLICT (id) DO UPDATE.
+type storeSeed struct {
+	id        string
+	slug      string
+	name      string
+	currency  string
+	host      string
+	isDefault bool
+	position  int
+}
+
+var storeSeeds = []storeSeed{
+	{id: "us", slug: "us", name: "GoCommerce US", currency: "USD", host: "localhost:8080", isDefault: true, position: 1},
+	{id: "eu", slug: "eu", name: "GoCommerce EU", currency: "EUR", host: "eu.localhost:8080", isDefault: false, position: 2},
+}
+
 const (
 	insertAttributeType = `INSERT INTO productcatalog_attribute_type
 		(id, name, unit, kind, filterable, position)
@@ -329,7 +349,42 @@ const (
 		ON CONFLICT (product_id, attribute_type_id) DO UPDATE SET
 			num_value = EXCLUDED.num_value,
 			text_value = EXCLUDED.text_value`
+
+	// upsertStore re-asserts every editable field of a store row on
+	// re-seed. The is_default flag is set explicitly here too — the
+	// migration's partial unique index plus the storeSeeds ordering
+	// (us first, default=true) is what guarantees exactly one default
+	// row after the loop completes.
+	upsertStore = `INSERT INTO store
+		(id, slug, name, currency, host, is_default, position)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (id) DO UPDATE SET
+			slug = EXCLUDED.slug,
+			name = EXCLUDED.name,
+			currency = EXCLUDED.currency,
+			host = EXCLUDED.host,
+			is_default = EXCLUDED.is_default,
+			position = EXCLUDED.position`
 )
+
+// seedStores idempotently inserts (or updates) the configured
+// storefront facades. To honour the partial unique index on
+// (is_default) WHERE is_default, any other row's is_default flag is
+// cleared before the upsert that introduces a new default.
+func seedStores(ctx context.Context, db *sql.DB) error {
+	for _, s := range storeSeeds {
+		if s.isDefault {
+			if _, err := db.ExecContext(ctx, `UPDATE store SET is_default = false WHERE id <> $1`, s.id); err != nil {
+				return fmt.Errorf("clear existing defaults before seeding %s: %w", s.id, err)
+			}
+		}
+		if _, err := db.ExecContext(ctx, upsertStore,
+			s.id, s.slug, s.name, s.currency, s.host, s.isDefault, s.position); err != nil {
+			return fmt.Errorf("seed store %s: %w", s.id, err)
+		}
+	}
+	return nil
+}
 
 // countCategoryAssignments returns the total number of (product, category)
 // pairs across all products — a product in two categories counts twice.
@@ -460,9 +515,13 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values, admin user %s (password reset required on first login)\n",
+			if err := seedStores(ctx, db); err != nil {
+				return err
+			}
+
+			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values, %d stores, admin user %s (password reset required on first login)\n",
 				len(seedProducts), len(variantSeeds), len(attributeTypeSeeds), len(categorySeeds),
-				countCategoryAssignments(), len(productAttributeSeeds), seedAdminEmail)
+				countCategoryAssignments(), len(productAttributeSeeds), len(storeSeeds), seedAdminEmail)
 			return nil
 		},
 	}
