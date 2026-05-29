@@ -1,6 +1,17 @@
 {{define "main"}}
   <h2 class="account-card__title">reviews</h2>
 
+  <nav class="tabs" aria-label="review status">
+    <a href="/admin/reviews"
+       class="tabs__link {{if eq .ActiveTab "pending"}}is-active{{end}}">
+      Pending ({{.PendingCount}})
+    </a>
+    <a href="/admin/reviews?status=all"
+       class="tabs__link {{if eq .ActiveTab "all"}}is-active{{end}}">
+      All
+    </a>
+  </nav>
+
   {{if .Rows}}
     <table class="admin-table">
       <thead>
@@ -8,6 +19,7 @@
           <th>product</th>
           <th>customer</th>
           <th>rating</th>
+          <th>status</th>
           <th>created</th>
           <th>body</th>
           <th></th>
@@ -19,11 +31,27 @@
             <td><a href="/product/{{$row.ProductID}}">{{$row.ProductName}}</a></td>
             <td>{{$row.Review.CustomerID}}</td>
             <td>{{$row.Review.Rating}} / 5</td>
+            <td>{{$row.Review.Status}}</td>
             <td>{{$row.Review.CreatedAt.Format "Jan 2, 2006 15:04"}}</td>
             <td>{{$row.Review.Body}}</td>
-            <td>
+            <td class="admin-table__actions">
+              {{if ne (printf "%s" $row.Review.Status) "approved"}}
+                <form method="post" action="/admin/reviews/{{$row.Review.ID}}/approve">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="status" value="{{$.ActiveTab}}">
+                  <button type="submit" class="btn btn--primary">approve</button>
+                </form>
+              {{end}}
+              {{if ne (printf "%s" $row.Review.Status) "rejected"}}
+                <form method="post" action="/admin/reviews/{{$row.Review.ID}}/reject">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <input type="hidden" name="status" value="{{$.ActiveTab}}">
+                  <button type="submit" class="btn">reject</button>
+                </form>
+              {{end}}
               <form method="post" action="/admin/reviews/{{$row.Review.ID}}/delete">
                 <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <input type="hidden" name="status" value="{{$.ActiveTab}}">
                 <button type="submit" class="btn btn--danger">delete</button>
               </form>
             </td>
@@ -32,6 +60,10 @@
       </tbody>
     </table>
   {{else}}
-    <p class="muted">no reviews yet.</p>
+    {{if eq .ActiveTab "pending"}}
+      <p class="muted">no reviews waiting for moderation.</p>
+    {{else}}
+      <p class="muted">no reviews yet.</p>
+    {{end}}
   {{end}}
 {{end}}

@@ -53,20 +53,39 @@ func (m *InMemory) SoftDelete(ctx context.Context, id string) error {
 		if r.ID() != id || r.IsDeleted() {
 			continue
 		}
-		m.reviews[i] = domain.RebuildReview(r.ID(), r.ProductID(), r.CustomerID(), r.Body(), r.Rating(), r.CreatedAt(), &now)
+		m.reviews[i] = domain.RebuildReview(r.ID(), r.ProductID(), r.CustomerID(), r.Body(), r.Rating(), r.CreatedAt(), &now, r.Status())
 		return nil
 	}
 	return nil
 }
 
-// ByProduct returns the active reviews for a product, newest-first, capped
-// at limit.
+// SetStatus flips the moderation state on a non-deleted review. Mirrors
+// the postgres adapter's UPDATE that filters out soft-deleted rows.
+func (m *InMemory) SetStatus(ctx context.Context, id string, status domain.Status) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, r := range m.reviews {
+		if r.ID() != id || r.IsDeleted() {
+			continue
+		}
+		m.reviews[i] = domain.RebuildReview(r.ID(), r.ProductID(), r.CustomerID(), r.Body(), r.Rating(), r.CreatedAt(), r.DeletedAt(), status)
+		return nil
+	}
+	return nil
+}
+
+// ByProduct returns the approved reviews for a product, newest-first, capped
+// at limit. Pending/rejected reviews are deliberately excluded — this is
+// the storefront-facing query.
 func (m *InMemory) ByProduct(ctx context.Context, productID string, limit int) ([]domain.Review, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.Review
 	for _, r := range m.reviews {
 		if r.IsDeleted() || r.ProductID() != productID {
+			continue
+		}
+		if !r.IsApproved() {
 			continue
 		}
 		out = append(out, r)
@@ -79,7 +98,8 @@ func (m *InMemory) ByProduct(ctx context.Context, productID string, limit int) (
 }
 
 // AggregateForProducts returns one Aggregate per product id that has at
-// least one active review.
+// least one approved review. Pending/rejected reviews do not contribute
+// to the storefront-visible badge.
 func (m *InMemory) AggregateForProducts(ctx context.Context, productIDs []string) (map[string]domain.Aggregate, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,6 +116,9 @@ func (m *InMemory) AggregateForProducts(ctx context.Context, productIDs []string
 	totals := map[string]*acc{}
 	for _, r := range m.reviews {
 		if r.IsDeleted() {
+			continue
+		}
+		if !r.IsApproved() {
 			continue
 		}
 		if !wanted[r.ProductID()] {
@@ -116,8 +139,10 @@ func (m *InMemory) AggregateForProducts(ctx context.Context, productIDs []string
 	return out, nil
 }
 
-// HasReviewed reports whether an active review by this customer exists for
-// the product.
+// HasReviewed reports whether any active (non-deleted) review by this
+// customer exists for the product. Status-agnostic on purpose — mirrors
+// the partial unique index in postgres so the storefront hides the submit
+// form whenever there is any row that would block resubmission.
 func (m *InMemory) HasReviewed(ctx context.Context, productID, customerID string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -130,4 +155,45 @@ func (m *InMemory) HasReviewed(ctx context.Context, productID, customerID string
 		}
 	}
 	return false, nil
+}
+
+// ListByStatus returns every non-deleted review at the given status, newest
+// first, capped at limit.
+func (m *InMemory) ListByStatus(ctx context.Context, status domain.Status, limit int) ([]domain.Review, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.Review
+	for _, r := range m.reviews {
+		if r.IsDeleted() {
+			continue
+		}
+		if r.Status() != status {
+			continue
+		}
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt().After(out[j].CreatedAt()) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// ListAll returns every non-deleted review (any status), newest first,
+// capped at limit.
+func (m *InMemory) ListAll(ctx context.Context, limit int) ([]domain.Review, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.Review
+	for _, r := range m.reviews {
+		if r.IsDeleted() {
+			continue
+		}
+		out = append(out, r)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt().After(out[j].CreatedAt()) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
