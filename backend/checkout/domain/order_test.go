@@ -100,7 +100,7 @@ func TestPlaceOrder_AppliesDiscount(t *testing.T) {
 	// discounted subtotal = 3600; caller computed tax 320 on it and kept
 	// shipping at 1500. Total = 3600 + 320 + 1500 = 5420.
 	o, err := domain.PlaceOrder("ord-d", "cart-1", "jane@example.com", domain.Address{}, method,
-		domain.RebuildPaymentMethod("card", "Card"), lines, 320, 1500, "SAVE10", 400, at)
+		domain.RebuildPaymentMethod("card", "Card"), lines, 320, 1500, "SAVE10", 400, "web", at)
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestPlaceOrder_AppliesTaxAndEffectiveShipping(t *testing.T) {
 
 	// Caller computed an 8.875% tax on 4000 = 355 and free shipping (threshold met).
 	o, err := domain.PlaceOrder("ord-3", "cart-1", "jane@example.com", domain.Address{}, method,
-		domain.RebuildPaymentMethod("card", "Card"), lines, 355, 0, "", 0, at)
+		domain.RebuildPaymentMethod("card", "Card"), lines, 355, 0, "", 0, "web", at)
 	if err != nil {
 		t.Fatalf("PlaceOrder: %v", err)
 	}
@@ -135,6 +135,29 @@ func TestPlaceOrder_AppliesTaxAndEffectiveShipping(t *testing.T) {
 	// subtotal 4000 + tax 355 + shipping 0.
 	if o.TotalAmount() != 4355 {
 		t.Errorf("total = %d, want 4355", o.TotalAmount())
+	}
+}
+
+// TestApplyOrderPlaced_SetsChannel locks in the v2 OrderPlaced field
+// behaviour: replaying an event whose Channel == "ios" lands on
+// o.Channel() == "ios". The codec's upcaster guarantees apply() always
+// sees a non-empty Channel; this test pins the aggregate side of that
+// contract.
+func TestApplyOrderPlaced_SetsChannel(t *testing.T) {
+	at := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
+	o := domain.RehydrateOrder([]domain.Event{
+		domain.OrderPlaced{
+			OrderID:    "ord-ch",
+			UserID:     "cart-1",
+			ShipMethod: domain.RebuildShippingMethod("pickup", "Pickup", 0),
+			PayMethod:  domain.RebuildPaymentMethod("card", "Card"),
+			Lines:      []domain.Line{domain.NewLine("v1", "Mug", 1, 1500, "USD")},
+			Channel:    "ios",
+			At:         at,
+		},
+	})
+	if o.Channel() != "ios" {
+		t.Errorf("Channel() = %q, want ios", o.Channel())
 	}
 }
 

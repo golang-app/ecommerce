@@ -33,6 +33,7 @@ type orderSnapshotDTO struct {
 	PlacedAt     time.Time         `json:"placed_at"`
 	Carrier      string            `json:"carrier,omitempty"`
 	TrackingCode string            `json:"tracking_code,omitempty"`
+	Channel      string            `json:"channel,omitempty"`
 	Version      int               `json:"version"`
 }
 
@@ -67,6 +68,7 @@ func marshalSnapshot(snap domain.OrderSnapshot) ([]byte, error) {
 		PlacedAt:     snap.PlacedAt,
 		Carrier:      snap.Carrier,
 		TrackingCode: snap.TrackingCode,
+		Channel:      snap.Channel,
 		Version:      snap.Version,
 	}
 	b, err := json.Marshal(dto)
@@ -105,6 +107,7 @@ func unmarshalSnapshot(payload []byte) (domain.OrderSnapshot, error) {
 		PlacedAt:     dto.PlacedAt,
 		Carrier:      dto.Carrier,
 		TrackingCode: dto.TrackingCode,
+		Channel:      dto.Channel,
 		Version:      dto.Version,
 	}, nil
 }

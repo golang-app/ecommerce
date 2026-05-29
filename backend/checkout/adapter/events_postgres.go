@@ -28,14 +28,14 @@ func appendEventsTx(ctx context.Context, tx *sql.Tx, aggregateID string, expecte
 	seq := expectedVersion
 	for _, e := range events {
 		seq++
-		eventType, payload, err := marshalEvent(e)
+		eventType, payloadVersion, payload, err := marshalEvent(e)
 		if err != nil {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, `
-			INSERT INTO checkout_events (aggregate_id, sequence, event_type, payload, occurred_at)
-			VALUES ($1, $2, $3, $4, $5)
-		`, aggregateID, seq, eventType, payload, e.OccurredAt())
+			INSERT INTO checkout_events (aggregate_id, sequence, event_type, payload, payload_version, occurred_at)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, aggregateID, seq, eventType, payload, payloadVersion, e.OccurredAt())
 		if err != nil {
 			return fmt.Errorf("append %s#%d: %w", e.EventType(), seq, err)
 		}
@@ -67,7 +67,7 @@ func (p Postgres) LoadEvents(ctx context.Context, aggregateID string) ([]domain.
 	}()
 
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT event_type, payload FROM checkout_events
+		SELECT event_type, payload_version, payload FROM checkout_events
 		WHERE aggregate_id = $1 ORDER BY sequence
 	`, aggregateID)
 	if err != nil {
@@ -80,13 +80,14 @@ func (p Postgres) LoadEvents(ctx context.Context, aggregateID string) ([]domain.
 	var events []domain.Event
 	for rows.Next() {
 		var typ string
+		var version int
 		var payload []byte
-		if err := rows.Scan(&typ, &payload); err != nil {
+		if err := rows.Scan(&typ, &version, &payload); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
-		e, err := unmarshalEvent(typ, payload)
+		e, err := unmarshalEvent(typ, version, payload)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
@@ -120,7 +121,7 @@ func (p Postgres) LoadEventsAfter(ctx context.Context, aggregateID string, after
 	}()
 
 	rows, err := p.db.QueryContext(ctx, `
-		SELECT event_type, payload FROM checkout_events
+		SELECT event_type, payload_version, payload FROM checkout_events
 		WHERE aggregate_id = $1 AND sequence > $2 ORDER BY sequence
 	`, aggregateID, afterVersion)
 	if err != nil {
@@ -133,13 +134,14 @@ func (p Postgres) LoadEventsAfter(ctx context.Context, aggregateID string, after
 	var events []domain.Event
 	for rows.Next() {
 		var typ string
+		var version int
 		var payload []byte
-		if err := rows.Scan(&typ, &payload); err != nil {
+		if err := rows.Scan(&typ, &version, &payload); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
-		e, err := unmarshalEvent(typ, payload)
+		e, err := unmarshalEvent(typ, version, payload)
 		if err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())

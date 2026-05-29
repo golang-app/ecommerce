@@ -54,6 +54,7 @@ type Order struct {
 	placedAt     time.Time
 	carrier      string
 	trackingCode string
+	channel      string
 
 	version       int
 	pendingEvents []Event
@@ -140,6 +141,12 @@ func (o Order) TotalDisplay() string  { return money(o.totalAmt) }
 func (o Order) Carrier() string       { return o.carrier }
 func (o Order) TrackingCode() string  { return o.trackingCode }
 
+// Channel returns the sales channel the order was placed through (e.g. "web",
+// "ios", "api"). v1 OrderPlaced events lacked this field; the codec's
+// upcaster fills "unknown" on load so historical orders read back with a
+// stable, explicit value rather than the zero string.
+func (o Order) Channel() string { return o.channel }
+
 // DiscountCode returns the literal promo code applied at place time
 // (empty when no code was used). The order is event-sourced so the
 // historical value is preserved across replays.
@@ -169,7 +176,13 @@ func (o Order) DiscountDisplay() string { return money(o.discountAmt) }
 // discountCode/discountAmount carry the resolved promo code (empty / 0 when
 // none was used). The event-sourced aggregate keeps these so replaying
 // history reproduces the original totals.
-func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, lines []Line, tax, effectiveShipping int64, discountCode string, discountAmount int64, at time.Time) (*Order, error) {
+//
+// channel records the sales channel ("web", "ios", "api", ...) the order was
+// placed through. It became part of the OrderPlaced v2 schema; callers
+// today always pass "web" (the only producer) but the parameter is wired
+// through so iOS/API entry points can light it up without a second
+// schema migration.
+func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, lines []Line, tax, effectiveShipping int64, discountCode string, discountAmount int64, channel string, at time.Time) (*Order, error) {
 	if len(lines) == 0 {
 		return nil, ErrCartEmpty
 	}
@@ -186,6 +199,7 @@ func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod Shippi
 		ShippingCost:   effectiveShipping,
 		DiscountCode:   discountCode,
 		DiscountAmount: discountAmount,
+		Channel:        channel,
 		At:             at,
 	})
 	return o, nil
@@ -247,6 +261,10 @@ func (o *Order) apply(e Event) {
 		o.totalCcy = ccy
 		o.status = StatusPending
 		o.placedAt = ev.At
+		// Channel is the v2 OrderPlaced field; v1 payloads are upcast to
+		// "unknown" by the codec before they reach apply, so this is always
+		// a meaningful string.
+		o.channel = ev.Channel
 	case PaymentSucceeded:
 		o.status = StatusPaid
 	case PaymentFailed:
