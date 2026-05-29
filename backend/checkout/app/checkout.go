@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
@@ -93,34 +92,13 @@ type nopStockMovements struct{}
 
 func (nopStockMovements) Record(context.Context, string, int, string, string) error { return nil }
 
-// PricingPolicy tells the checkout service how to derive tax and the
-// effective shipping cost from the order's subtotal and chosen shipping
-// method. Both fields default to zero/disabled so existing wiring stays
-// arithmetic-identical to before the change.
-type PricingPolicy struct {
-	// TaxRatePercent is the flat tax rate applied to the subtotal, e.g.
-	// 8.875 for 8.875%. 0 disables tax.
-	TaxRatePercent float64
-	// FreeShippingThreshold is the minimum subtotal (in minor units) at or
-	// above which the chosen method's shipping cost is overridden to 0.
-	// 0 disables the override.
-	FreeShippingThreshold int64
-}
-
-// computeTaxAndShipping applies the policy to a given subtotal + method,
-// returning the tax amount and the effective shipping cost (both in minor
-// units).
-func (p PricingPolicy) computeTaxAndShipping(subtotal int64, method domain.ShippingMethod) (int64, int64) {
-	var tax int64
-	if p.TaxRatePercent > 0 && subtotal > 0 {
-		tax = int64(math.Round(float64(subtotal) * p.TaxRatePercent / 100.0))
-	}
-	shipping := method.Cost()
-	if p.FreeShippingThreshold > 0 && subtotal >= p.FreeShippingThreshold {
-		shipping = 0
-	}
-	return tax, shipping
-}
+// PricingPolicy is an alias for the domain-level policy so the
+// composition root (cmd/web) can continue to construct one through the
+// checkout/app package while the actual math lives in the Pricing
+// domain service (checkout/domain.PriceQuote). The field set —
+// TaxRatePercent + FreeShippingThreshold — is unchanged, which keeps
+// the historical wiring arithmetic-identical to before the lift.
+type PricingPolicy = domain.PricingPolicy
 
 // IDGenerator returns a fresh order ID. Injected so tests can substitute a
 // deterministic generator.
@@ -207,13 +185,9 @@ func (s CheckoutService) WithPromoRedeemer(p PromoRedeemer) CheckoutService {
 // recorded but will not appear in any customer's order history.
 //
 // discount carries an already-resolved promo code (see promo/app.Service.
-// Resolve). Pricing math applies it BEFORE tax:
-//
-//	discountedSubtotal = subtotal - discount.AmountMinor
-//	tax                = round(discountedSubtotal * cfg.TaxRate / 100)
-//	effectiveShipping  = 0 if discount.FreeShipping
-//	                     else (free-shipping-threshold logic on discountedSubtotal)
-//	total              = discountedSubtotal + tax + effectiveShipping
+// Resolve). The pricing math — discount-before-tax, free-shipping
+// override, total — lives in the domain.PriceQuote service; this
+// orchestrator just hands it the inputs and reads the quote back.
 //
 // An empty Discount value (no code applied) is the same arithmetic as
 // before promo codes existed.
@@ -289,37 +263,20 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		_ = s.movements.Record(ctx, vid, -qty, "reserve", orderID)
 	}
 
-	// Pricing math, in order:
-	//   1. sum line totals → subtotal
-	//   2. subtract discount.AmountMinor (capped to 0) → discountedSubtotal
-	//   3. compute tax on discountedSubtotal so the saving carries through
-	//      the tax line (avoids charging tax on a discount the customer
-	//      never paid)
-	//   4. compute shipping from discountedSubtotal via the free-shipping
-	//      threshold; a free-shipping promo overrides that to 0 outright
-	//   5. total = discountedSubtotal + tax + effectiveShipping
-	var subtotal int64
-	for _, ln := range lines {
-		subtotal += ln.LineTotal()
-	}
-	discountAmount := discount.AmountMinor()
-	if discountAmount < 0 {
-		discountAmount = 0
-	}
-	if discountAmount > subtotal {
-		discountAmount = subtotal
-	}
-	discountedSubtotal := subtotal - discountAmount
-	tax, effectiveShipping := s.pricing.computeTaxAndShipping(discountedSubtotal, shipMethod)
-	if discount.FreeShipping() {
-		effectiveShipping = 0
-	}
+	// Pricing math is delegated to the Pricing domain service so this
+	// orchestrator stays focused on the workflow. The aggregate's
+	// constructor still takes the resolved tax / shipping / discount
+	// values — we just no longer compute them here.
+	quote := domain.PriceQuote(lines, shipMethod, domain.DiscountInput{
+		AmountMinor:  discount.AmountMinor(),
+		FreeShipping: discount.FreeShipping(),
+	}, s.pricing)
 	span.SetAttributes(
-		attribute.Int64("order.subtotal", subtotal),
-		attribute.Int64("order.discount", discountAmount),
+		attribute.Int64("order.subtotal", quote.Subtotal),
+		attribute.Int64("order.discount", quote.DiscountAmount),
 		attribute.String("order.discount_code", discount.Code()),
-		attribute.Int64("order.tax", tax),
-		attribute.Int64("order.shipping", effectiveShipping),
+		attribute.Int64("order.tax", quote.Tax),
+		attribute.Int64("order.shipping", quote.ShippingCost),
 	)
 
 	// channel records the sales channel the order was placed through; the
@@ -327,7 +284,7 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	// "web". Pluggable when iOS / API channels arrive — the signature is
 	// already wired through PlaceOrder and the OrderPlaced v2 schema.
 	const channel = "web"
-	order, err := domain.PlaceOrder(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, tax, effectiveShipping, discount.Code(), discountAmount, channel, s.now())
+	order, err := domain.PlaceOrder(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, quote.Tax, quote.ShippingCost, discount.Code(), quote.DiscountAmount, channel, s.now())
 	if err != nil {
 		_ = s.stock.Release(ctx, quantities)
 		for vid, qty := range quantities {
