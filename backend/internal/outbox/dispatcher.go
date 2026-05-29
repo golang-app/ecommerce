@@ -19,8 +19,14 @@ type Store interface {
 // Publisher is the subset of *eventbus.Bus the dispatcher uses. The
 // concrete bus satisfies it; tests pass a fake to assert what was
 // published.
+//
+// PublishWithID threads the outbox row's id through to id-aware
+// subscribers (eventbus.HandlerWithID) — that id is what
+// internal/inbox uses as a content-stable dedupe key, completing the
+// at-least-once -> effectively exactly-once story at the subscriber
+// boundary.
 type Publisher interface {
-	Publish(ctx context.Context, e eventbus.Event)
+	PublishWithID(ctx context.Context, eventID int64, e eventbus.Event)
 }
 
 // Decoder turns a stored (kind, payload) row back into the integration
@@ -135,7 +141,7 @@ func (d *Dispatcher) dispatchOnce(ctx context.Context) {
 			}
 			continue
 		}
-		d.bus.Publish(ctx, event)
+		d.bus.PublishWithID(ctx, r.ID, event)
 		if err := d.store.MarkSent(ctx, r.ID); err != nil {
 			if d.logger != nil {
 				d.logger.WithError(err).WithFields(logrus.Fields{

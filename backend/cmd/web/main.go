@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/ardanlabs/conf"
@@ -24,6 +23,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/inbox"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/outbox"
@@ -134,6 +134,11 @@ func main() {
 	// checkout adapter calls AppendTx inside its own tx) and as the
 	// dispatcher's source of unsent rows.
 	outboxStore := outbox.NewPostgres(db)
+	// Inbox store: per-subscriber dedupe of redelivered Outbox events.
+	// Each Outbox-driven subscriber is wrapped via inbox.Wrap below so
+	// the at-least-once contract from the Outbox becomes effectively
+	// exactly-once at the subscriber boundary. See internal/inbox.
+	inboxStore := inbox.NewPostgres(db)
 	// Search OHS: published-language storage + service. The same *app.Service
 	// instance is wired as both productcatalog's SearchIndexer (write side)
 	// and layout's searchService (read side) — one struct, two roles.
@@ -187,83 +192,86 @@ func main() {
 		From:     cfg.MailFrom,
 	}, logger)
 
-	// Cross-context integration: when checkout reports an order paid, the cart
-	// context empties the basket it was placed from.
-	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
-		return cartSrv.Clear(ctx, e.(checkoutintegration.OrderPaid).SessionID)
-	})
+	// Cross-context integration: the three OrderPaid subscribers are
+	// registered with SubscribeWithID and wrapped through inbox.Wrap
+	// so the outbox dispatcher's at-least-once redelivery becomes
+	// effectively exactly-once at each subscriber. The subscriber
+	// names are stable strings — they are the natural key in the
+	// inbox_handled table, so renaming them is a migration concern.
 
-	// Third OrderPaid subscriber: the fulfillment Process Manager
-	// spawns a new Fulfillment record in StatusScheduled. The handler
-	// is idempotent (FindByOrder + ErrAlreadyExists no-op) so the
-	// outbox dispatcher's at-least-once redelivery cannot create
-	// duplicate fulfillments after a crash between publish and
-	// MarkSent.
-	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
-		paid := e.(checkoutintegration.OrderPaid)
-		return fulfillmentSrv.OnOrderPaid(ctx, paid.OrderID, paid.At)
-	})
-
-	// Second OrderPaid subscriber: render and dispatch the order
-	// confirmation email. Anonymous orders (CustomerID == "") are
-	// skipped — there is no inbox to mail. Any failure inside the
-	// subscriber is returned (and logged by the bus) but never aborts
-	// the publisher's own transaction; the cart-clearing subscriber
-	// above is unaffected.
-	//
-	// IDEMPOTENCY. The outbox dispatcher delivers integration events
-	// at-least-once: a process crash between Publish and MarkSent will
-	// republish the same OrderPaid on the next tick, and we'd send the
-	// confirmation email twice. Sending Clear() twice on a cart is a
-	// no-op so the cart-clear handler above is naturally safe, but
-	// duplicate emails are user-visible spam. The in-memory dedupe
-	// below remembers recently-seen OrderIDs and drops the duplicate
-	// publish.
-	//
-	// TRADE-OFF. This dedupe only survives within a single process —
-	// a restart wipes the map. That is acceptable for a demo because
-	// the outbox dispatcher won't republish a sent row (sent_at is
-	// set) once MarkSent has committed. The narrow remaining window
-	// is: crash AFTER publish, BEFORE MarkSent, then restart — in
-	// which case the row republishes and the in-memory dedupe is
-	// empty, so a duplicate email goes out. A real implementation
-	// would replace this with a persistent dedupe key (a
-	// sent_emails(order_id, kind) table, or wiring the order's
-	// confirmation_email_sent_at via a domain command) so the
-	// duplicate is suppressed across restarts too.
-	var (
-		sentEmailsMu sync.Mutex
-		sentEmails   = map[string]struct{}{}
+	// 1. cart.clear-on-orderpaid — empty the basket the order was
+	//    placed from. Clear() is a natural-id no-op the second time
+	//    around, so the inbox wrap is belt-and-braces here: cheaper
+	//    than the cart round-trip, and uniform with the other two.
+	bus.SubscribeWithID(
+		checkoutintegration.OrderPaid{}.EventName(),
+		inbox.Wrap("cart.clear-on-orderpaid", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				return cartSrv.Clear(ctx, e.(checkoutintegration.OrderPaid).SessionID)
+			},
+		),
 	)
-	bus.Subscribe(checkoutintegration.OrderPaid{}.EventName(), func(ctx context.Context, e eventbus.Event) error {
-		paid := e.(checkoutintegration.OrderPaid)
-		if paid.CustomerID == "" {
-			return nil
-		}
-		sentEmailsMu.Lock()
-		if _, dup := sentEmails[paid.OrderID]; dup {
-			sentEmailsMu.Unlock()
-			return nil
-		}
-		sentEmails[paid.OrderID] = struct{}{}
-		sentEmailsMu.Unlock()
-		view, err := checkoutQry.Find(ctx, paid.OrderID)
-		if err != nil {
-			return fmt.Errorf("order confirmation: load view: %w", err)
-		}
-		msg, err := layout.RenderOrderConfirmation(view, cfg.BaseURL)
-		if err != nil {
-			return fmt.Errorf("order confirmation: render: %w", err)
-		}
-		// Make sure the recipient is the actual customer email even
-		// if RenderOrderConfirmation derived it from the view; the
-		// integration event is the authoritative source.
-		msg.To = paid.CustomerID
-		if err := mailerSrv.Send(ctx, msg); err != nil {
-			return fmt.Errorf("order confirmation: send: %w", err)
-		}
-		return nil
-	})
+
+	// 2. fulfillment.on-orderpaid — the fulfillment Process Manager
+	//    spawns a new Fulfillment record in StatusScheduled. The
+	//    handler is itself idempotent (FindByOrder + ErrAlreadyExists
+	//    no-op); the inbox wrap stops the redelivery before it ever
+	//    reaches the service.
+	bus.SubscribeWithID(
+		checkoutintegration.OrderPaid{}.EventName(),
+		inbox.Wrap("fulfillment.on-orderpaid", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				paid := e.(checkoutintegration.OrderPaid)
+				return fulfillmentSrv.OnOrderPaid(ctx, paid.OrderID, paid.At)
+			},
+		),
+	)
+
+	// 3. email.order-confirmation — render and dispatch the order
+	//    confirmation email. Anonymous orders (CustomerID == "") are
+	//    skipped — there is no inbox to mail. Any failure inside the
+	//    subscriber is returned (and logged by the bus) but never
+	//    aborts the publisher's own transaction; the cart-clearing
+	//    subscriber above is unaffected.
+	//
+	//    IDEMPOTENCY. The Outbox dispatcher delivers integration
+	//    events at-least-once: a process crash between Publish and
+	//    MarkSent will republish the same OrderPaid on the next tick.
+	//    Sending the confirmation email twice would be user-visible
+	//    spam. Previously this subscriber kept an in-memory
+	//    sync.Map dedupe set which did not survive process restarts
+	//    (the only window where the redelivery actually happens).
+	//    inbox.Wrap replaces it with a persistent
+	//    (subscriber, event_id) row in inbox_handled keyed on the
+	//    outbox row id, so the dedupe survives crashes.
+	bus.SubscribeWithID(
+		checkoutintegration.OrderPaid{}.EventName(),
+		inbox.Wrap("email.order-confirmation", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				paid := e.(checkoutintegration.OrderPaid)
+				if paid.CustomerID == "" {
+					return nil
+				}
+				view, err := checkoutQry.Find(ctx, paid.OrderID)
+				if err != nil {
+					return fmt.Errorf("order confirmation: load view: %w", err)
+				}
+				msg, err := layout.RenderOrderConfirmation(view, cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("order confirmation: render: %w", err)
+				}
+				// Make sure the recipient is the actual customer
+				// email even if RenderOrderConfirmation derived it
+				// from the view; the integration event is the
+				// authoritative source.
+				msg.To = paid.CustomerID
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order confirmation: send: %w", err)
+				}
+				return nil
+			},
+		),
+	)
 
 	app.AddBoundedContext(cartBD)
 
