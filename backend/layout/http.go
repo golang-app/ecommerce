@@ -232,7 +232,14 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 
 	r.HandleFunc("/admin/inventory", observability.HTTPWrap(m.handler.AdminInventory, m.logger)).Methods("GET")
 
+	// Reviews admin: list + moderation actions. The approve/reject paths
+	// follow the same /{id}/<verb> shape as delete so the existing
+	// "register specific sub-paths before any catch-all" convention is
+	// preserved (none of these conflict — they're sibling verbs — but
+	// keeping them together makes the moderation surface easy to grep).
 	r.HandleFunc("/admin/reviews", observability.HTTPWrap(m.handler.AdminReviews, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/reviews/{id}/approve", observability.HTTPWrap(m.handler.AdminApproveReview, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/reviews/{id}/reject", observability.HTTPWrap(m.handler.AdminRejectReview, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/reviews/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteReview, m.logger)).Methods("POST")
 
 	// Promo codes admin: list + inline create on /admin/promo-codes; the

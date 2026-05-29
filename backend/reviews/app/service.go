@@ -29,13 +29,18 @@ var ErrNotVerifiedBuyer = errors.New("only verified buyers can leave a review")
 // Storage is the persistence port for reviews. Adapters live in
 // reviews/adapter (postgres + in-memory). The unique index on
 // (product_id, customer_id) WHERE deleted_at IS NULL is mapped to
-// ErrDuplicateReview by Insert.
+// ErrDuplicateReview by Insert. ByProduct / AggregateForProducts only
+// surface approved reviews (the storefront calls them); the admin queue
+// uses ListByStatus / ListAll to see every row.
 type Storage interface {
 	Insert(ctx context.Context, r domain.Review) error
 	SoftDelete(ctx context.Context, id string) error
+	SetStatus(ctx context.Context, id string, status domain.Status) error
 	ByProduct(ctx context.Context, productID string, limit int) ([]domain.Review, error)
 	AggregateForProducts(ctx context.Context, productIDs []string) (map[string]domain.Aggregate, error)
 	HasReviewed(ctx context.Context, productID, customerID string) (bool, error)
+	ListByStatus(ctx context.Context, status domain.Status, limit int) ([]domain.Review, error)
+	ListAll(ctx context.Context, limit int) ([]domain.Review, error)
 }
 
 // VerifiedBuyerChecker is the cross-context port used to gate Submit. The
@@ -111,7 +116,10 @@ func (s *Service) Submit(ctx context.Context, productID, customerID, body string
 		return ErrDuplicateReview
 	}
 
-	review, err := domain.NewReview(s.newID(), productID, customerID, body, rating, s.now())
+	// New submissions always land as pending — moderation policy lives
+	// here so the domain stays a pure value object and the adapters stay
+	// dumb. Admins flip the status via Approve / Reject.
+	review, err := domain.NewReview(s.newID(), productID, customerID, body, rating, s.now(), domain.StatusPending)
 	if err != nil {
 		return err
 	}
@@ -124,6 +132,25 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return errors.New("review id is required")
 	}
 	return s.storage.SoftDelete(ctx, id)
+}
+
+// Approve flips a review's moderation state to approved. From this point
+// the row participates in ByProduct / AggregateForProducts (the storefront).
+func (s *Service) Approve(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("review id is required")
+	}
+	return s.storage.SetStatus(ctx, id, domain.StatusApproved)
+}
+
+// Reject flips a review's moderation state to rejected. The row stays in
+// storage (so the partial unique index still blocks resubmission until an
+// admin soft-deletes it) but disappears from the storefront.
+func (s *Service) Reject(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return errors.New("review id is required")
+	}
+	return s.storage.SetStatus(ctx, id, domain.StatusRejected)
 }
 
 // ListForProduct returns the most recent active reviews for a product,
@@ -155,6 +182,25 @@ func (s *Service) HasReviewed(ctx context.Context, productID, customerID string)
 		return false, nil
 	}
 	return s.storage.HasReviewed(ctx, productID, customerID)
+}
+
+// ListPending returns the pending moderation queue (newest first, capped at
+// limit). Powers the default tab on the admin reviews page.
+func (s *Service) ListPending(ctx context.Context, limit int) ([]domain.Review, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	return s.storage.ListByStatus(ctx, domain.StatusPending, limit)
+}
+
+// ListAll returns every review (any status, excluding soft-deleted),
+// newest first, capped at limit. Powers the "all" tab on the admin reviews
+// page.
+func (s *Service) ListAll(ctx context.Context, limit int) ([]domain.Review, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	return s.storage.ListAll(ctx, limit)
 }
 
 // newRandomID returns a 16-byte hex string — 128 bits of randomness is well

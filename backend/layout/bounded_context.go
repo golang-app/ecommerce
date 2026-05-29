@@ -118,14 +118,19 @@ type promoService interface {
 
 // reviewsService is the narrow seam the layout package needs from the
 // reviews bounded context: list / aggregate for the product page, submit /
-// has-reviewed for the customer-facing review form, and delete for the
-// admin moderation page. Mirrors *reviews/app.Service.
+// has-reviewed for the customer-facing review form, and the moderation
+// surface (approve / reject / delete / list pending / list all) for the
+// admin reviews page. Mirrors *reviews/app.Service.
 type reviewsService interface {
 	ListForProduct(ctx context.Context, productID string, limit int) ([]reviewsDomain.Review, error)
 	AggregateForProducts(ctx context.Context, productIDs []string) (map[string]reviewsDomain.Aggregate, error)
 	HasReviewed(ctx context.Context, productID, customerID string) (bool, error)
 	Submit(ctx context.Context, productID, customerID, body string, rating int) error
 	Delete(ctx context.Context, id string) error
+	Approve(ctx context.Context, id string) error
+	Reject(ctx context.Context, id string) error
+	ListPending(ctx context.Context, limit int) ([]reviewsDomain.Review, error)
+	ListAll(ctx context.Context, limit int) ([]reviewsDomain.Review, error)
 }
 
 // wishlistService is the narrow seam the layout package needs from the
