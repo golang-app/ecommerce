@@ -3,11 +3,13 @@ package adapter
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"go.opentelemetry.io/otel/attribute"
@@ -16,12 +18,27 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type Postgres struct {
-	db *sql.DB
+// OutboxAppender is the narrow seam through which the checkout
+// adapter stages integration events into the Transactional Outbox.
+// The outbox row is INSERTed inside the same *sql.Tx that appends the
+// domain events and projects them — so the integration event commits
+// atomically with the business write. A nil OutboxAppender disables
+// the integration; older test wiring that doesn't need it stays
+// compatible.
+type OutboxAppender interface {
+	AppendTx(ctx context.Context, tx *sql.Tx, kind string, payload []byte) error
 }
 
-func NewPostgres(db *sql.DB) Postgres {
-	return Postgres{db: db}
+type Postgres struct {
+	db     *sql.DB
+	outbox OutboxAppender
+}
+
+// NewPostgres builds the checkout Postgres adapter. outbox may be nil
+// — Save then writes events + projections only, matching the previous
+// behaviour (used by tests that don't exercise the integration path).
+func NewPostgres(db *sql.DB, outbox OutboxAppender) Postgres {
+	return Postgres{db: db, outbox: outbox}
 }
 
 // Save appends the aggregate's pending events to the event store and projects
@@ -67,6 +84,27 @@ func (p Postgres) Save(ctx context.Context, order *domain.Order) error {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return err
+		}
+	}
+
+	// Stage integration events into the outbox INSIDE the same
+	// transaction. The DB guarantees the business write and the
+	// outbox row commit (or roll back) together — that atomicity is
+	// the whole point of the pattern. A separate dispatcher will
+	// publish each row onto the in-process bus shortly after commit.
+	if p.outbox != nil {
+		records, err := extractIntegrationEvents(order, pending)
+		if err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+		for _, rec := range records {
+			if err = p.outbox.AppendTx(ctx, tx, rec.Kind, rec.Payload); err != nil {
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+				return err
+			}
 		}
 	}
 
@@ -291,4 +329,52 @@ func (p Postgres) ListAll(ctx context.Context) ([]query.OrderSummary, error) {
 		return nil, fmt.Errorf("rows: %w", err)
 	}
 	return summaries, nil
+}
+
+// outboxRecord is the already-encoded integration event the adapter
+// is about to stage into the outbox table. Kind is the wire name (it
+// MUST match integration.X{}.EventName() so the dispatcher's decoder
+// reaches the right Unmarshal); Payload is the JSON body.
+type outboxRecord struct {
+	Kind    string
+	Payload []byte
+}
+
+// extractIntegrationEvents maps the aggregate's pending domain events
+// into the integration events checkout publishes outward. Keeping
+// this mapping inside the adapter (next to the rest of the
+// persistence layer) means the application service stays oblivious to
+// the outbox — its only contract with the storage is still
+// Save(order).
+//
+// The current rule is intentionally narrow: a single
+// PaymentSucceeded on a paid order emits one integration.OrderPaid.
+// The aggregate's projection (apply()) has already moved Status to
+// StatusPaid by the time we run, so reading o.Status() here is the
+// final post-apply state.
+func extractIntegrationEvents(o *domain.Order, pending []domain.Event) ([]outboxRecord, error) {
+	if o.Status() != domain.StatusPaid {
+		return nil, nil
+	}
+	var out []outboxRecord
+	for _, e := range pending {
+		ps, ok := e.(domain.PaymentSucceeded)
+		if !ok {
+			continue
+		}
+		payload, err := json.Marshal(integration.OrderPaid{
+			OrderID:    o.ID(),
+			SessionID:  o.UserID(),
+			CustomerID: o.CustomerID(),
+			At:         ps.At,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("encode OrderPaid: %w", err)
+		}
+		out = append(out, outboxRecord{
+			Kind:    integration.OrderPaid{}.EventName(),
+			Payload: payload,
+		})
+	}
+	return out, nil
 }

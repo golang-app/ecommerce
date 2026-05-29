@@ -28,6 +28,12 @@ services:
       # released. Defaults: 30m / 5m. Override here for dev/testing.
       RESERVATION_TTL: ${RESERVATION_TTL:-30m}
       RESERVATION_SWEEP_INTERVAL: ${RESERVATION_SWEEP_INTERVAL:-5m}
+      # Transactional Outbox dispatcher poll cadence. The dispatcher
+      # drains unsent integration events from outbox_event and
+      # republishes them onto the in-process bus. Lower values cut
+      # publish lag at the cost of more idle SELECTs; the default keeps
+      # lag sub-second under normal load.
+      OUTBOX_INTERVAL: ${OUTBOX_INTERVAL:-1s}
       # Tax rate (percent, e.g. 8.875 for 8.875%) and the free-shipping
       # threshold in MINOR units (cents). Both default to zero (disabled).
       TAX_RATE_PERCENT: ${TAX_RATE_PERCENT:-0}

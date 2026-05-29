@@ -61,6 +61,13 @@ type config struct {
 	// runs. Set to 0 (or any non-positive value) to disable the sweeper
 	// entirely. Default keeps lag low without hammering the read side.
 	ReservationSweepInterval time.Duration `conf:"default:5m"`
+	// OutboxInterval is how often the Transactional Outbox dispatcher
+	// polls outbox_event for unsent rows and republishes them onto the
+	// in-process bus. A non-positive value disables the dispatcher
+	// entirely (integration events stay durable in the table but no
+	// subscriber will be notified — useful only for offline diagnostics).
+	// Default keeps the publish lag sub-second under normal load.
+	OutboxInterval time.Duration `conf:"default:1s"`
 	// TaxRatePercent is the flat tax rate applied to every order's subtotal
 	// at checkout time, expressed as a percentage (e.g. 8.875 for 8.875%).
 	// Defaults to 0, i.e. tax-free; tax is applied to the subtotal and is

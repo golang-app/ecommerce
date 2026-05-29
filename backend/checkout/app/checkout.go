@@ -9,8 +9,6 @@ import (
 
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
-	"github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
-	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	"go.opentelemetry.io/otel/attribute"
@@ -20,8 +18,11 @@ import (
 
 // tracer is the package-level tracer for the checkout application service.
 // The parent Place span and its named child spans (cart.get, stock.reserve,
-// payment.charge, order.save, events.publish) all flow through this scope so
-// they share a single instrumentation name in the trace backend.
+// payment.charge, order.save) all flow through this scope so they share a
+// single instrumentation name in the trace backend. The previous
+// events.publish span has been retired with the inline event bus call —
+// integration events are now staged into the outbox inside order.save and
+// published asynchronously by the outbox dispatcher.
 var tracer = observability.Tracer("github.com/bkielbasa/go-ecommerce/backend/checkout/app")
 
 // recordSpanError marks the span errored and attaches the underlying error so
@@ -49,13 +50,6 @@ func totalReservedUnits(quantities map[string]int) int64 {
 // minimal.
 type CartReader interface {
 	Get(ctx context.Context, sessID string) (*cartDomain.Cart, error)
-}
-
-// EventPublisher publishes integration events for other bounded contexts.
-// Checkout uses it instead of calling other contexts directly — e.g. it
-// announces that an order was paid rather than reaching into the cart.
-type EventPublisher interface {
-	Publish(ctx context.Context, e eventbus.Event)
 }
 
 type OrderStorage interface {
@@ -154,20 +148,25 @@ type CheckoutService struct {
 	payment   PaymentProcessor
 	stock     StockReserver
 	movements StockMovements
-	events    EventPublisher
 	promo     PromoRedeemer
 	newID     IDGenerator
 	now       func() time.Time
 	pricing   PricingPolicy
 }
 
+// NewCheckoutService constructs the checkout command service.
+//
+// Note: there is no EventPublisher dependency. Integration events
+// (e.g. OrderPaid) are staged into the Transactional Outbox by the
+// storage layer inside Save's own transaction, then published by a
+// separate dispatcher. The application service is intentionally
+// oblivious to that wiring — it only knows how to call Save.
 func NewCheckoutService(
 	cart CartReader,
 	storage OrderStorage,
 	payment PaymentProcessor,
 	stock StockReserver,
 	movements StockMovements,
-	events EventPublisher,
 	newID IDGenerator,
 	pricing PricingPolicy,
 ) CheckoutService {
@@ -180,7 +179,6 @@ func NewCheckoutService(
 		payment:   payment,
 		stock:     stock,
 		movements: movements,
-		events:    events,
 		promo:     nopPromoRedeemer{},
 		newID:     newID,
 		now:       func() time.Time { return time.Now().UTC() },
@@ -418,19 +416,12 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		}
 	}
 
-	// Announce the paid order. Subscribers (e.g. the cart context emptying the
-	// basket) react best-effort; their failures never block the confirmation.
-	publishCtx, publishSpan := tracer.Start(ctx, "events.publish", trace.WithAttributes(
-		attribute.String("event.name", integration.OrderPaid{}.EventName()),
-		attribute.String("order.id", orderID),
-	))
-	s.events.Publish(publishCtx, integration.OrderPaid{
-		OrderID:    order.ID(),
-		SessionID:  sessID,
-		CustomerID: customerID,
-		At:         s.now(),
-	})
-	publishSpan.End()
+	// Integration events are no longer announced inline. The Save above
+	// has already staged an OrderPaid row into the outbox inside the
+	// same transaction that committed the domain events — the
+	// background dispatcher will publish it to the bus. That's what
+	// makes the hand-off durable across crashes between commit and
+	// publish.
 
 	return *order, nil
 }
