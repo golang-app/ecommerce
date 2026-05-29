@@ -1,0 +1,23 @@
+{{define "title"}}stores · {{.SiteName}}{{end}}
+
+{{define "main"}}
+  <h1 class="page-title">stores</h1>
+  <p class="muted">Each store has its own host and currency. Switching stores keeps you on the same page.</p>
+  {{if .Links}}
+    <div class="stores-grid">
+      {{range .Links}}
+        <div class="stores-card{{if .IsActive}} stores-card--active{{end}}">
+          <span class="stores-card__name">{{.Store.Name}}</span>
+          <span class="stores-card__ccy">{{.Store.Currency}}</span>
+          {{if .IsActive}}
+            <span class="stores-card__badge">current</span>
+          {{else}}
+            <a class="stores-card__link" href="{{.URL}}">visit</a>
+          {{end}}
+        </div>
+      {{end}}
+    </div>
+  {{else}}
+    <p class="muted">no stores configured.</p>
+  {{end}}
+{{end}}

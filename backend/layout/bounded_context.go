@@ -18,6 +18,7 @@ import (
 	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
 	searchapp "github.com/bkielbasa/go-ecommerce/backend/search/app"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
+	storeDomain "github.com/bkielbasa/go-ecommerce/backend/store/domain"
 	wishlistDomain "github.com/bkielbasa/go-ecommerce/backend/wishlist/domain"
 	"github.com/sirupsen/logrus"
 )
@@ -146,6 +147,19 @@ type searchService interface {
 	Search(ctx context.Context, q string, opts searchapp.QueryOptions) ([]searchapp.Hit, error)
 }
 
+// storeService is the narrow seam the layout package needs from the
+// store bounded context. ResolveByHost drives the per-request
+// middleware that binds the active store to the request context; the
+// rest of the surface powers the footer switcher / admin CRUD.
+type storeService interface {
+	ResolveByHost(ctx context.Context, host string) (storeDomain.Store, error)
+	Find(ctx context.Context, id string) (storeDomain.Store, error)
+	ListAll(ctx context.Context) ([]storeDomain.Store, error)
+	Create(ctx context.Context, s storeDomain.Store) error
+	Update(ctx context.Context, s storeDomain.Store) error
+	Delete(ctx context.Context, id string) error
+}
+
 // checkoutQueries is the read side of the checkout context (CQRS); it returns
 // dedicated read models, not the write aggregate.
 type checkoutQueries interface {
@@ -165,7 +179,7 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -180,6 +194,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			wishlistSrv: wishlistSrv,
 			promoSrv:    promoSrv,
 			searchSrv:   searchSrv,
+			storeSrv:    storeSrv,
 			imageStore:  imageStore,
 			mailer:      mailerSrv,
 			baseURL:     baseURL,

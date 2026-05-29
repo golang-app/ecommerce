@@ -28,6 +28,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/reviews"
 	"github.com/bkielbasa/go-ecommerce/backend/search"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
+	"github.com/bkielbasa/go-ecommerce/backend/store"
 	"github.com/bkielbasa/go-ecommerce/backend/wishlist"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -151,6 +152,11 @@ func main() {
 	// productcatalog_variant through the table's FK. Returns both the
 	// BoundedContext envelope and the concrete service which layout consumes.
 	wishlistBD, wishlistSrv := wishlist.New(db)
+	// Store bounded context: owns the `store` table and powers the
+	// per-request active-store resolution. The service is consumed by
+	// layout (the per-request middleware + admin CRUD + footer
+	// switcher); no other context depends on it.
+	storeBD, storeSrv := store.New(db)
 
 	// Mailer is the outbound-email abstraction. When SMTP_HOST is empty
 	// (the dev default), New() returns a LogMailer that writes each email
@@ -208,7 +214,12 @@ func main() {
 	// remain stored and charged in DefaultCurrency (USD).
 	fxRates := fx.New(cfg.DefaultCurrency, cfg.SupportedCurrencies, cfg.FXRates, logger)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
+	// StoreMiddleware resolves the active store per request and binds
+	// it on the request context. It MUST run before the CSRF middleware
+	// so the store is available to every handler/template — including
+	// the renders that mint the CSRF token.
+	app.Use(layout.StoreMiddleware(storeSrv))
 	// CSRF protection wraps every route on the application router. It must be
 	// installed after layout.New has set up the session store (which the
 	// middleware reads from) but before app.Run() begins serving.
@@ -220,6 +231,7 @@ func main() {
 	app.AddBoundedContext(wishlistBD)
 	app.AddBoundedContext(promoBD)
 	app.AddBoundedContext(searchBD)
+	app.AddBoundedContext(storeBD)
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock
