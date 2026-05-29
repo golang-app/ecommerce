@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	searchdomain "github.com/bkielbasa/go-ecommerce/backend/search/domain"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -26,7 +29,9 @@ func recordSpanError(span trace.Span, err error) {
 }
 
 type ProductService struct {
-	storage ProductStorage
+	storage   ProductStorage
+	searchIdx SearchIndexer
+	now       func() time.Time
 }
 
 type ProductStorage interface {
@@ -75,8 +80,56 @@ type ProductStorage interface {
 	ListStockMovements(ctx context.Context, variantID string, limit int) ([]domain.StockMovement, error)
 }
 
+// NewProductService wires the service against a ProductStorage. The
+// SearchIndexer slot defaults to NoopSearchIndexer so callers that do not
+// (yet) participate in search (tests, the CLI) keep working unchanged;
+// production composition swaps in the live indexer with WithSearchIndexer.
 func NewProductService(s ProductStorage) ProductService {
-	return ProductService{storage: s}
+	return ProductService{
+		storage:   s,
+		searchIdx: NoopSearchIndexer,
+		now:       time.Now,
+	}
+}
+
+// WithSearchIndexer returns a copy of the service that publishes index
+// updates after every successful product mutation. Index failures are
+// best-effort: they are logged and discarded, never returned, so a flaky
+// search index cannot break product writes (the catalogue is the source
+// of truth — the index can be rebuilt via `cli reindex`).
+func (ps ProductService) WithSearchIndexer(idx SearchIndexer) ProductService {
+	if idx == nil {
+		idx = NoopSearchIndexer
+	}
+	ps.searchIdx = idx
+	return ps
+}
+
+// reindexProduct re-loads the product from storage (so the latest variants,
+// categories and attributes are picked up) and translates it through the
+// ACL into a search Document. Failures are logged at Warn — the product
+// mutation that triggered this call has already succeeded.
+func (ps ProductService) reindexProduct(ctx context.Context, productID string) {
+	p, err := ps.storage.Find(ctx, productID)
+	if err != nil {
+		logrus.WithError(err).WithField("product_id", productID).Warn("search reindex: cannot load product")
+		return
+	}
+	doc, err := productToDocument(p, ps.now())
+	if err != nil {
+		logrus.WithError(err).WithField("product_id", productID).Warn("search reindex: cannot build document")
+		return
+	}
+	if err := ps.searchIdx.Index(ctx, doc); err != nil {
+		logrus.WithError(err).WithField("product_id", productID).Warn("search reindex: indexer rejected document")
+	}
+}
+
+// removeFromIndex removes the product from the index, best-effort.
+func (ps ProductService) removeFromIndex(ctx context.Context, productID string) {
+	if err := ps.searchIdx.Remove(ctx, searchdomain.KindProduct, productID); err != nil {
+		logrus.WithError(err).WithField("product_id", productID).Warn("search reindex: indexer failed to remove document")
+	}
 }
 
 func (ps ProductService) AllProducts(ctx context.Context) ([]domain.Product, error) {
@@ -158,19 +211,15 @@ func (ps ProductService) Release(ctx context.Context, quantities map[string]int)
 }
 
 // List returns the products matching the given listing-page query.
+//
+// Note: free-text search no longer flows through here. The storefront's
+// /search route is served by the search bounded context (an OHS); this
+// method is strictly category + facet filtering now.
 func (ps ProductService) List(ctx context.Context, q ProductQuery) ([]domain.Product, error) {
 	ctx, span := tracer.Start(ctx, "Catalog.List", trace.WithAttributes(
 		attribute.String("catalog.category_slug", q.CategorySlug),
-		attribute.Bool("catalog.has_search", q.Search != ""),
 	))
 	defer span.End()
-
-	// Search-driven listings are the user-visible search count; non-search
-	// listings (category browsing) are intentionally NOT counted as
-	// searches.
-	if q.Search != "" {
-		observability.SearchQueriesInc(ctx)
-	}
 
 	products, err := ps.storage.ListProducts(ctx, q)
 	if err != nil {
@@ -427,7 +476,13 @@ func (ps ProductService) Add(ctx context.Context, id, name, desc string, priceMi
 	// A simple product is purchasable through a single default variant
 	// carrying its price (no options) and the product image.
 	defaultVariant := domain.NewVariant("var-"+id, id, thumbnail, nil, priceVO, defaultStock)
-	return ps.storage.AddVariant(ctx, id, 0, defaultVariant)
+	if err := ps.storage.AddVariant(ctx, id, 0, defaultVariant); err != nil {
+		return err
+	}
+	// Publish to the search index after the variant exists so PriceFrom
+	// reflects the freshly inserted default variant's price.
+	ps.reindexProduct(ctx, id)
+	return nil
 }
 
 // UpdateProduct validates the core product fields and persists them. It only
@@ -450,13 +505,21 @@ func (ps ProductService) UpdateProduct(ctx context.Context, id, name, desc strin
 	if err != nil {
 		return err
 	}
-	return ps.storage.UpdateProduct(ctx, p)
+	if err := ps.storage.UpdateProduct(ctx, p); err != nil {
+		return err
+	}
+	ps.reindexProduct(ctx, id)
+	return nil
 }
 
 // DeleteProduct removes a product; its variants, category and attribute links
 // cascade in storage.
 func (ps ProductService) DeleteProduct(ctx context.Context, id string) error {
-	return ps.storage.DeleteProduct(ctx, id)
+	if err := ps.storage.DeleteProduct(ctx, id); err != nil {
+		return err
+	}
+	ps.removeFromIndex(ctx, id)
+	return nil
 }
 
 // SetVariantStock sets a single variant's stock level (rejecting negatives)
@@ -626,6 +689,9 @@ func (ps ProductService) AddVariantProduct(ctx context.Context, id, name, desc, 
 			return err
 		}
 	}
+	// Index after all variants are inserted so PriceFrom reflects the
+	// full set (the lowest variant price).
+	ps.reindexProduct(ctx, id)
 	return nil
 }
 
@@ -679,7 +745,12 @@ func (ps ProductService) AddVariantToProduct(ctx context.Context, productID, sku
 	existing := product.Variants()
 	variantID := ps.uniqueVariantID(productID, sku, existing)
 	position := len(existing)
-	return ps.storage.AddVariant(ctx, productID, position, domain.NewVariant(variantID, sku, image, options, price, stock))
+	if err := ps.storage.AddVariant(ctx, productID, position, domain.NewVariant(variantID, sku, image, options, price, stock)); err != nil {
+		return err
+	}
+	// A new variant can change the displayed "from" price; reindex.
+	ps.reindexProduct(ctx, productID)
+	return nil
 }
 
 // uniqueVariantID derives a variant id (slug of sku, else productID-<n>) that
@@ -711,7 +782,17 @@ func (ps ProductService) UpdateVariant(ctx context.Context, variantID, sku, imag
 	if _, err := domain.NewCurrency(currency); err != nil {
 		return fmt.Errorf("invalid currency: %w", err)
 	}
-	return ps.storage.UpdateVariant(ctx, variantID, sku, image, priceMinor, currency, stock)
+	// Resolve the owning product up front so we can reindex it after the
+	// update. We don't fail the mutation if the lookup misses (a missing
+	// variant is the storage layer's problem to report).
+	owner, _, lookupErr := ps.storage.FindVariant(ctx, variantID)
+	if err := ps.storage.UpdateVariant(ctx, variantID, sku, image, priceMinor, currency, stock); err != nil {
+		return err
+	}
+	if lookupErr == nil {
+		ps.reindexProduct(ctx, string(owner.ID()))
+	}
+	return nil
 }
 
 // DeleteVariant removes a variant from a product, refusing to delete the last
@@ -724,7 +805,13 @@ func (ps ProductService) DeleteVariant(ctx context.Context, productID, variantID
 	if len(product.Variants()) <= 1 {
 		return fmt.Errorf("cannot delete the last variant: a product needs at least one variant")
 	}
-	return ps.storage.DeleteVariant(ctx, variantID)
+	if err := ps.storage.DeleteVariant(ctx, variantID); err != nil {
+		return err
+	}
+	// The deleted variant may have been the cheapest; reindex so PriceFrom
+	// is correct.
+	ps.reindexProduct(ctx, productID)
+	return nil
 }
 
 // AddOptionType adds a new option type to an existing product. Because a

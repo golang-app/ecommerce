@@ -20,9 +20,14 @@ var rootCmd = &cobra.Command{
 
 func Execute(db *sql.DB) {
 	storage := adapter.NewPostgres(db)
-	appServ := app.NewProductService(storage)
+	// CLI catalogue writes do not maintain the search index — the CLI's
+	// `reindex` subcommand owns the index lifecycle separately, building
+	// its own search.New(db). Wiring the NoopSearchIndexer keeps every
+	// other subcommand index-agnostic.
+	appServ := app.NewProductService(storage).WithSearchIndexer(app.NoopSearchIndexer)
 	rootCmd.AddCommand(newProductCatalogCmd(appServ))
 	rootCmd.AddCommand(newSeedsCmd(appServ, db))
+	rootCmd.AddCommand(newReindexCmd(db))
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

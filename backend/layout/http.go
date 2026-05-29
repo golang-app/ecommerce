@@ -50,6 +50,7 @@ type httpHandler struct {
 	reviewsSrv  reviewsService
 	wishlistSrv wishlistService
 	promoSrv    promoService
+	searchSrv   searchService
 	imageStore  imagestore.Store
 	mailer      mailer.Mailer
 	baseURL     string
