@@ -13,25 +13,26 @@ import "time"
 // aggregate's unexported fields without breaking encapsulation for the
 // rest of the codebase.
 type OrderSnapshot struct {
-	ID            string
-	UserID        string
-	CustomerID    string
-	ShipTo        Address
-	ShipMethod    ShippingMethod
-	PayMethod     PaymentMethod
-	Items         []Line
-	SubtotalAmt   int64
-	TaxAmt        int64
-	ShipCostAmt   int64
-	DiscountCode  string
-	DiscountAmt   int64
-	TotalAmt      int64
-	TotalCcy      string
-	Status        Status
-	PlacedAt      time.Time
-	Carrier       string
-	TrackingCode  string
-	Version       int
+	ID           string
+	UserID       string
+	CustomerID   string
+	ShipTo       Address
+	ShipMethod   ShippingMethod
+	PayMethod    PaymentMethod
+	Items        []Line
+	SubtotalAmt  int64
+	TaxAmt       int64
+	ShipCostAmt  int64
+	DiscountCode string
+	DiscountAmt  int64
+	TotalAmt     int64
+	TotalCcy     string
+	Status       Status
+	PlacedAt     time.Time
+	Carrier      string
+	TrackingCode string
+	Channel      string
+	Version      int
 }
 
 // SnapshotOrder builds an OrderSnapshot from the aggregate's current state
@@ -64,6 +65,7 @@ func SnapshotOrder(o *Order) OrderSnapshot {
 		PlacedAt:     o.PlacedAt(),
 		Carrier:      o.Carrier(),
 		TrackingCode: o.TrackingCode(),
+		Channel:      o.Channel(),
 		Version:      o.version,
 	}
 }
@@ -95,6 +97,7 @@ func RehydrateOrderFromSnapshot(snap OrderSnapshot, tail []Event) *Order {
 		placedAt:     snap.PlacedAt,
 		carrier:      snap.Carrier,
 		trackingCode: snap.TrackingCode,
+		channel:      snap.Channel,
 		version:      snap.Version,
 	}
 	ApplyTail(o, tail)

@@ -1,6 +1,7 @@
 package adapter
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -23,18 +24,22 @@ func TestEventCodecRoundTrip_OrderPlaced(t *testing.T) {
 		ShippingCost:   0,
 		DiscountCode:   "SAVE10",
 		DiscountAmount: 240,
+		Channel:        "web",
 		At:             at,
 	}
 
-	typ, payload, err := marshalEvent(original)
+	typ, version, payload, err := marshalEvent(original)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	if typ != "OrderPlaced" {
 		t.Fatalf("type = %q, want OrderPlaced", typ)
 	}
+	if version != 2 {
+		t.Fatalf("version = %d, want 2 (latest OrderPlaced schema)", version)
+	}
 
-	got, err := unmarshalEvent(typ, payload)
+	got, err := unmarshalEvent(typ, version, payload)
 	if err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -67,6 +72,9 @@ func TestEventCodecRoundTrip_OrderPlaced(t *testing.T) {
 	if op.DiscountCode != "SAVE10" || op.DiscountAmount != 240 {
 		t.Errorf("discount round-trip mismatch: code=%q amount=%d", op.DiscountCode, op.DiscountAmount)
 	}
+	if op.Channel != "web" {
+		t.Errorf("channel round-trip mismatch: got %q want web", op.Channel)
+	}
 }
 
 func TestEventCodecRoundTrip_Fulfillment(t *testing.T) {
@@ -77,11 +85,14 @@ func TestEventCodecRoundTrip_Fulfillment(t *testing.T) {
 		domain.OrderRefunded{OrderID: "ord-1", Reason: "customer return", At: at},
 	}
 	for _, e := range cases {
-		typ, payload, err := marshalEvent(e)
+		typ, version, payload, err := marshalEvent(e)
 		if err != nil {
 			t.Fatalf("marshal %s: %v", e.EventType(), err)
 		}
-		got, err := unmarshalEvent(typ, payload)
+		if version != 1 {
+			t.Errorf("version for %s = %d, want 1 (event has not evolved yet)", typ, version)
+		}
+		got, err := unmarshalEvent(typ, version, payload)
 		if err != nil {
 			t.Fatalf("unmarshal %s: %v", typ, err)
 		}
@@ -107,11 +118,11 @@ func TestEventCodecRoundTrip_Payment(t *testing.T) {
 		domain.PaymentSucceeded{OrderID: "ord-1", At: at},
 		domain.PaymentFailed{OrderID: "ord-1", Reason: "declined", At: at},
 	} {
-		typ, payload, err := marshalEvent(e)
+		typ, version, payload, err := marshalEvent(e)
 		if err != nil {
 			t.Fatalf("marshal %s: %v", e.EventType(), err)
 		}
-		got, err := unmarshalEvent(typ, payload)
+		got, err := unmarshalEvent(typ, version, payload)
 		if err != nil {
 			t.Fatalf("unmarshal %s: %v", typ, err)
 		}
@@ -130,13 +141,120 @@ func TestEventCodecRoundTrip_Payment(t *testing.T) {
 
 func mustUnmarshal(t *testing.T, e domain.Event) domain.Event {
 	t.Helper()
-	typ, payload, err := marshalEvent(e)
+	typ, version, payload, err := marshalEvent(e)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	got, err := unmarshalEvent(typ, payload)
+	got, err := unmarshalEvent(typ, version, payload)
 	if err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	return got
+}
+
+// TestUnmarshalOrderPlacedV1 feeds a hand-built v1 payload (no channel key)
+// into unmarshalEvent and asserts the upcaster materialises Channel ==
+// "unknown" on the resulting domain event. This is the textbook upcaster
+// check: the aggregate's apply() should never see a v1 shape directly.
+func TestUnmarshalOrderPlacedV1(t *testing.T) {
+	at := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
+
+	// Hand-built v1 JSON — note the deliberate ABSENCE of the "channel"
+	// key. This is exactly what rows written before the v2 migration look
+	// like in the database.
+	v1JSON := []byte(`{
+		"order_id": "ord-v1",
+		"user_id": "cart-1",
+		"customer_id": "jane@example.com",
+		"ship_to": {"name":"Jane","street1":"1 Main St","street2":"","city":"PDX","zip":"97201","country":"USA"},
+		"ship_method": {"code":"courier","label":"Courier","cost":1500},
+		"pay_method": {"code":"card","label":"Card"},
+		"lines": [{"product_id":"ceramic-mug-cream","product_name":"Mug","qty":2,"price_amount":2400,"price_currency":"USD"}],
+		"tax": 426,
+		"shipping_cost": 0,
+		"discount_code": "SAVE10",
+		"discount_amount": 240,
+		"at": "2026-05-27T09:00:00Z"
+	}`)
+
+	got, err := unmarshalEvent("OrderPlaced", 1, v1JSON)
+	if err != nil {
+		t.Fatalf("unmarshal v1: %v", err)
+	}
+	op, ok := got.(domain.OrderPlaced)
+	if !ok {
+		t.Fatalf("got %T, want domain.OrderPlaced", got)
+	}
+	if op.Channel != "unknown" {
+		t.Errorf("upcast channel = %q, want unknown (v1 default fill)", op.Channel)
+	}
+	// Sanity: the rest of the payload survived the upcast unchanged.
+	if op.OrderID != "ord-v1" || op.Tax != 426 || op.DiscountCode != "SAVE10" || op.DiscountAmount != 240 {
+		t.Errorf("v1 payload not preserved: %+v", op)
+	}
+	if !op.At.Equal(at) {
+		t.Errorf("v1 occurred-at lost: got %v want %v", op.At, at)
+	}
+	if len(op.Lines) != 1 || op.Lines[0].PriceAmount() != 2400 {
+		t.Errorf("v1 lines not preserved: %+v", op.Lines)
+	}
+}
+
+// TestRoundTripOrderPlacedV2 locks in that a v2 OrderPlaced (with Channel)
+// marshals at version 2 and round-trips back through unmarshalEvent
+// without going through the upcaster.
+func TestRoundTripOrderPlacedV2(t *testing.T) {
+	at := time.Date(2026, 5, 27, 10, 0, 0, 0, time.UTC)
+	original := domain.OrderPlaced{
+		OrderID:    "ord-2",
+		UserID:     "cart-1",
+		CustomerID: "jane@example.com",
+		ShipTo:     domain.RebuildAddress("Jane", "1 Main St", "", "PDX", "97201", "USA"),
+		ShipMethod: domain.RebuildShippingMethod("pickup", "Pickup", 0),
+		PayMethod:  domain.RebuildPaymentMethod("card", "Card"),
+		Lines:      []domain.Line{domain.NewLine("v1", "Mug", 1, 1500, "USD")},
+		Channel:    "web",
+		At:         at,
+	}
+
+	typ, version, payload, err := marshalEvent(original)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if typ != "OrderPlaced" {
+		t.Fatalf("type = %q, want OrderPlaced", typ)
+	}
+	if version != 2 {
+		t.Fatalf("version = %d, want 2", version)
+	}
+
+	// Confirm the wire payload actually carries the channel key — guards
+	// against a future regression that silently drops the field.
+	var raw map[string]any
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		t.Fatalf("re-parse payload: %v", err)
+	}
+	if raw["channel"] != "web" {
+		t.Errorf("wire payload channel = %v, want web", raw["channel"])
+	}
+
+	got, err := unmarshalEvent(typ, version, payload)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	op, ok := got.(domain.OrderPlaced)
+	if !ok {
+		t.Fatalf("got %T, want domain.OrderPlaced", got)
+	}
+	if op.Channel != "web" {
+		t.Errorf("channel lost in round-trip: got %q want web", op.Channel)
+	}
+}
+
+// TestUnmarshalOrderPlacedUnknownVersion guards the codec contract: an
+// unrecognised version is a loud failure, not a silent zero-value load.
+func TestUnmarshalOrderPlacedUnknownVersion(t *testing.T) {
+	if _, err := unmarshalEvent("OrderPlaced", 99, []byte(`{}`)); err == nil {
+		t.Fatal("expected error for unknown OrderPlaced version, got nil")
+	}
 }

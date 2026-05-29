@@ -26,6 +26,11 @@ type Event interface {
 // units that was subtracted from the subtotal before computing tax. For
 // free_shipping codes DiscountAmount stays 0 — the saving is reflected in
 // ShippingCost=0, not in the subtotal.
+//
+// Channel records the sales channel the order came in through (e.g. "web",
+// "ios", "api"). It was added in the v2 OrderPlaced schema; the codec's
+// upcaster fills "unknown" for v1 rows that predate the field so apply()
+// only ever sees the latest shape.
 type OrderPlaced struct {
 	OrderID        string
 	UserID         string
@@ -38,6 +43,7 @@ type OrderPlaced struct {
 	ShippingCost   int64
 	DiscountCode   string
 	DiscountAmount int64
+	Channel        string
 	At             time.Time
 }
 

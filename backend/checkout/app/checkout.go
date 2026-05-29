@@ -322,7 +322,12 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		attribute.Int64("order.shipping", effectiveShipping),
 	)
 
-	order, err := domain.PlaceOrder(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, tax, effectiveShipping, discount.Code(), discountAmount, s.now())
+	// channel records the sales channel the order was placed through; the
+	// admin/checkout HTTP flow is the only producer today, so we hardcode
+	// "web". Pluggable when iOS / API channels arrive — the signature is
+	// already wired through PlaceOrder and the OrderPlaced v2 schema.
+	const channel = "web"
+	order, err := domain.PlaceOrder(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, tax, effectiveShipping, discount.Code(), discountAmount, channel, s.now())
 	if err != nil {
 		_ = s.stock.Release(ctx, quantities)
 		for vid, qty := range quantities {

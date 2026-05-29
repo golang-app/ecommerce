@@ -20,7 +20,7 @@ import (
 // rebuild is deterministic by construction.
 func RebuildReadModels(ctx context.Context, tx *sql.Tx) (int, int, error) {
 	rows, err := tx.QueryContext(ctx, `
-		SELECT aggregate_id, event_type, payload
+		SELECT aggregate_id, event_type, payload_version, payload
 		FROM checkout_events
 		ORDER BY aggregate_id, sequence
 	`)
@@ -34,15 +34,16 @@ func RebuildReadModels(ctx context.Context, tx *sql.Tx) (int, int, error) {
 	var lastAgg string
 	for rows.Next() {
 		var aggID, eventType string
+		var version int
 		var payload []byte
-		if err := rows.Scan(&aggID, &eventType, &payload); err != nil {
+		if err := rows.Scan(&aggID, &eventType, &version, &payload); err != nil {
 			return eventCount, aggCount, fmt.Errorf("scan event: %w", err)
 		}
 		if aggID != lastAgg {
 			aggCount++
 			lastAgg = aggID
 		}
-		e, err := unmarshalEvent(eventType, payload)
+		e, err := unmarshalEvent(eventType, version, payload)
 		if err != nil {
 			return eventCount, aggCount, err
 		}
