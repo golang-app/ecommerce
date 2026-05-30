@@ -93,6 +93,62 @@ type OrderLineSource interface {
 	OrderQuantities(ctx context.Context, orderID string) (map[string]int, error)
 }
 
+// OrderDetailLine is the fulfillment-owned shape of a single order
+// line. It mirrors what an ECST consumer cares about and is
+// deliberately decoupled from checkout/domain.Line: the composition
+// root's adapter translates the checkout view into these.
+type OrderDetailLine struct {
+	ProductID     string
+	ProductName   string
+	Quantity      int
+	PriceAmount   int64
+	PriceCurrency string
+}
+
+// OrderDetailAddress is the fulfillment-owned shape of a shipping
+// destination. Like OrderDetailLine, it is decoupled from
+// checkout/domain.Address — fulfillment owns its own value objects so
+// it does not import checkout's internal model.
+type OrderDetailAddress struct {
+	Name    string
+	Street1 string
+	Street2 string
+	City    string
+	Zip     string
+	Country string
+}
+
+// OrderDetail is the fulfillment-owned aggregate view of everything
+// the ECST publication path needs to build an OrderShippedECST event:
+// who the customer is, where the parcel is going, what is in it, and
+// the totals. The composition root supplies an adapter that maps
+// checkout's OrderView onto this type so fulfillment never imports
+// checkout/query.
+type OrderDetail struct {
+	CustomerID   string
+	Email        string
+	ShipTo       OrderDetailAddress
+	Items        []OrderDetailLine
+	Subtotal     int64
+	Tax          int64
+	ShippingCost int64
+	Total        int64
+	Currency     string
+}
+
+// OrderDetailReader is the seam onto which the Ship command pulls the
+// rich snapshot it needs to publish an ECST event. The composition
+// root wires it to a thin adapter over checkout's query side; the
+// adapter — not fulfillment — knows how checkout's read model is
+// shaped. A nil reader (or one returning an error) disables the ECST
+// publication path: the durable notification-style OrderShipped
+// event is still published, so the Ship transition stays committed
+// and any downstream consumer wired to the notification name still
+// fires.
+type OrderDetailReader interface {
+	OrderDetail(ctx context.Context, orderID string) (OrderDetail, error)
+}
+
 // Service is the application facade. Methods follow the same shape:
 //
 //  1. load the record (or no-op if missing for OnOrderPaid)
@@ -100,13 +156,30 @@ type OrderLineSource interface {
 //  3. save (Create / Update)
 //  4. publish pending events
 type Service struct {
-	storage   Storage
-	publisher EventPublisher
-	stock     StockReleaser
-	lines     OrderLineSource
-	now       func() time.Time
-	newID     func() string
+	storage     Storage
+	publisher   EventPublisher
+	stock       StockReleaser
+	lines       OrderLineSource
+	orderDetail OrderDetailReader
+	logger      Logger
+	now         func() time.Time
+	newID       func() string
 }
+
+// Logger is the minimal log seam the service uses for non-fatal
+// warnings (e.g. ECST publication failed but the Ship transition has
+// already committed). Implemented by *logrus.Entry; tests can pass a
+// no-op.
+type Logger interface {
+	Warnf(format string, args ...any)
+}
+
+// nopLogger is the default when no logger is supplied — keeps the
+// service constructible in tests that don't care about non-fatal
+// warnings.
+type nopLogger struct{}
+
+func (nopLogger) Warnf(string, ...any) {}
 
 // NewService wires the service against its storage adapter. Optional
 // dependencies (publisher, stock releaser, line source, clock, id
@@ -116,6 +189,7 @@ func NewService(storage Storage) *Service {
 		storage:   storage,
 		publisher: nopPublisher{},
 		stock:     nopReleaser{},
+		logger:    nopLogger{},
 		now:       func() time.Time { return time.Now().UTC() },
 		newID:     newRandomID,
 	}
@@ -146,6 +220,26 @@ func (s *Service) WithStockReleaser(r StockReleaser) *Service {
 // best-effort no-op.
 func (s *Service) WithOrderLines(src OrderLineSource) *Service {
 	s.lines = src
+	return s
+}
+
+// WithOrderDetailReader wires the seam onto which Ship pulls the
+// rich order snapshot for the ECST publication. Without it the Ship
+// transition still commits and the notification-style OrderShipped
+// event is still published; only the ECST publication is suppressed.
+func (s *Service) WithOrderDetailReader(r OrderDetailReader) *Service {
+	s.orderDetail = r
+	return s
+}
+
+// WithLogger wires the warn-level log seam. Used by Ship to record
+// when the ECST publication path could not run (e.g. checkout's read
+// side could not be queried) without aborting the transition.
+func (s *Service) WithLogger(l Logger) *Service {
+	if l == nil {
+		l = nopLogger{}
+	}
+	s.logger = l
 	return s
 }
 
@@ -212,12 +306,96 @@ func (s *Service) Label(ctx context.Context, orderID, carrier, trackingCode stri
 	})
 }
 
-// Ship marks a labeled fulfillment shipped. Emits the
-// fulfillment.OrderShipped integration event.
+// Ship marks a labeled fulfillment shipped. Emits the notification-
+// style fulfillment.OrderShipped integration event from the
+// transition's pending-events drain (the durable signal) and then
+// additionally publishes the ECST-style fulfillment.OrderShippedECST
+// event carrying the full snapshot a downstream consumer needs to
+// render a "your order has shipped" notification without calling
+// back into checkout.
+//
+// The ECST publication is best-effort: a failure to load the order
+// detail or to publish the event is logged at Warn but does NOT
+// abort the Ship transition. The notification event is the durable
+// signal — a subscriber wired to OrderShipped still fires; only the
+// ECST consumer misses this one delivery. This mirrors the bus's
+// overall fire-and-forget contract for cross-context publishes.
 func (s *Service) Ship(ctx context.Context, orderID string) error {
-	return s.transition(ctx, orderID, func(f *domain.Fulfillment) error {
+	if err := s.transition(ctx, orderID, func(f *domain.Fulfillment) error {
 		return f.Ship(s.now())
-	})
+	}); err != nil {
+		return err
+	}
+	s.publishOrderShippedECST(ctx, orderID)
+	return nil
+}
+
+// publishOrderShippedECST builds and publishes the ECST companion to
+// the notification-style OrderShipped event. All failure paths are
+// logged at Warn and swallowed — the Ship transition has already
+// committed by the time we get here, and the durable notification
+// event has already been published.
+func (s *Service) publishOrderShippedECST(ctx context.Context, orderID string) {
+	if s.orderDetail == nil {
+		// Nothing wired — ECST publication is opt-in at the
+		// composition root. Stay silent (the absence is intentional
+		// in tests that don't exercise the ECST path).
+		return
+	}
+	f, err := s.storage.FindByOrder(ctx, orderID)
+	if err != nil {
+		s.logger.Warnf("fulfillment: ECST publish: reload after ship: %v", err)
+		return
+	}
+	detail, err := s.orderDetail.OrderDetail(ctx, orderID)
+	if err != nil {
+		s.logger.Warnf("fulfillment: ECST publish: order detail: %v", err)
+		return
+	}
+	ev := integration.OrderShippedECST{
+		OrderID:      orderID,
+		CustomerID:   detail.CustomerID,
+		Email:        detail.Email,
+		Carrier:      f.Carrier(),
+		TrackingCode: f.TrackingCode(),
+		ShipTo: integration.ShippingAddressDTO{
+			Name:    detail.ShipTo.Name,
+			Street1: detail.ShipTo.Street1,
+			Street2: detail.ShipTo.Street2,
+			City:    detail.ShipTo.City,
+			Zip:     detail.ShipTo.Zip,
+			Country: detail.ShipTo.Country,
+		},
+		Items:        toLineDTOs(detail.Items),
+		Subtotal:     detail.Subtotal,
+		Tax:          detail.Tax,
+		ShippingCost: detail.ShippingCost,
+		Total:        detail.Total,
+		Currency:     detail.Currency,
+		At:           f.ShippedAt(),
+	}
+	s.publisher.Publish(ctx, ev)
+}
+
+// toLineDTOs maps the fulfillment-owned line snapshots onto the
+// published-language LineDTOs that travel on the wire. Keeping the
+// mapping next to the publish path means the DTO contract stays in
+// one place.
+func toLineDTOs(lines []OrderDetailLine) []integration.LineDTO {
+	if len(lines) == 0 {
+		return nil
+	}
+	out := make([]integration.LineDTO, 0, len(lines))
+	for _, ln := range lines {
+		out = append(out, integration.LineDTO{
+			ProductID:     ln.ProductID,
+			ProductName:   ln.ProductName,
+			Quantity:      ln.Quantity,
+			PriceAmount:   ln.PriceAmount,
+			PriceCurrency: ln.PriceCurrency,
+		})
+	}
+	return out
 }
 
 // Deliver marks a shipped fulfillment delivered. Emits

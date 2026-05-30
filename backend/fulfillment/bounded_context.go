@@ -22,9 +22,21 @@ import (
 // .Service is intentionally exposed so the composition root can call
 // the optional With… seams (stock releaser, order line source)
 // without re-importing storage types.
-func New(db *sql.DB, bus *eventbus.Bus) (application.BoundedContext, *app.Service) {
+//
+// orderDetail is the seam onto which Ship's ECST publication path
+// pulls the rich order snapshot it puts on the wire. The composition
+// root supplies an adapter over checkout's query side so this
+// package never imports checkout/query — fulfillment owns the port
+// shape, the composition root owns the translation. A nil reader is
+// permitted: the ECST publication path is best-effort and silently
+// disabled when no reader is wired (mirroring how StockReleaser /
+// OrderLineSource are optional). The notification-style
+// OrderShipped event is published unconditionally either way.
+func New(db *sql.DB, bus *eventbus.Bus, orderDetail app.OrderDetailReader) (application.BoundedContext, *app.Service) {
 	storage := adapter.NewPostgres(db)
-	srv := app.NewService(storage).WithPublisher(busPublisher{bus: bus})
+	srv := app.NewService(storage).
+		WithPublisher(busPublisher{bus: bus}).
+		WithOrderDetailReader(orderDetail)
 	return &boundedContext{}, srv
 }
 

@@ -9,6 +9,7 @@ import (
 	texttmpl "text/template"
 
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
+	fulfillmentIntegration "github.com/bkielbasa/go-ecommerce/backend/fulfillment/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 )
 
@@ -45,6 +46,14 @@ var (
 	resetTextOnce sync.Once
 	resetText     *texttmpl.Template
 	resetTextErr  error
+
+	orderShippedHTMLOnce sync.Once
+	orderShippedHTML     *htmltmpl.Template
+	orderShippedHTMLErr  error
+
+	orderShippedTextOnce sync.Once
+	orderShippedText     *texttmpl.Template
+	orderShippedTextErr  error
 )
 
 func loadOrderConfHTML() (*htmltmpl.Template, error) {
@@ -73,6 +82,20 @@ func loadResetText() (*texttmpl.Template, error) {
 		resetText, resetTextErr = texttmpl.ParseFS(emailTemplates, "tmpl/emails/password_reset.txt.tmpl")
 	})
 	return resetText, resetTextErr
+}
+
+func loadOrderShippedHTML() (*htmltmpl.Template, error) {
+	orderShippedHTMLOnce.Do(func() {
+		orderShippedHTML, orderShippedHTMLErr = htmltmpl.ParseFS(emailTemplates, "tmpl/emails/order_shipped.html.tmpl")
+	})
+	return orderShippedHTML, orderShippedHTMLErr
+}
+
+func loadOrderShippedText() (*texttmpl.Template, error) {
+	orderShippedTextOnce.Do(func() {
+		orderShippedText, orderShippedTextErr = texttmpl.ParseFS(emailTemplates, "tmpl/emails/order_shipped.txt.tmpl")
+	})
+	return orderShippedText, orderShippedTextErr
 }
 
 // RenderOrderConfirmation builds a Message for the order-paid email. The
@@ -110,6 +133,46 @@ func RenderOrderConfirmation(view checkoutQuery.OrderView, baseURL string) (mail
 		HTMLBody: htmlBuf.String(),
 		TextBody: textBuf.String(),
 		Kind:     mailer.KindOrderConfirmation,
+	}, nil
+}
+
+// RenderOrderShipped builds a Message for the fulfillment.OrderShippedECST
+// integration event. It is the ECST companion to
+// RenderOrderConfirmation: every byte the templates execute against
+// comes from the event itself — there is NO callback into checkout's
+// read side. The subscriber that drives this helper can therefore
+// stay live even when the checkout context is unavailable, which is
+// the whole point of the Event-Carried State Transfer pattern (see
+// the fulfillment/integration package doc for the trade-off).
+func RenderOrderShipped(event fulfillmentIntegration.OrderShippedECST) (mailer.Message, error) {
+	htmlT, err := loadOrderShippedHTML()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+	textT, err := loadOrderShippedText()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+
+	data := map[string]any{
+		"Event":    event,
+		"SiteName": emailSiteName,
+	}
+
+	var htmlBuf, textBuf bytes.Buffer
+	if err := htmlT.Execute(&htmlBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+	if err := textT.Execute(&textBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+
+	return mailer.Message{
+		To:       event.Email,
+		Subject:  "Your order " + event.OrderID + " has shipped",
+		HTMLBody: htmlBuf.String(),
+		TextBody: textBuf.String(),
+		Kind:     mailer.KindOrderShipped,
 	}, nil
 }
 

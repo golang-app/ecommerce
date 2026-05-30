@@ -41,6 +41,7 @@ type MessageKind = string
 const (
 	KindUnknown           MessageKind = "unknown"
 	KindOrderConfirmation MessageKind = "order_confirmation"
+	KindOrderShipped      MessageKind = "order_shipped"
 	KindPasswordReset     MessageKind = "password_reset"
 )
 
