@@ -1,0 +1,28 @@
+{{/*
+  Order shipped is rendered ENTIRELY from the OrderShippedECST event
+  payload — no callbacks into checkout's read side. See the .html
+  template's comment for the pattern.
+*/ -}}
+Your order is on its way.
+
+Order {{.Event.OrderID}} shipped {{.Event.At.Format "Jan 2, 2006 15:04 MST"}}
+
+Carrier: {{.Event.Carrier}}
+Tracking code: {{.Event.TrackingCode}}
+
+Items:
+{{range $line := .Event.Items}}- {{$line.ProductName}} x {{$line.Quantity}} @ {{$line.PriceAmount}} {{$line.PriceCurrency}}
+{{end}}
+Subtotal: {{.Event.Subtotal}} {{.Event.Currency}}
+Shipping: {{.Event.ShippingCost}} {{.Event.Currency}}
+Tax: {{.Event.Tax}} {{.Event.Currency}}
+Total: {{.Event.Total}} {{.Event.Currency}}
+
+Shipping to:
+  {{.Event.ShipTo.Name}}
+  {{.Event.ShipTo.Street1}}{{with .Event.ShipTo.Street2}}
+  {{.}}{{end}}
+  {{.Event.ShipTo.City}}, {{.Event.ShipTo.Zip}}
+  {{.Event.ShipTo.Country}}
+
+This email is a shipping notification from {{.SiteName}}. Track your parcel with the carrier code above.

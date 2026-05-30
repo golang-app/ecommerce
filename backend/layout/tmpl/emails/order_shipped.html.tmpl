@@ -1,0 +1,71 @@
+{{/*
+  Order shipped is rendered ENTIRELY from the OrderShippedECST event
+  payload — no callbacks into checkout's read side. The pattern is
+  Event-Carried State Transfer: the publisher hands us everything the
+  consumer needs to do its job. Compare with order_confirmation
+  above, which renders from a freshly-loaded checkout OrderView.
+*/ -}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Order {{.Event.OrderID}} has shipped</title>
+</head>
+<body style="font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #1d1d1f; line-height: 1.5; max-width: 560px; margin: 24px auto; padding: 0 16px;">
+  <h1 style="font-size: 22px; font-weight: 600;">Your order is on its way.</h1>
+  <p>Order <strong>{{.Event.OrderID}}</strong> shipped {{.Event.At.Format "Jan 2, 2006 15:04 MST"}}.</p>
+
+  <p style="margin-top: 16px;">
+    <strong>Carrier:</strong> {{.Event.Carrier}}<br>
+    <strong>Tracking code:</strong> {{.Event.TrackingCode}}
+  </p>
+
+  <table cellspacing="0" cellpadding="6" style="width: 100%; border-collapse: collapse; margin-top: 16px;">
+    <thead>
+      <tr style="text-align: left; border-bottom: 1px solid #d2d2d7;">
+        <th>Item</th>
+        <th style="text-align: right;">Qty</th>
+        <th style="text-align: right;">Unit</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range $line := .Event.Items}}
+        <tr style="border-bottom: 1px solid #f0f0f0;">
+          <td>{{$line.ProductName}}</td>
+          <td style="text-align: right;">{{$line.Quantity}}</td>
+          <td style="text-align: right;">{{$line.PriceAmount}} {{$line.PriceCurrency}}</td>
+        </tr>
+      {{end}}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2" style="text-align: right;">Subtotal</td>
+        <td style="text-align: right;">{{.Event.Subtotal}} {{.Event.Currency}}</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="text-align: right;">Shipping</td>
+        <td style="text-align: right;">{{.Event.ShippingCost}} {{.Event.Currency}}</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="text-align: right;">Tax</td>
+        <td style="text-align: right;">{{.Event.Tax}} {{.Event.Currency}}</td>
+      </tr>
+      <tr style="font-weight: 600; border-top: 1px solid #d2d2d7;">
+        <td colspan="2" style="text-align: right;">Total</td>
+        <td style="text-align: right;">{{.Event.Total}} {{.Event.Currency}}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <p style="margin-top: 16px;"><strong>Shipping to</strong></p>
+  <p style="margin: 0;">
+    {{.Event.ShipTo.Name}}<br>
+    {{.Event.ShipTo.Street1}}<br>
+    {{with .Event.ShipTo.Street2}}{{.}}<br>{{end}}
+    {{.Event.ShipTo.City}}, {{.Event.ShipTo.Zip}}<br>
+    {{.Event.ShipTo.Country}}
+  </p>
+
+  <p style="color: #6e6e73; font-size: 12px; margin-top: 32px;">This email is a shipping notification from {{.SiteName}}. Track your parcel with the carrier code above.</p>
+</body>
+</html>

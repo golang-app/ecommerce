@@ -17,6 +17,8 @@ import (
 	checkoutquery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/sweeper"
 	"github.com/bkielbasa/go-ecommerce/backend/fulfillment"
+	fulfillmentapp "github.com/bkielbasa/go-ecommerce/backend/fulfillment/app"
+	fulfillmentintegration "github.com/bkielbasa/go-ecommerce/backend/fulfillment/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/internal"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
@@ -156,10 +158,18 @@ func main() {
 	// (ship/deliver/refund). Stock release on refund goes through the
 	// productcatalog port wired below — same seam checkout used to
 	// call directly before that flow moved.
-	fulfillmentBD, fulfillmentSrv := fulfillment.New(db, bus)
+	//
+	// orderDetailReaderAdapter is the ACL onto checkout's read side
+	// the Ship command pulls through when it publishes the
+	// OrderShippedECST integration event (event-carried state
+	// transfer, alongside the notification-style OrderShipped). The
+	// translation lives in this composition root so fulfillment
+	// itself stays unaware of checkout's internal types.
+	fulfillmentBD, fulfillmentSrv := fulfillment.New(db, bus, orderDetailReaderAdapter{q: checkoutQry})
 	fulfillmentSrv = fulfillmentSrv.
 		WithStockReleaser(catalogService).
-		WithOrderLines(orderLinesAdapter{q: checkoutQry})
+		WithOrderLines(orderLinesAdapter{q: checkoutQry}).
+		WithLogger(logger)
 	// Promo bounded context: owns promo_code + promo_redemption. The
 	// checkout service redeems through its narrow PromoRedeemer seam so
 	// the math stays inside checkout while the ledger lives here.
@@ -273,6 +283,41 @@ func main() {
 		),
 	)
 
+	// 4. email.order-shipped — the ECST subscriber. This is the
+	//    counterpart to email.order-confirmation: it renders a "your
+	//    order has shipped" email and dispatches it via the same
+	//    Mailer. The subscriber is wired to fulfillment.OrderShippedECST
+	//    rather than the notification-style fulfillment.OrderShipped
+	//    — the whole point of the ECST pattern is to make this
+	//    subscriber operationally independent of checkout. Compare
+	//    with the order-confirmation subscriber above which has to
+	//    call back into checkoutQry.Find to materialise its render
+	//    data; here the event itself is sufficient.
+	//
+	//    The inbox.Wrap key matches the cross-context naming
+	//    convention used by the other subscribers — it is the
+	//    natural key in inbox_handled so renaming it is a migration
+	//    concern.
+	bus.SubscribeWithID(
+		fulfillmentintegration.OrderShippedECST{}.EventName(),
+		inbox.Wrap("email.order-shipped", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				shipped := e.(fulfillmentintegration.OrderShippedECST)
+				if shipped.Email == "" {
+					return nil
+				}
+				msg, err := layout.RenderOrderShipped(shipped)
+				if err != nil {
+					return fmt.Errorf("order shipped: render: %w", err)
+				}
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order shipped: send: %w", err)
+				}
+				return nil
+			},
+		),
+	)
+
 	app.AddBoundedContext(cartBD)
 
 	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
@@ -373,6 +418,63 @@ func (a orderLinesAdapter) OrderQuantities(ctx context.Context, orderID string) 
 		out[ln.ProductID()] += ln.Quantity()
 	}
 	return out, nil
+}
+
+// orderDetailReaderAdapter bridges the checkout query service to the
+// fulfillment service's OrderDetailReader port — the seam Ship's
+// ECST publication path pulls through to assemble an
+// OrderShippedECST event. The translation lives here, in the
+// composition root, so the fulfillment package never imports
+// checkout/query and downstream subscribers stay bound to
+// fulfillment's published-language DTOs (see
+// fulfillment/integration/events.go) rather than to checkout's
+// internal value objects.
+//
+// CustomerID on the OrderView is the customer's email today
+// (single-field identity); the adapter copies it into both
+// CustomerID and Email on the fulfillment-owned OrderDetail. If the
+// two ever diverge — e.g. a future change splits the columns — the
+// fix is local to this adapter.
+type orderDetailReaderAdapter struct {
+	q interface {
+		Find(ctx context.Context, id string) (checkoutquery.OrderView, error)
+	}
+}
+
+func (a orderDetailReaderAdapter) OrderDetail(ctx context.Context, orderID string) (fulfillmentapp.OrderDetail, error) {
+	view, err := a.q.Find(ctx, orderID)
+	if err != nil {
+		return fulfillmentapp.OrderDetail{}, err
+	}
+	items := make([]fulfillmentapp.OrderDetailLine, 0, len(view.Items()))
+	for _, ln := range view.Items() {
+		items = append(items, fulfillmentapp.OrderDetailLine{
+			ProductID:     ln.ProductID(),
+			ProductName:   ln.ProductName(),
+			Quantity:      ln.Quantity(),
+			PriceAmount:   ln.PriceAmount(),
+			PriceCurrency: ln.PriceCurrency(),
+		})
+	}
+	ship := view.ShipTo()
+	return fulfillmentapp.OrderDetail{
+		CustomerID: view.CustomerID(),
+		Email:      view.CustomerID(),
+		ShipTo: fulfillmentapp.OrderDetailAddress{
+			Name:    ship.Name(),
+			Street1: ship.Street1(),
+			Street2: ship.Street2(),
+			City:    ship.City(),
+			Zip:     ship.Zip(),
+			Country: ship.Country(),
+		},
+		Items:        items,
+		Subtotal:     view.Subtotal(),
+		Tax:          view.TaxAmount(),
+		ShippingCost: view.ShippingCost(),
+		Total:        view.TotalAmount(),
+		Currency:     view.TotalCurrency(),
+	}, nil
 }
 
 // newLogger builds the process-wide structured logger.
