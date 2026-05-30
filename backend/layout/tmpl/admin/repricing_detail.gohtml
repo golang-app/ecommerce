@@ -1,0 +1,51 @@
+{{define "main"}}
+  <h2 class="account-card__title">repricing {{.Reprice.ID}}</h2>
+  <p>
+    <a href="/admin/repricing">&larr; back to list</a>
+  </p>
+
+  <dl class="admin-form">
+    <dt>category</dt><dd><code>{{.Reprice.CategoryID}}</code></dd>
+    <dt>percent change</dt><dd>{{.Reprice.PercentChange}}%</dd>
+    <dt>started at</dt><dd>{{.Reprice.StartedAt.Format "2006-01-02 15:04:05"}}</dd>
+    {{with .Reprice.CompletedAt}}<dt>completed at</dt><dd>{{.Format "2006-01-02 15:04:05"}}</dd>{{end}}
+  </dl>
+
+  <div id="repricing-progress"
+    {{if .InFlight}}
+      hx-get="/admin/repricing/{{.Reprice.ID}}"
+      hx-trigger="every 2s"
+      hx-swap="outerHTML"
+    {{end}}
+  >
+    {{template "progress-block" .}}
+  </div>
+{{end}}
+
+{{define "progress-block"}}
+<div id="repricing-progress"
+  {{if .InFlight}}
+    hx-get="/admin/repricing/{{.Reprice.ID}}"
+    hx-trigger="every 2s"
+    hx-swap="outerHTML"
+  {{end}}
+>
+  <section class="admin-form">
+    <h3 class="account-card__title">progress</h3>
+    <p>
+      <strong>{{.Reprice.Status}}</strong> &middot;
+      {{.Reprice.ProcessedItems}} / {{.Reprice.TotalItems}} items
+      ({{.Percent}}%)
+    </p>
+    <div style="background: #eee; border-radius: 4px; overflow: hidden; height: 12px;">
+      <div style="background: #2b8a3e; height: 12px; width: {{.Percent}}%;"></div>
+    </div>
+    {{with .Reprice.LastError}}
+      <p class="flash flash--error">last per-item error: {{.}}</p>
+    {{end}}
+    {{if .Done}}
+      <p class="muted">run finished &mdash; this page will stop polling.</p>
+    {{end}}
+  </section>
+</div>
+{{end}}

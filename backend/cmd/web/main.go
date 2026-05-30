@@ -34,7 +34,10 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/payments"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
+	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
+	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/promo"
+	"github.com/bkielbasa/go-ecommerce/backend/repricing"
 	"github.com/bkielbasa/go-ecommerce/backend/reviews"
 	"github.com/bkielbasa/go-ecommerce/backend/search"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
@@ -209,6 +212,20 @@ func main() {
 	// switcher); no other context depends on it.
 	storeBD, storeSrv := store.New(db)
 
+	// Repricing Process Manager: owns the bulk "reprice every
+	// product in a category by N%" saga. It depends on the
+	// catalogue through two narrow ports: CategoryReader (to
+	// snapshot the planned product ids at Start time) and
+	// PriceUpdater (to apply the per-item update during
+	// RunActive). The ACLs live here in the composition root so
+	// the repricing context never imports productcatalog/app
+	// directly.
+	repricingBD, repricingSrv := repricing.New(db,
+		repricingCategoryReaderAdapter{catalog: catalogService},
+		repricingPriceUpdaterAdapter{catalog: catalogService},
+	)
+	repricingSrv = repricingSrv.WithLogger(logger)
+
 	// Mailer is the outbound-email abstraction. When SMTP_HOST is empty
 	// (the dev default), New() returns a LogMailer that writes each email
 	// to the structured log instead of dialling — keeping the app bootable
@@ -366,7 +383,7 @@ func main() {
 	// remain stored and charged in DefaultCurrency (USD).
 	fxRates := fx.New(cfg.DefaultCurrency, cfg.SupportedCurrencies, cfg.FXRates, logger)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates, cfg.StripeWebhookSecret, paymentsSrv))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, repricingSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates, cfg.StripeWebhookSecret, paymentsSrv))
 	// StoreMiddleware resolves the active store per request and binds
 	// it on the request context. It MUST run before the CSRF middleware
 	// so the store is available to every handler/template — including
@@ -386,6 +403,7 @@ func main() {
 	app.AddBoundedContext(searchBD)
 	app.AddBoundedContext(storeBD)
 	app.AddBoundedContext(paymentsBD)
+	app.AddBoundedContext(repricingBD)
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock
@@ -542,4 +560,69 @@ func newLogger(lvl logrus.Level, appName string) logrus.FieldLogger {
 	}
 
 	return instance.WithField("service.name", appName)
+}
+
+// repricingCategoryReaderAdapter bridges the productcatalog query
+// surface (ProductService.List + ProductQuery{CategorySlug}) onto
+// the repricing context's CategoryReader port. The repricing
+// context never imports productcatalog directly — the ACL lives
+// here in the composition root so swapping the catalogue out (or
+// growing a richer "give me product ids for category" surface)
+// touches one place.
+type repricingCategoryReaderAdapter struct {
+	catalog interface {
+		List(ctx context.Context, q pcapp.ProductQuery) ([]pcdomain.Product, error)
+	}
+}
+
+func (a repricingCategoryReaderAdapter) ProductsInCategory(ctx context.Context, categorySlug string) ([]string, error) {
+	products, err := a.catalog.List(ctx, pcapp.ProductQuery{CategorySlug: categorySlug})
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(products))
+	for _, p := range products {
+		ids = append(ids, string(p.ID()))
+	}
+	return ids, nil
+}
+
+// repricingPriceUpdaterAdapter bridges the productcatalog mutation
+// surface onto the repricing context's PriceUpdater port.
+// productcatalog/app.ProductService.UpdateProduct rewrites every
+// field on the product row, so this adapter first loads the
+// product to preserve name / description / thumbnail / currency
+// verbatim, then re-issues UpdateProduct with the new price.
+// CurrentPriceMinor reads the same product's base price in minor
+// units so the saga can compute the new amount before calling
+// back.
+type repricingPriceUpdaterAdapter struct {
+	catalog interface {
+		Find(ctx context.Context, id string) (pcdomain.Product, error)
+		UpdateProduct(ctx context.Context, id, name, desc string, priceMinorUnits int64, currency, thumbnail string) error
+	}
+}
+
+func (a repricingPriceUpdaterAdapter) CurrentPriceMinor(ctx context.Context, productID string) (int64, error) {
+	p, err := a.catalog.Find(ctx, productID)
+	if err != nil {
+		return 0, err
+	}
+	return p.Price().Amount(), nil
+}
+
+func (a repricingPriceUpdaterAdapter) UpdateProductPrice(ctx context.Context, productID string, newAmountMinor int64) error {
+	p, err := a.catalog.Find(ctx, productID)
+	if err != nil {
+		return err
+	}
+	return a.catalog.UpdateProduct(
+		ctx,
+		string(p.ID()),
+		p.Name(),
+		p.Description(),
+		newAmountMinor,
+		p.Price().Currency().String(),
+		p.Thumbnail(),
+	)
 }
