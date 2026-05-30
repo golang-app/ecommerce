@@ -103,6 +103,13 @@ func (handler httpHandler) AdminNewProductForm(w http.ResponseWriter, r *http.Re
 
 // AdminCreateProduct handles the create-product form (a simple product with a
 // single default variant). Price is entered in major units (e.g. "9.00").
+//
+// Idempotency. This endpoint participates in the HTTP-boundary
+// Idempotency-Key contract (see internal/idempotency): a client may
+// send the same `Idempotency-Key` header on a retry and the
+// originally-recorded response will be replayed instead of creating a
+// second product. No per-handler code is needed — the middleware
+// installed via layout.IdempotencyMiddleware is content-agnostic.
 func (handler httpHandler) AdminCreateProduct(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return

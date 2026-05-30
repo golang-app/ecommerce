@@ -33,6 +33,14 @@ func (handler httpHandler) AdminPromoCodes(w http.ResponseWriter, r *http.Reques
 }
 
 // AdminCreatePromoCode handles the create-promo-code form submission.
+//
+// Idempotency. This endpoint participates in the HTTP-boundary
+// Idempotency-Key contract (see internal/idempotency): a client may
+// send the same `Idempotency-Key` header on a retry and the
+// originally-recorded response will be replayed instead of attempting
+// to create a duplicate promo code (which the domain would reject with
+// ErrCodeAlreadyExists anyway — the contract just makes the retry
+// path return the original "created" response cleanly).
 func (handler httpHandler) AdminCreatePromoCode(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return

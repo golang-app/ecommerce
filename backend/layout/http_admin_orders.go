@@ -211,6 +211,14 @@ func (handler httpHandler) AdminInventory(w http.ResponseWriter, r *http.Request
 // AdminRefundOrder refunds the fulfillment for an order; the
 // fulfillment service also releases the reserved stock back to the
 // catalogue via the wired StockReleaser port.
+//
+// Idempotency. This endpoint participates in the HTTP-boundary
+// Idempotency-Key contract (see internal/idempotency): a client may
+// send the same `Idempotency-Key` header on a retry and the
+// originally-recorded response will be replayed instead of issuing a
+// second refund attempt. Refunds are the highest-stakes admin POST in
+// the system — a network blip after the refund commits is exactly the
+// situation the contract exists to neutralise.
 func (handler httpHandler) AdminRefundOrder(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
