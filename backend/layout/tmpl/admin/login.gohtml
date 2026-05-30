@@ -1,0 +1,21 @@
+{{define "title"}}Admin sign in · {{.SiteName}}{{end}}
+{{define "description"}}Sign in to the {{.SiteName}} admin panel.{{end}}
+
+{{define "main"}}
+  <h1 class="page-title">admin sign in</h1>
+
+  <form class="form" method="post" action="/admin/login">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <div class="field">
+      <label for="admin-login-email">email</label>
+      <input id="admin-login-email" type="email" name="email" autocomplete="email" required>
+    </div>
+
+    <div class="field">
+      <label for="admin-login-password">password</label>
+      <input id="admin-login-password" type="password" name="password" autocomplete="current-password" required>
+    </div>
+
+    <button type="submit" class="btn btn--block">sign in</button>
+  </form>
+{{end}}

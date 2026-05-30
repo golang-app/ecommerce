@@ -7,51 +7,39 @@ import (
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 )
 
-// requireAdmin is the access gate for every admin page. It resolves the
-// current customer and confirms they hold the admin flag. On failure it has
-// already written the response (a redirect to login for anonymous users, or a
-// 403 for non-admins) and returns ok=false; callers should simply return.
+// requireAdmin is the access gate for every admin page. As of the
+// customer/admin split it resolves the admin session cookie
+// ("ecommerce_admin"), NOT the customer one — an admin and a customer
+// session can coexist in the same browser and the two are wholly
+// independent.
 //
-// If the admin still has the must_change_password flag set, the gate sends
-// them to /auth/change-password so the forced-reset flow cannot be skipped
-// by deep-linking to an admin page.
-//
-// Later admin phases (products, categories, orders, ...) reuse this gate as
-// their first line.
+// On failure it has already written the response (a redirect to admin
+// login for anonymous admins, or a redirect to /admin/change-password
+// when the forced-reset gate is set) and returns ok=false; callers
+// should simply return.
 func (handler httpHandler) requireAdmin(w http.ResponseWriter, r *http.Request) (string, bool) {
-	email := handler.currentCustomerID(r)
+	email := handler.currentAdminEmail(r)
 	if email == "" {
-		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 		return "", false
 	}
 
-	isAdmin, err := handler.authSrv.IsAdmin(r.Context(), email)
-	if err != nil || !isAdmin {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return "", false
-	}
-
-	// Force the password change before any admin work. A lookup error here
-	// is treated as "not flagged" so a transient DB hiccup doesn't lock
-	// the admin out of the panel.
-	if must, mcpErr := handler.authSrv.MustChangePassword(r.Context(), email); mcpErr == nil && must {
-		http.Redirect(w, r, "/auth/change-password", http.StatusSeeOther)
+	// Force the password change before any admin work. A lookup
+	// error here is treated as "not flagged" so a transient DB
+	// hiccup doesn't lock the admin out of the panel.
+	if must, mcpErr := handler.adminAuthSrv.MustChangePassword(r.Context(), email); mcpErr == nil && must {
+		http.Redirect(w, r, "/admin/change-password", http.StatusSeeOther)
 		return "", false
 	}
 
 	return email, true
 }
 
-// isAdmin is a defensive helper for templates: it reports whether the current
-// request belongs to a logged-in admin, swallowing any lookup error as a
-// non-admin. Used by renderTemplate to expose `.IsAdmin`.
+// isAdmin is a defensive helper for templates: it reports whether the
+// current request carries a valid admin session, swallowing any lookup
+// error as a non-admin. Used by renderTemplate to expose `.IsAdmin`.
 func (handler httpHandler) isAdmin(r *http.Request) bool {
-	email := handler.currentCustomerID(r)
-	if email == "" {
-		return false
-	}
-	isAdmin, err := handler.authSrv.IsAdmin(r.Context(), email)
-	return err == nil && isAdmin
+	return handler.currentAdminID(r) != ""
 }
 
 // AdminDashboard renders the admin landing page with at-a-glance counts and

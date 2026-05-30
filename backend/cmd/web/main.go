@@ -147,7 +147,7 @@ func main() {
 	searchBD, searchSrv := search.New(db)
 	pcBD, catalogService := productcatalog.New(db, searchSrv)
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
-	authBD, authService := auth.New(db)
+	authBD, authService, adminAuthService := auth.New(db)
 	// Pricing policies are pluggable Strategies — the composition root
 	// chooses concrete implementations and the checkout service stays
 	// agnostic. The defaults (FlatTaxStrategy / ThresholdShippingStrategy)
@@ -333,7 +333,7 @@ func main() {
 	// remain stored and charged in DefaultCurrency (USD).
 	fxRates := fx.New(cfg.DefaultCurrency, cfg.SupportedCurrencies, cfg.FXRates, logger)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, checkoutSrv, checkoutQry, fulfillmentSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
 	// StoreMiddleware resolves the active store per request and binds
 	// it on the request context. It MUST run before the CSRF middleware
 	// so the store is available to every handler/template — including
