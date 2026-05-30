@@ -92,14 +92,6 @@ type nopStockMovements struct{}
 
 func (nopStockMovements) Record(context.Context, string, int, string, string) error { return nil }
 
-// PricingPolicy is an alias for the domain-level policy so the
-// composition root (cmd/web) can continue to construct one through the
-// checkout/app package while the actual math lives in the Pricing
-// domain service (checkout/domain.PriceQuote). The field set —
-// TaxRatePercent + FreeShippingThreshold — is unchanged, which keeps
-// the historical wiring arithmetic-identical to before the lift.
-type PricingPolicy = domain.PricingPolicy
-
 // IDGenerator returns a fresh order ID. Injected so tests can substitute a
 // deterministic generator.
 type IDGenerator func() string
@@ -121,18 +113,25 @@ func (nopPromoRedeemer) Redeem(context.Context, string, string, string, promodom
 }
 
 type CheckoutService struct {
-	cart      CartReader
-	storage   OrderStorage
-	payment   PaymentProcessor
-	stock     StockReserver
-	movements StockMovements
-	promo     PromoRedeemer
-	newID     IDGenerator
-	now       func() time.Time
-	pricing   PricingPolicy
+	cart             CartReader
+	storage          OrderStorage
+	payment          PaymentProcessor
+	stock            StockReserver
+	movements        StockMovements
+	promo            PromoRedeemer
+	newID            IDGenerator
+	now              func() time.Time
+	taxStrategy      domain.TaxStrategy
+	shippingStrategy domain.ShippingStrategy
 }
 
 // NewCheckoutService constructs the checkout command service.
+//
+// taxStrategy / shippingStrategy are the pluggable pricing policies the
+// service hands to domain.PriceQuote. Passing nil for either falls back
+// to the historical zero-config behaviour (no tax / catalogue shipping
+// cost) — both defaults are constructable as the zero value of the
+// matching default strategy (FlatTaxStrategy{} / ThresholdShippingStrategy{}).
 //
 // Note: there is no EventPublisher dependency. Integration events
 // (e.g. OrderPaid) are staged into the Transactional Outbox by the
@@ -146,21 +145,29 @@ func NewCheckoutService(
 	stock StockReserver,
 	movements StockMovements,
 	newID IDGenerator,
-	pricing PricingPolicy,
+	taxStrategy domain.TaxStrategy,
+	shippingStrategy domain.ShippingStrategy,
 ) CheckoutService {
 	if movements == nil {
 		movements = nopStockMovements{}
 	}
+	if taxStrategy == nil {
+		taxStrategy = domain.FlatTaxStrategy{}
+	}
+	if shippingStrategy == nil {
+		shippingStrategy = domain.ThresholdShippingStrategy{}
+	}
 	return CheckoutService{
-		cart:      cart,
-		storage:   storage,
-		payment:   payment,
-		stock:     stock,
-		movements: movements,
-		promo:     nopPromoRedeemer{},
-		newID:     newID,
-		now:       func() time.Time { return time.Now().UTC() },
-		pricing:   pricing,
+		cart:             cart,
+		storage:          storage,
+		payment:          payment,
+		stock:            stock,
+		movements:        movements,
+		promo:            nopPromoRedeemer{},
+		newID:            newID,
+		now:              func() time.Time { return time.Now().UTC() },
+		taxStrategy:      taxStrategy,
+		shippingStrategy: shippingStrategy,
 	}
 }
 
@@ -270,7 +277,7 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	quote := domain.PriceQuote(lines, shipMethod, domain.DiscountInput{
 		AmountMinor:  discount.AmountMinor(),
 		FreeShipping: discount.FreeShipping(),
-	}, s.pricing)
+	}, s.taxStrategy, s.shippingStrategy)
 	span.SetAttributes(
 		attribute.Int64("order.subtotal", quote.Subtotal),
 		attribute.Int64("order.discount", quote.DiscountAmount),

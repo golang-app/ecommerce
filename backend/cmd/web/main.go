@@ -12,7 +12,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/auth"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout"
-	checkoutapp "github.com/bkielbasa/go-ecommerce/backend/checkout/app"
+	checkoutdomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	checkoutintegration "github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
 	checkoutquery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/sweeper"
@@ -148,11 +148,16 @@ func main() {
 	pcBD, catalogService := productcatalog.New(db, searchSrv)
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
 	authBD, authService := auth.New(db)
-	pricing := checkoutapp.PricingPolicy{
-		TaxRatePercent:        cfg.TaxRatePercent,
-		FreeShippingThreshold: cfg.FreeShippingThreshold,
-	}
-	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, outboxStore, catalogService, catalogService, pricing)
+	// Pricing policies are pluggable Strategies — the composition root
+	// chooses concrete implementations and the checkout service stays
+	// agnostic. The defaults (FlatTaxStrategy / ThresholdShippingStrategy)
+	// preserve the historical "flat percent tax, free shipping above a
+	// configurable threshold" behaviour while leaving the door open for
+	// per-jurisdiction tax, weight-based shipping etc. by swapping in a
+	// different strategy here.
+	taxStrategy := checkoutdomain.FlatTaxStrategy{RatePercent: cfg.TaxRatePercent}
+	shippingStrategy := checkoutdomain.ThresholdShippingStrategy{FreeShippingThreshold: cfg.FreeShippingThreshold}
+	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, outboxStore, catalogService, catalogService, taxStrategy, shippingStrategy)
 	// Fulfillment Process Manager: subscribes to OrderPaid, spawns a
 	// state-stored Fulfillment, and owns the operational lifecycle
 	// (ship/deliver/refund). Stock release on refund goes through the

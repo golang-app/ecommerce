@@ -113,8 +113,9 @@ func TestPlaceOrder_AppliesDiscount(t *testing.T) {
 }
 
 // TestPlaceOrder_AppliesTaxAndEffectiveShipping locks in the tax/shipping
-// math driven by the new PricingPolicy: the OrderPlaced event carries the
-// derived numbers and the rehydrated order's total reflects them.
+// math driven by the pluggable pricing strategies: the OrderPlaced event
+// carries the derived numbers and the rehydrated order's total reflects
+// them.
 func TestPlaceOrder_AppliesTaxAndEffectiveShipping(t *testing.T) {
 	at := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
 	lines := []domain.Line{domain.NewLine("v1", "Mug", 4, 1000, "USD")}
