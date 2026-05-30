@@ -29,6 +29,7 @@ func Execute(db *sql.DB) {
 	rootCmd.AddCommand(newSeedsCmd(appServ, db))
 	rootCmd.AddCommand(newReindexCmd(db))
 	rootCmd.AddCommand(newRebuildReadModelsCmd(db))
+	rootCmd.AddCommand(newEventsCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
