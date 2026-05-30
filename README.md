@@ -127,6 +127,8 @@ For a strategic lens — which contexts are Core / Supporting / Generic, and
 where the business actually differentiates — see
 [docs/subdomains.md](./docs/subdomains.md).
 
+For a worked example of how a context realises hexagonal architecture, see [backend/cart/Readme.md](./backend/cart/Readme.md).
+
 
 ## Quick start
 
