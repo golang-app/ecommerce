@@ -28,18 +28,10 @@ func (p authStoragePostgres) UpdatePassword(ctx context.Context, email, password
 	return err
 }
 
-// ClearMustChangePassword resets the must_change_password flag for the given
-// customer. Called after a successful ChangePassword so the gate at /auth/
-// change-password stops firing for them.
-func (p authStoragePostgres) ClearMustChangePassword(ctx context.Context, email string) error {
-	_, err := p.db.ExecContext(ctx, "UPDATE auth_customer SET must_change_password = false WHERE username = $1", email)
-	return err
-}
-
 func (p authStoragePostgres) Find(ctx context.Context, email string) (Customer, error) {
 	c := Customer{}
 
-	err := p.db.QueryRowContext(ctx, "SELECT username, password_hash, is_admin, must_change_password FROM auth_customer WHERE username = $1", email).Scan(&c.Username, &c.PasswordHash, &c.IsAdmin, &c.MustChangePassword)
+	err := p.db.QueryRowContext(ctx, "SELECT username, password_hash FROM auth_customer WHERE username = $1", email).Scan(&c.Username, &c.PasswordHash)
 
 	if err == sql.ErrNoRows {
 		return Customer{}, domain.ErrCustomerNotFound

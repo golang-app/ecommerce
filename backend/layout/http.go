@@ -44,6 +44,7 @@ type httpHandler struct {
 	cartSrv        cartService
 	catalogSrv     catalogService
 	authSrv        authService
+	adminAuthSrv   adminAuthService
 	checkoutSrv    checkoutCommands
 	checkoutQry    checkoutQueries
 	fulfillmentSrv fulfillmentService
@@ -150,8 +151,6 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/auth/logout", observability.HTTPWrap(m.handler.HandleLogout, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.Register, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/register", observability.HTTPWrap(m.handler.HandleRegister, m.logger)).Methods("POST")
-	r.HandleFunc("/auth/change-password", observability.HTTPWrap(m.handler.ChangePasswordPage, m.logger)).Methods("GET")
-	r.HandleFunc("/auth/change-password", observability.HTTPWrap(m.handler.HandleChangePassword, m.logger)).Methods("POST")
 	r.HandleFunc("/auth/forgot", observability.HTTPWrap(m.handler.ForgotPasswordPage, m.logger)).Methods("GET")
 	r.HandleFunc("/auth/forgot", observability.HTTPWrap(m.handler.HandleForgotPassword, m.logger)).Methods("POST")
 	r.HandleFunc("/auth/reset", observability.HTTPWrap(m.handler.ResetPasswordPage, m.logger)).Methods("GET")
@@ -177,6 +176,16 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/account/wishlist", observability.HTTPWrap(m.handler.AccountWishlist, m.logger)).Methods("GET")
 
 	r.HandleFunc("/wishlist/{variantID}/toggle", observability.HTTPWrap(m.handler.WishlistToggle, m.logger)).Methods("POST")
+
+	// Admin authentication: separate from the customer flow so a single
+	// browser can be logged in as both simultaneously. Cookies are
+	// distinct (ecommerce vs ecommerce_admin) and sessions are stamped
+	// with a principal_kind discriminator at the storage layer.
+	r.HandleFunc("/admin/login", observability.HTTPWrap(m.handler.AdminLoginPage, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/login", observability.HTTPWrap(m.handler.HandleAdminLogin, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/logout", observability.HTTPWrap(m.handler.HandleAdminLogout, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/change-password", observability.HTTPWrap(m.handler.AdminChangePasswordPage, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/change-password", observability.HTTPWrap(m.handler.HandleAdminChangePassword, m.logger)).Methods("POST")
 
 	// Admin panel. Later phases register the /admin/products, /admin/categories,
 	// /admin/attributes and /admin/orders handlers here, all behind requireAdmin.
@@ -415,7 +424,7 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	data["CSRFToken"] = csrfToken
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
-	data["AdminEmail"] = handler.currentCustomerID(r)
+	data["AdminEmail"] = handler.currentAdminEmail(r)
 	err = session.Save(r, w)
 	if err != nil {
 		handler.logger.WithError(err).Error("cannot save session")

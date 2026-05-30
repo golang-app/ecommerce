@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"time"
 
+	authAdapter "github.com/bkielbasa/go-ecommerce/backend/auth/adapter"
 	authDomain "github.com/bkielbasa/go-ecommerce/backend/auth/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
@@ -74,16 +75,29 @@ type cartService interface {
 	Get(ctx context.Context, sessID string) (*domain.Cart, error)
 }
 
+// authService is the customer-side seam onto the auth bounded context.
+// As of the customer/admin split it no longer carries IsAdmin /
+// MustChangePassword — those belong to adminAuthService below.
 type authService interface {
 	Login(ctx context.Context, username string, password string) (*authDomain.Session, error)
 	Logout(ctx context.Context, seesionID string) error
 	CreateNewCustomer(ctx context.Context, email, password string) error
 	FindByToken(ctx context.Context, sessToken string) (*authDomain.Session, error)
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
-	IsAdmin(ctx context.Context, email string) (bool, error)
-	MustChangePassword(ctx context.Context, email string) (bool, error)
 	RequestPasswordReset(ctx context.Context, email string) (string, error)
 	ResetPassword(ctx context.Context, rawToken, newPassword string) error
+}
+
+// adminAuthService is the operator-side seam onto the auth bounded
+// context. It backs requireAdmin, the admin login/logout/change-password
+// handlers, and the .IsAdmin template flag.
+type adminAuthService interface {
+	Login(ctx context.Context, email, password string) (*authDomain.Session, error)
+	Logout(ctx context.Context, token string) error
+	FindByToken(ctx context.Context, token string) (*authDomain.Session, error)
+	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
+	MustChangePassword(ctx context.Context, email string) (bool, error)
+	FindByID(ctx context.Context, id string) (authAdapter.Admin, error)
 }
 
 type shippingService interface {
@@ -205,7 +219,7 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -213,6 +227,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			cartSrv:        cartSrv,
 			catalogSrv:     catalogSrv,
 			authSrv:        authSrv,
+			adminAuthSrv:   adminAuthSrv,
 			checkoutSrv:    checkoutSrv,
 			checkoutQry:    checkoutQry,
 			fulfillmentSrv: fulfillmentSrv,

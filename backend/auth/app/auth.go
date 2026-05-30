@@ -34,14 +34,13 @@ const passwordResetTTL = 30 * time.Minute
 
 var emailRegexp = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 
+// CustomerStorage is the persistence boundary for the Customer aggregate.
+// As of the customer/admin split (migration 000038) it no longer carries
+// the IsAdmin / MustChangePassword surface — those moved to AdminStorage.
 type CustomerStorage interface {
 	Create(ctx context.Context, email, passwordHash string) error
 	Find(ctx context.Context, email string) (adapter.Customer, error)
 	UpdatePassword(ctx context.Context, email, passwordHash string) error
-	// ClearMustChangePassword resets the must_change_password flag for the
-	// given customer. Called by ChangePassword after a successful update so
-	// the change-password gate stops firing on subsequent logins.
-	ClearMustChangePassword(ctx context.Context, email string) error
 }
 
 type SessStorage interface {
@@ -76,17 +75,24 @@ func NewAuth(authStorage CustomerStorage, sessStorage SessStorage, resetStorage 
 	}
 	return auth{
 		authStorage: authStorage, sessStorage: sessStorage, resetStorage: rs,
-		passPolicies: []domain.PasswordPolicy{
+		passPolicies: defaultPasswordPolicies(),
+	}
+}
 
-			// those values are recommended by OWASP https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#implement-proper-password-strength-controls
-			domain.MinLength(8),
-			domain.MaxLength(64),
-
-			domain.MustContainLowercase,
-			domain.MustContainUppercase,
-			domain.MustContainNumber,
-			domain.MustContainSpecialChar,
-		},
+// defaultPasswordPolicies returns the OWASP-aligned policy bundle that the
+// customer and admin services both enforce. Centralising the list here
+// keeps the two services in lockstep — there is no reason for admins to
+// face a different password contract than customers.
+//
+// Source: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#implement-proper-password-strength-controls
+func defaultPasswordPolicies() []domain.PasswordPolicy {
+	return []domain.PasswordPolicy{
+		domain.MinLength(8),
+		domain.MaxLength(64),
+		domain.MustContainLowercase,
+		domain.MustContainUppercase,
+		domain.MustContainNumber,
+		domain.MustContainSpecialChar,
 	}
 }
 
@@ -211,8 +217,14 @@ func (a auth) Login(ctx context.Context, email, password string) (_ *domain.Sess
 
 // ChangePassword verifies the customer's current password, enforces the
 // password policy on the new one, and stores the new hash.
+//
+// Customers no longer carry a must_change_password flag — that gate
+// moved to the Admin aggregate as part of the 000038 split — so this
+// method has no "clear the flag" side effect today. The shape is kept
+// (rather than reduced to UpdatePassword) so storefront and admin
+// services stay symmetric.
 func (a auth) ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error {
-	ctx, span := tracer.Start(ctx, "Auth.ChangePassword")
+	_, span := tracer.Start(ctx, "Auth.ChangePassword")
 	defer span.End()
 
 	customer, err := a.authStorage.Find(ctx, email)
@@ -244,44 +256,7 @@ func (a auth) ChangePassword(ctx context.Context, email, oldPassword, newPasswor
 		return fmt.Errorf("could not update password: %w", err)
 	}
 
-	// A successful password change always clears the must-change-password
-	// gate (no-op for users who weren't flagged in the first place).
-	if err := a.authStorage.ClearMustChangePassword(ctx, email); err != nil {
-		recordSpanError(span, err)
-		return fmt.Errorf("could not clear must-change-password flag: %w", err)
-	}
-
 	return nil
-}
-
-// IsAdmin reports whether the customer identified by email has the admin
-// flag set. A missing customer is treated as a non-admin (false, nil); any
-// other lookup error is returned.
-func (a auth) IsAdmin(ctx context.Context, email string) (bool, error) {
-	customer, err := a.authStorage.Find(ctx, email)
-	if err == domain.ErrCustomerNotFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("could not find customer: %w", err)
-	}
-
-	return customer.IsAdmin, nil
-}
-
-// MustChangePassword reports whether the given customer is currently flagged
-// for a forced password change. A missing customer is treated as false so
-// anonymous lookups don't trip the gate; any other lookup error is returned.
-func (a auth) MustChangePassword(ctx context.Context, email string) (bool, error) {
-	customer, err := a.authStorage.Find(ctx, email)
-	if err == domain.ErrCustomerNotFound {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("could not find customer: %w", err)
-	}
-
-	return customer.MustChangePassword, nil
 }
 
 func hashPassword(password string) (string, error) {
@@ -332,7 +307,7 @@ func (a auth) RequestPasswordReset(ctx context.Context, email string) (string, e
 // The token is consumed BEFORE the policy check on purpose: a policy
 // failure should not let a leaked token stay reusable.
 func (a auth) ResetPassword(ctx context.Context, rawToken, newPassword string) error {
-	ctx, span := tracer.Start(ctx, "Auth.ResetPassword")
+	_, span := tracer.Start(ctx, "Auth.ResetPassword")
 	defer span.End()
 
 	if a.resetStorage == nil {
@@ -360,12 +335,6 @@ func (a auth) ResetPassword(ctx context.Context, rawToken, newPassword string) e
 	if err := a.authStorage.UpdatePassword(ctx, customerID, newHash); err != nil {
 		recordSpanError(span, err)
 		return fmt.Errorf("could not update password: %w", err)
-	}
-	// A successful password reset clears any forced-change flag the same
-	// way ChangePassword does — the user just proved they own the inbox.
-	if err := a.authStorage.ClearMustChangePassword(ctx, customerID); err != nil {
-		recordSpanError(span, err)
-		return fmt.Errorf("could not clear must-change-password flag: %w", err)
 	}
 	return nil
 }

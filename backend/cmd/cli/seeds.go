@@ -18,15 +18,22 @@ const (
 	seedAdminPassword = "Admin123!"
 )
 
-// upsertAdmin idempotently inserts the demo admin account or, on conflict,
-// re-asserts is_admin = true and forces must_change_password = true. Always
-// resetting must_change_password on re-seed makes the "change password on
-// first login" gate reliably testable when developers re-run `seeds`.
-const upsertAdmin = `INSERT INTO auth_customer (username, password_hash, is_admin, must_change_password)
-	VALUES ($1, $2, true, true)
-	ON CONFLICT (username) DO UPDATE SET is_admin = true, must_change_password = true`
+// upsertAdmin idempotently inserts (or refreshes) the demo admin account
+// in the auth_admin table (the split admin aggregate; see migration
+// 000038). must_change_password = true is always re-asserted on
+// re-seed so the "change password on first login" gate is reliably
+// testable when developers re-run `seeds`.
+const upsertAdmin = `INSERT INTO auth_admin (id, email, password_hash, role, must_change_password)
+	VALUES ($1, $1, $2, 'admin', true)
+	ON CONFLICT (id) DO UPDATE SET
+		email = EXCLUDED.email,
+		password_hash = EXCLUDED.password_hash,
+		role = EXCLUDED.role,
+		must_change_password = true`
 
-// seedAdminUser idempotently creates (or promotes) the demo admin account.
+// seedAdminUser idempotently creates (or refreshes) the demo admin
+// account. The post-split target is auth_admin, not auth_customer:
+// admins live in their own aggregate now.
 func seedAdminUser(ctx context.Context, db *sql.DB) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(seedAdminPassword), bcrypt.DefaultCost)
 	if err != nil {
