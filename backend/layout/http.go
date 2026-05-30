@@ -121,6 +121,16 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	// User-uploaded images live on disk (see internal/imagestore) and are
 	// served from m.uploadsDir under the /uploads/ URL prefix.
 	r.PathPrefix("/uploads/").Handler(imagestore.Serve(m.uploadsDir))
+	// Payments webhook. Registered without CSRF (the /webhooks/ prefix is
+	// exempted by csrfMiddleware) — webhook requests come from outside the
+	// browser and are authenticated by a signed body, not a session
+	// cookie. The handler verifies the Stripe-Signature header against
+	// the configured secret before doing anything with the payload. See
+	// http_payments_webhook.go for the full rationale (idempotency, body
+	// reading, etc.).
+	if m.paymentsWebhookSrv != nil && m.paymentsWebhookSecret != "" {
+		r.HandleFunc("/webhooks/payments", observability.HTTPWrap(paymentsWebhookHandler(m.paymentsWebhookSecret, m.paymentsWebhookSrv), m.logger)).Methods("POST")
+	}
 	// SEO endpoints. Registered before the "/" catch-all so they are not
 	// shadowed by the home page route. Both are public (no admin gate).
 	r.HandleFunc("/robots.txt", observability.HTTPWrap(m.handler.Robots, m.logger)).Methods("GET")

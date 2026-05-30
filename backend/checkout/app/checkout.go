@@ -316,6 +316,16 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		attribute.String("payment.currency", order.TotalCurrency()),
 		attribute.String("payment.method", payMethod.Code()),
 	))
+	// Thread the order id and a derived idempotency key onto the
+	// charge context so a payments-backed PaymentProcessor can
+	// (a) tag its records with the order and (b) deduplicate two
+	// retries of the same Place call. The key is the order id
+	// itself: orderIDs are minted fresh for every Place, and a
+	// retry that ever wanted to double-charge the same order would
+	// reuse this same id — so the same id is the right dedupe key.
+	// Implementations that don't care (the historical FakePayment
+	// path) simply never read these values.
+	chargeCtx = WithChargeContext(chargeCtx, orderID, "payment:"+orderID)
 	chargeErr := s.payment.Charge(chargeCtx, order.TotalAmount(), order.TotalCurrency(), cardNumber)
 	if chargeErr != nil {
 		recordSpanError(chargeSpan, chargeErr)

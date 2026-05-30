@@ -102,7 +102,7 @@ func CSRFMiddleware(next http.Handler) http.Handler {
 // as idempotent on net/http so a downstream re-parse is safe.
 func csrfMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !csrfEnabled || isSafeMethod(r.Method) {
+		if !csrfEnabled || isSafeMethod(r.Method) || isWebhookPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -149,4 +149,15 @@ func isSafeMethod(method string) bool {
 	default:
 		return false
 	}
+}
+
+// isWebhookPath returns true for inbound webhook routes. These come
+// from outside the browser (e.g. a payment provider's webhook
+// emitter), carry no session cookie, and are authenticated by a
+// signed body — they have no CSRF token to present, and demanding
+// one would block every legitimate delivery. The handler downstream
+// (see http_payments_webhook.go) verifies the signature before
+// touching state, so the bypass is safe.
+func isWebhookPath(path string) bool {
+	return strings.HasPrefix(path, "/webhooks/")
 }

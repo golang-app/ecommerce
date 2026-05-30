@@ -49,15 +49,21 @@ type StockMovements interface {
 // to disable the integration entirely (matches the previous behaviour and
 // what older tests expect).
 //
+// payment is the checkout PaymentProcessor port implementation. In
+// production wiring it is the payments-backed adapter
+// (checkout/adapter.PaymentsProcessor) that calls into the payments
+// bounded context. Tests may pass a fake; a no-op "always succeeds"
+// implementation is no longer provided here because the demo's whole
+// point is that checkout calls payments through an explicit port.
+//
 // movements may be nil — checkout then runs without writing audit rows, which
 // is the historical behaviour. taxStrategy and shippingStrategy are the
 // pluggable pricing policies the service hands to domain.PriceQuote; passing
 // nil for either falls back to the zero-config defaults (FlatTaxStrategy{} /
 // ThresholdShippingStrategy{}), matching the historical "no tax, no
 // automatic free-shipping override" behaviour.
-func New(db *sql.DB, cart CartReader, outbox adapter.OutboxAppender, stock StockReserver, movements StockMovements, taxStrategy domain.TaxStrategy, shippingStrategy domain.ShippingStrategy) (application.BoundedContext, app.CheckoutService, query.Service) {
+func New(db *sql.DB, cart CartReader, outbox adapter.OutboxAppender, payment app.PaymentProcessor, stock StockReserver, movements StockMovements, taxStrategy domain.TaxStrategy, shippingStrategy domain.ShippingStrategy) (application.BoundedContext, app.CheckoutService, query.Service) {
 	storage := adapter.NewPostgres(db, outbox)
-	payment := adapter.NewFakePayment()
 	cmd := app.NewCheckoutService(cart, storage, payment, stock, movements, newOrderID, taxStrategy, shippingStrategy)
 	queries := query.NewService(storage)
 	return &boundedContext{}, cmd, queries

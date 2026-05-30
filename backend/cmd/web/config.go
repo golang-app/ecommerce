@@ -95,6 +95,18 @@ type config struct {
 	// implementation of internal/fx.Rates; every storefront template and
 	// the /currency handler talk through that single seam.
 	FXRates string
+	// StripeWebhookSecret is the shared secret used to verify the HMAC
+	// signature on inbound payment webhooks (Stripe-Signature header).
+	// Defaults to a dev placeholder so the local stack can boot; the
+	// payments webhook route is skipped entirely if the secret is left
+	// blank. Production operators MUST override.
+	StripeWebhookSecret string `conf:"default:whsec_dev_only_do_not_use_in_production,STRIPE_WEBHOOK_SECRET"`
+	// StripeFailCardEndingIn drives the fake provider's failure mode.
+	// Set it to e.g. "0000" so a card token ending in 0000 triggers a
+	// declined charge (status "failed"); leave empty and every charge
+	// the fake provider sees succeeds. Dev/test only — production
+	// payment failures come from the real provider's logic.
+	StripeFailCardEndingIn string `conf:"default:,STRIPE_FAIL_CARD_ENDING_IN"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep
