@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/bkielbasa/go-ecommerce/backend/internal/sharedkernel"
 )
 
 type Status string
@@ -160,6 +162,42 @@ func (o Order) DiscountAmount() int64 { return o.discountAmt }
 // DiscountDisplay renders the discount amount for the totals row in the
 // templates (negative sign included).
 func (o Order) DiscountDisplay() string { return money(o.discountAmt) }
+
+// --- Shared-kernel Money accessors (additive) ---
+//
+// These getters return the same numbers as the int64 accessors above, wrapped
+// in the shared-kernel Money value object. They live ALONGSIDE the existing
+// accessors so callers that already speak Money (or want to) can pick them
+// up without breaking the int64-shaped reader paths (storage, templates,
+// CQRS projections) that still pair amount+currency at the boundary. See
+// internal/sharedkernel/README.md for the migration plan.
+
+// TotalMoney returns the order's grand total as a Money value.
+func (o Order) TotalMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(o.totalAmt, sharedkernel.Currency(o.totalCcy))
+}
+
+// SubtotalMoney returns the pre-discount, pre-tax, pre-shipping subtotal.
+func (o Order) SubtotalMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(o.subtotalAmt, sharedkernel.Currency(o.totalCcy))
+}
+
+// TaxMoney returns the tax charged on the discounted subtotal.
+func (o Order) TaxMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(o.taxAmt, sharedkernel.Currency(o.totalCcy))
+}
+
+// ShippingCostMoney returns the effective shipping cost (0 when free
+// shipping applied).
+func (o Order) ShippingCostMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(o.shipCostAmt, sharedkernel.Currency(o.totalCcy))
+}
+
+// DiscountMoney returns the resolved discount subtracted from the subtotal
+// before tax (zero when no code, or when the code only zeroed shipping).
+func (o Order) DiscountMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(o.discountAmt, sharedkernel.Currency(o.totalCcy))
+}
 
 // --- event-sourced write side ---
 

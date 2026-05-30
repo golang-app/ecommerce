@@ -45,7 +45,11 @@
 //     strategy only needs to cover its own math.
 package domain
 
-import "math"
+import (
+	"math"
+
+	"github.com/bkielbasa/go-ecommerce/backend/internal/sharedkernel"
+)
 
 // Quote is the value object returned by PriceQuote: every line a checkout
 // summary or order confirmation can render. Currency is implicit — the
@@ -215,4 +219,39 @@ func PriceQuote(lines []Line, shipMethod ShippingMethod, discount DiscountInput,
 		Total:          discountedSubtotal + taxAmount + shippingCost,
 		FreeShipping:   freeShipping,
 	}
+}
+
+// --- Shared-kernel Money helpers on Quote (additive) ---
+//
+// Quote keeps its int64 fields so the existing pricing-math and persistence
+// paths stay untouched. These helpers wrap each amount in a Money value
+// using the currency the caller supplies (typically the order's stored
+// currency, since Quote intentionally does not carry one). See
+// internal/sharedkernel/README.md for the migration plan.
+
+// SubtotalMoney returns the subtotal as Money in the supplied currency.
+func (q Quote) SubtotalMoney(currency sharedkernel.Currency) sharedkernel.Money {
+	return sharedkernel.MustNewMoney(q.Subtotal, currency)
+}
+
+// DiscountMoney returns the (clamped) discount as Money in the supplied
+// currency.
+func (q Quote) DiscountMoney(currency sharedkernel.Currency) sharedkernel.Money {
+	return sharedkernel.MustNewMoney(q.DiscountAmount, currency)
+}
+
+// TaxMoney returns the tax amount as Money in the supplied currency.
+func (q Quote) TaxMoney(currency sharedkernel.Currency) sharedkernel.Money {
+	return sharedkernel.MustNewMoney(q.Tax, currency)
+}
+
+// ShippingCostMoney returns the effective shipping cost as Money in the
+// supplied currency (zero when free shipping applied).
+func (q Quote) ShippingCostMoney(currency sharedkernel.Currency) sharedkernel.Money {
+	return sharedkernel.MustNewMoney(q.ShippingCost, currency)
+}
+
+// TotalMoney returns the grand total as Money in the supplied currency.
+func (q Quote) TotalMoney(currency sharedkernel.Currency) sharedkernel.Money {
+	return sharedkernel.MustNewMoney(q.Total, currency)
 }

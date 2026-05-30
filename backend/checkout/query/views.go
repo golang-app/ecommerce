@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/sharedkernel"
 )
 
 func money(amount int64) string {
@@ -44,6 +45,15 @@ func (s OrderSummary) ItemCount() int        { return s.itemCount }
 func (s OrderSummary) TotalAmount() int64    { return s.total }
 func (s OrderSummary) TotalDisplay() string  { return money(s.total) }
 func (s OrderSummary) TotalCurrency() string { return s.currency }
+
+// TotalMoney returns the row's grand total as a shared-kernel Money value.
+// It mirrors TotalAmount+TotalCurrency and is the preferred read for new
+// callers; the int64 accessors remain so the templates' currency-aware
+// `money` helper keeps working unchanged. See
+// internal/sharedkernel/README.md for the migration plan.
+func (s OrderSummary) TotalMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(s.total, sharedkernel.Currency(s.currency))
+}
 
 // OrderView is the read model for the order detail page.
 type OrderView struct {
@@ -136,6 +146,40 @@ func (v OrderView) DiscountDisplay() string { return money(v.discountAmount) }
 // row as "free shipping (CODE)" instead of a money amount.
 func (v OrderView) FreeShipping() bool {
 	return v.discountCode != "" && v.shipCost == 0 && v.discountAmount == 0
+}
+
+// --- Shared-kernel Money accessors (additive) ---
+//
+// These return the same numbers as the int64 accessors above, paired with
+// the view's stored currency. They sit alongside the existing accessors so
+// the storefront templates' `money` FuncMap helper keeps working unchanged
+// while new readers can speak Money directly.
+
+// SubtotalMoney returns the view's subtotal as a Money value.
+func (v OrderView) SubtotalMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(v.subtotal, sharedkernel.Currency(v.currency))
+}
+
+// TaxMoney returns the view's tax amount as a Money value.
+func (v OrderView) TaxMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(v.tax, sharedkernel.Currency(v.currency))
+}
+
+// ShippingCostMoney returns the view's effective shipping cost as a Money
+// value (zero when free shipping applied).
+func (v OrderView) ShippingCostMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(v.shipCost, sharedkernel.Currency(v.currency))
+}
+
+// TotalMoney returns the view's grand total as a Money value.
+func (v OrderView) TotalMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(v.total, sharedkernel.Currency(v.currency))
+}
+
+// DiscountMoney returns the view's discount as a Money value (zero when no
+// code was used).
+func (v OrderView) DiscountMoney() sharedkernel.Money {
+	return sharedkernel.MustNewMoney(v.discountAmount, sharedkernel.Currency(v.currency))
 }
 
 // DailySalesRow is one row of the analytics_daily_sales projection — a
