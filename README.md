@@ -46,26 +46,71 @@ graph TD
     auth["auth<br/><i>customers, sessions, admin role</i>"]
     shippinginfo["shippinginfo<br/><i>saved addresses</i>"]
 
-    layout --> productcatalog
-    layout --> cart
-    layout --> checkout
-    layout --> auth
-    layout --> shippinginfo
+    layout -->|Conformist| productcatalog
+    layout -->|Conformist| cart
+    layout -->|Conformist| checkout
+    layout -->|Conformist| auth
+    layout -->|Conformist| shippinginfo
 
-    cart -- "ACL: variant → cart product" --> productcatalog
-    checkout -- "reads cart at order time" --> cart
-    checkout -- "reserves / releases stock" --> productcatalog
-    checkout -. "OrderPaid event (bus)" .-> cart
+    cart -->|ACL: variant → cart product| productcatalog
+    checkout -->|Customer-Supplier: cart read port| cart
+    checkout -->|Customer-Supplier: stock ports| productcatalog
+    checkout -. "Published Language: OrderPaid (bus)" .-> cart
 ```
+
+### Relationship types
+
+Each edge above is labelled with one of the standard DDD strategic-design
+relationships. The patterns realised in the code are:
+
+- **Anti-Corruption Layer (ACL)** — a translation layer that protects one
+  context from another's vocabulary. Here: `cart` translates a
+  `productcatalog.Variant` into its own `domain.Product` (re-checking stock
+  and currency) in
+  [`transformProductCatalog`](./backend/cart/bounded_context.go) — cart
+  never imports productcatalog types beyond that seam.
+- **Customer-Supplier** — two contexts collaborate on a port the customer
+  needs; the supplier agrees to honour it. Here: `checkout` defines
+  `CartReader` and the stock ports (`StockReserver`, `StockMovements`) in
+  [`backend/checkout/bounded_context.go`](./backend/checkout/bounded_context.go);
+  `cart` and `productcatalog` implement them. The contract is checkout-shaped,
+  not a generic catalogue API.
+- **Published Language** — a documented, stable interchange schema. Here:
+  the integration event `checkout.OrderPaid`
+  ([`backend/checkout/integration/events.go`](./backend/checkout/integration/events.go))
+  is checkout's outward-facing shape — subscribers (cart, fulfillment, the
+  email subscriber) consume it through the in-process bus + Outbox without
+  checkout knowing they exist.
+- **Conformist** — the consumer accepts the producer's vocabulary with no
+  translation. Here: `layout` declares narrow per-context interfaces but
+  refers to each producer's domain types directly (e.g. `pcdomain.Product`,
+  `checkoutDomain.Order`, `fulfillmentDomain.Fulfillment`); see the imports
+  at the top of
+  [`backend/layout/bounded_context.go`](./backend/layout/bounded_context.go).
+  A presentation layer that just renders is a natural conformist.
+- **Open Host Service (OHS)** — a context exposes a deliberately stable,
+  public API any other context can integrate with. Here: `search` publishes
+  the `Document` value object plus the `Indexer` / `Querier` ports in
+  [`backend/search/app/service.go`](./backend/search/app/service.go).
+  Productcatalog is the in-repo producer today (via the
+  `SearchIndexer` port), but the surface is intentionally generic — a blog
+  or FAQ producer could light it up with no changes to search. (Not drawn
+  in the diagram above because the search context is omitted for
+  readability; see the table below.)
+
+The other patterns from Evans' catalogue — **Partnership** (joint
+co-evolution) and **Shared Kernel** (a small set of shared types) — are
+not realised in master today, so no edge above carries those labels.
 
 | Context | Responsibility | Talks to |
 | --- | --- | --- |
-| **productcatalog** | Products, variants, option types, filterable attributes, categories, and stock reservation. No dependencies on other contexts. | — |
-| **cart** | Session-scoped shopping carts. Resolves a variant id into its own product notion through an anti-corruption layer over productcatalog. | productcatalog (sync, ACL) |
-| **checkout** | Orders as an event-sourced aggregate with a separate CQRS read side. Snapshots the cart, reserves stock, records payment, and publishes an `OrderPaid` integration event. | cart, productcatalog (sync); cart (async, via event bus) |
+| **productcatalog** | Products, variants, option types, filterable attributes, categories, and stock reservation. No dependencies on other contexts. | search (OHS producer side: publishes Documents via `SearchIndexer`) |
+| **cart** | Session-scoped shopping carts. Resolves a variant id into its own product notion through an anti-corruption layer over productcatalog. | productcatalog (sync, ACL); checkout (async, subscribes to `OrderPaid` to clear the basket) |
+| **checkout** | Orders as an event-sourced aggregate with a separate CQRS read side. Snapshots the cart, reserves stock, records payment, and publishes an `OrderPaid` integration event. | cart (sync, Customer-Supplier on `CartReader`); productcatalog (sync, Customer-Supplier on stock ports); downstream subscribers via Published Language `OrderPaid` |
 | **auth** | Customers, sessions, password policy, and the admin role. Standalone. | — |
 | **shippinginfo** | Customers' saved shipping addresses. Standalone. | — |
-| **layout** | HTTP presentation: the HTMX storefront and the admin panel. Orchestrates every context through narrow interfaces. | all contexts |
+| **search** | Free-text + filtered search over an open set of `Document` kinds. Two ports: `Indexer` (write) and `Querier` (read). | productcatalog (OHS consumer side) |
+| **layout** | HTTP presentation: the HTMX storefront and the admin panel. Orchestrates every context through narrow interfaces, conforming to each producer's domain types. | all contexts (Conformist) |
 
 Cross-context integration is mostly synchronous through anti-corruption interfaces
 defined at the composition root (`backend/cmd/web/main.go`). The one decoupled
@@ -73,7 +118,10 @@ path is an in-process event bus (`backend/internal/eventbus`): checkout publishe
 `OrderPaid` after a successful payment and the cart context subscribes to empty
 the basket, so checkout never calls the cart directly for that side effect.
 
-The shared vocabulary used across these contexts is collected in the [ubiquitous-language glossary](./docs/glossary.md).
+The shared vocabulary used across these contexts is collected in the
+[ubiquitous-language glossary](./docs/glossary.md). See
+[docs/glossary.md](./docs/glossary.md) for the full DDD vocabulary used
+by this project — including the relationship-type definitions above.
 
 
 ## Quick start

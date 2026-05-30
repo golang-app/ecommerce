@@ -117,11 +117,36 @@ the codec (see [Upcaster](#upcaster)). Today every producer passes "web",
 but the parameter is wired through so a future iOS / API entry point
 needs no schema change.
 
+### Conformist [cross-context]
+A strategic-design relationship where the downstream context accepts the
+upstream's model and vocabulary as-is, without a translation layer. Cheap
+but tightly coupled: any upstream change ripples through. Here: `layout`
+declares narrow per-context interfaces but those interfaces refer to each
+producer's domain types directly (e.g. `pcdomain.Product`,
+`checkoutDomain.Order`, `fulfillmentDomain.Fulfillment`); see the imports
+at the top of
+[backend/layout/bounded_context.go](../backend/layout/bounded_context.go).
+A presentation layer that only renders is a natural conformist. Contrast
+with [Anti-Corruption Layer](#anti-corruption-layer-acl-cross-context).
+
 ### Customer [auth]
 An authenticated end user, identified by email address. The aggregate is
 `Customer` in [backend/auth/domain/customer.go](../backend/auth/domain/customer.go).
 Sessions reference a customer through `Session.CustomerID()`. The
 cart's `User` is **not** a customer — see [User vs Customer](#user-vs-customer-disambiguation).
+
+### Customer-Supplier [cross-context]
+A strategic-design relationship where two contexts collaborate on the
+shape of their seam: the downstream "customer" tells the upstream
+"supplier" what it needs, and the supplier honours that contract. Here:
+`checkout` (customer) defines `CartReader` and the stock ports
+(`StockReserver`, `StockMovements`) in
+[backend/checkout/bounded_context.go](../backend/checkout/bounded_context.go);
+`cart` and `productcatalog` (suppliers) implement them. The contract is
+checkout-shaped, not a generic catalogue API. Distinct from
+[Conformist](#conformist-cross-context) (no negotiation) and from
+[Anti-Corruption Layer](#anti-corruption-layer-acl-cross-context) (one-way
+translation against an unchangeable upstream).
 
 ### Discount [promo]
 The *resolved* effect of a promo [Code](#code) on one specific order:
@@ -253,6 +278,18 @@ in action.
 Read models are projected from the event stream and are never used to
 issue commands.
 
+### Partnership [cross-context]
+A strategic-design relationship where two contexts jointly evolve their
+shared interface, succeeding or failing together. The strongest form of
+coupling between two otherwise distinct contexts, and rare in practice.
+Not realised in this codebase today — no two contexts here co-own a
+contract; every cross-context seam is either
+[Customer-Supplier](#customer-supplier-cross-context),
+[ACL](#anti-corruption-layer-acl-cross-context),
+[OHS](#open-host-service-ohs) /
+[Published Language](#published-language-cross-context), or
+[Conformist](#conformist-cross-context).
+
 ### Process Manager [fulfillment]
 A long-running coordinator that reacts to events from other aggregates
 and emits commands of its own. The `fulfillment` context is the example
@@ -285,6 +322,19 @@ with values `["Red","Blue"]`. Defined in
 [backend/productcatalog/domain/variant.go](../backend/productcatalog/domain/variant.go)
 as `OptionType`. A `Product` has zero or more option types; each
 `Variant` is one combination of option-type values.
+
+### Published Language [cross-context]
+A documented, stable interchange schema that one or more contexts agree
+to read or produce — the "language" of the conversation between them,
+deliberately decoupled from any one context's internal model. Here:
+[`checkout.OrderPaid`](../backend/checkout/integration/events.go) is the
+checkout context's outward shape; the cart, fulfillment and email
+subscribers consume it through the [event bus](#event-bus) +
+[Transactional Outbox](#transactional-outbox) without checkout knowing
+they exist. The search [Document](#document) value object is a second
+example, paired with the search [OHS](#open-host-service-ohs). Closely
+related to [Integration event](#integration-event), which is the
+specific carrier here.
 
 ### Projection / Read model [checkout]
 The CQRS read side: a flat representation of an aggregate, derived from
@@ -326,6 +376,15 @@ with a moderation lifecycle `pending → approved | rejected` and a
 soft-delete escape hatch (the unique index is partial so a buyer can
 re-review after a removal). Only verified buyers can submit — see
 [Verified buyer](#verified-buyer).
+
+### Shared Kernel [cross-context]
+A strategic-design relationship where two contexts deliberately share a
+small, jointly-owned set of types — typically primitives like `Money` or
+`Currency`. Any change to the kernel is a coordinated change across both
+sides, so the kernel is kept intentionally tiny. Not realised in master
+today: each context defines its own currency / money types and the cart's
+ACL re-validates them on the way through. Listed here so a future `Money`
+value object lifted into `backend/internal/` lands with a name.
 
 ### Snapshot [checkout]
 A serialised point-in-time copy of an event-sourced aggregate's state,
