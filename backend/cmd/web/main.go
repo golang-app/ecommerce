@@ -200,12 +200,32 @@ func main() {
 	// (the dev default), New() returns a LogMailer that writes each email
 	// to the structured log instead of dialling — keeping the app bootable
 	// with no MailHog/SMTP relay running. Production always sets SMTP_HOST.
+	//
+	// The leaf mailer is wrapped in three service-level decorators. The
+	// composition order matters — read it innermost-out:
+	//
+	//   1. RetryingMailer (innermost wrap): on transient SMTP failures,
+	//      reissue up to 3 attempts with exponential backoff (200ms,
+	//      400ms). Sits closest to the leaf because retries should be
+	//      transparent to everything above.
+	//   2. MetricsMailer: records gocommerce_emails_sent_total exactly
+	//      once per logical Send. It MUST sit OUTSIDE retries — otherwise
+	//      a single Message that succeeds on attempt 3 would emit two
+	//      "failure" + one "success" observation instead of the single
+	//      "success" that callers actually care about.
+	//   3. LoggingMailer (outermost): one INFO breadcrumb per call,
+	//      promoted to ERROR if the (already-retried, already-counted)
+	//      send still failed. Outermost so a single noisy retry storm
+	//      does not pollute the log with one entry per attempt.
 	mailerSrv := mailer.New(mailer.Config{
 		Host:     cfg.SMTPHost,
 		Username: cfg.SMTPUsername,
 		Password: cfg.SMTPPassword,
 		From:     cfg.MailFrom,
 	}, logger)
+	mailerSrv = mailer.NewRetrying(mailerSrv, 3, 200*time.Millisecond, time.Now)
+	mailerSrv = mailer.NewMetrics(mailerSrv)
+	mailerSrv = mailer.NewLogging(mailerSrv, logger)
 
 	// Cross-context integration: the three OrderPaid subscribers are
 	// registered with SubscribeWithID and wrapped through inbox.Wrap

@@ -9,6 +9,23 @@
 //
 // Adding a new provider later (SES native API, SendGrid HTTP) is a matter of
 // implementing the Mailer interface — no caller code needs to change.
+//
+// # Decorator pattern
+//
+// Cross-cutting concerns around Send (retries, structured logging, metrics)
+// are NOT baked into the SMTP/Log mailers. Instead this package ships three
+// composable decorators — RetryingMailer, LoggingMailer, MetricsMailer — each
+// of which embeds an inner Mailer, adds one behaviour, and exposes the same
+// Send(ctx, msg) signature. They are wired together in main.go in the order
+// that matches the desired behaviour: the innermost decorator runs closest
+// to the wrapped implementation, the outermost runs first/last. The pattern
+// is Go's idiomatic "embed an interface, add behaviour, return it" — it
+// keeps every concern in one file, makes each one independently testable,
+// and lets new concerns (rate limiting, circuit breaker, sampling) drop in
+// without touching the SMTP code.
+//
+// See internal/mailer/Readme.md for the recommended composition order and a
+// checklist for adding a new decorator.
 package mailer
 
 import (
@@ -126,19 +143,18 @@ var ErrEmptyMessage = errors.New("mailer: message has no body")
 // Send dispatches msg over SMTP. The MIME body is built locally so the
 // implementation can produce a true multipart/alternative when both bodies
 // are present without dragging in net/mail or net/textproto.
-func (m *SMTPMailer) Send(ctx context.Context, msg Message) (rerr error) {
+//
+// Metrics: the emails_sent_total counter is NOT incremented here; that
+// responsibility lives in the MetricsMailer decorator, which wraps this
+// implementation in cmd/web/main.go. Keeping it out of the leaf mailer
+// avoids double-counting once retries are layered in: the decorator records
+// the final outcome (one observation per Message), not per attempt.
+func (m *SMTPMailer) Send(ctx context.Context, msg Message) error {
 	kind := kindOrDefault(msg.Kind)
 	ctx, span := tracer.Start(ctx, "Mailer.SMTP.Send", trace.WithAttributes(
 		attribute.String("mail.kind", kind),
 	))
 	defer span.End()
-	defer func() {
-		outcome := "success"
-		if rerr != nil {
-			outcome = "failure"
-		}
-		observability.EmailsSentInc(ctx, kind, outcome)
-	}()
 
 	if msg.HTMLBody == "" && msg.TextBody == "" {
 		span.RecordError(ErrEmptyMessage)
@@ -270,19 +286,15 @@ type LogMailer struct {
 // The body itself is intentionally NOT logged in full (passwords / reset
 // tokens can show up inside it); a truncated preview is enough for a
 // developer to confirm the right email was triggered.
-func (m *LogMailer) Send(ctx context.Context, msg Message) (rerr error) {
+//
+// Metrics: the emails_sent_total counter is NOT incremented here; that
+// responsibility lives in the MetricsMailer decorator (see metrics.go).
+func (m *LogMailer) Send(ctx context.Context, msg Message) error {
 	kind := kindOrDefault(msg.Kind)
-	ctx, span := tracer.Start(ctx, "Mailer.Log.Send", trace.WithAttributes(
+	_, span := tracer.Start(ctx, "Mailer.Log.Send", trace.WithAttributes(
 		attribute.String("mail.kind", kind),
 	))
 	defer span.End()
-	defer func() {
-		outcome := "success"
-		if rerr != nil {
-			outcome = "failure"
-		}
-		observability.EmailsSentInc(ctx, kind, outcome)
-	}()
 
 	if msg.To == "" {
 		err := errors.New("mailer: To is required")
