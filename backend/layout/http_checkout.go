@@ -152,6 +152,30 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return
 	}
+	// The HTTP form already validates address / payment-method shape via
+	// domain.NewAddress / PaymentMethodByCode above, but the Aggregate
+	// Factory re-checks them as a belt-and-braces guard so a malformed
+	// caller (an alternate entry point, a future API) cannot smuggle an
+	// invalid Order into the event log. Map the sentinels to user-facing
+	// remediations rather than a generic 500.
+	if errors.Is(err, checkoutDomain.ErrAddressRequired) {
+		handler.flash(w, r, "please provide a shipping address for the chosen shipping method", "error")
+		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+		return
+	}
+	if errors.Is(err, checkoutDomain.ErrPaymentMethodRequired) {
+		handler.flash(w, r, "please choose a payment method", "error")
+		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+		return
+	}
+	if errors.Is(err, checkoutDomain.ErrChannelRequired) {
+		// The web flow always sets channel="web"; reaching this branch
+		// would indicate a programmer error. Render a generic message
+		// and send the customer back to the form rather than 500.
+		handler.flash(w, r, "could not place the order; please try again", "error")
+		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+		return
+	}
 	if errors.Is(err, pcdomain.ErrInsufficientStock) {
 		handler.flash(w, r, "Sorry — an item in your cart just went out of stock. Please review your cart.", "error")
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)

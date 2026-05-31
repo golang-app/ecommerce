@@ -201,8 +201,11 @@ func (o Order) DiscountMoney() sharedkernel.Money {
 
 // --- event-sourced write side ---
 
-// PlaceOrder is the command that creates a new order from a cart snapshot
-// and the customer's checkout choices. It emits an OrderPlaced event.
+// PlaceOrder is the AGGREGATE COMMAND that emits OrderPlaced. The
+// OrderFactory (see order_factory.go) front-loads construction validation
+// (empty cart, missing address / channel / payment method); this function
+// trusts its inputs and focuses on raising the event + advancing the
+// aggregate to StatusPending.
 //
 // tax is the tax amount in minor units already computed by the caller
 // (CheckoutService) from the configured rate AFTER the promo-code discount
@@ -220,10 +223,14 @@ func (o Order) DiscountMoney() sharedkernel.Money {
 // today always pass "web" (the only producer) but the parameter is wired
 // through so iOS/API entry points can light it up without a second
 // schema migration.
+//
+// PlaceOrder kept its previous signature + return type for back-compat:
+// existing tests call it directly, and the factory delegates to it after
+// validation. The empty-cart guard that used to live here has moved to
+// OrderFactory.FromCart so all construction-time validation is in one
+// place. Callers that bypass the factory (e.g. tests) are responsible for
+// supplying a non-empty lines slice.
 func PlaceOrder(id, userID, customerID string, shipTo Address, shipMethod ShippingMethod, payMethod PaymentMethod, lines []Line, tax, effectiveShipping int64, discountCode string, discountAmount int64, channel string, at time.Time) (*Order, error) {
-	if len(lines) == 0 {
-		return nil, ErrCartEmpty
-	}
 	o := &Order{}
 	o.raise(OrderPlaced{
 		OrderID:        id,

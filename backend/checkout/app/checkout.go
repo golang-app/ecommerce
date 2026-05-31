@@ -291,7 +291,11 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	// "web". Pluggable when iOS / API channels arrive — the signature is
 	// already wired through PlaceOrder and the OrderPlaced v2 schema.
 	const channel = "web"
-	order, err := domain.PlaceOrder(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, quote.Tax, quote.ShippingCost, discount.Code(), quote.DiscountAmount, channel, s.now())
+	// Construction validation (empty cart / missing address / channel /
+	// payment method) lives in the Aggregate Factory; we hand it the Quote
+	// directly so tax / shipping / discount are read straight off the
+	// pricing service's output rather than threaded as separate args.
+	order, err := domain.NewOrderFactory().FromCart(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, quote, discount.Code(), channel, s.now())
 	if err != nil {
 		_ = s.stock.Release(ctx, quantities)
 		for vid, qty := range quantities {

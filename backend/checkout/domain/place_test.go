@@ -1,22 +1,16 @@
 package domain_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 )
 
-func TestPlaceOrder_EmptyCartRejected(t *testing.T) {
-	_, err := domain.PlaceOrder("ord-1", "cart-1", "", domain.Address{},
-		domain.RebuildShippingMethod("pickup", "Personal pickup", 0),
-		domain.RebuildPaymentMethod("cod", "Cash on delivery"),
-		nil, 0, 0, "", 0, "web", time.Now())
-	if !errors.Is(err, domain.ErrCartEmpty) {
-		t.Errorf("err = %v, want ErrCartEmpty", err)
-	}
-}
+// TestPlaceOrder_EmptyCartRejected used to live here. The empty-cart
+// guard moved out of PlaceOrder (the aggregate command) into
+// OrderFactory.FromCart (the construction step); the corresponding
+// assertion lives in order_factory_test.go.
 
 func TestPlaceOrder_EmitsPendingOrderPlaced(t *testing.T) {
 	at := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
