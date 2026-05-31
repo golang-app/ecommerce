@@ -117,6 +117,20 @@ the codec (see [Upcaster](#upcaster)). Today every producer passes "web",
 but the parameter is wired through so a future iOS / API entry point
 needs no schema change.
 
+### Conformance test [cross-context]
+A single test suite per `Storage` port that is run against EVERY adapter
+implementing the port. Encodes [Liskov substitution](https://en.wikipedia.org/wiki/Liskov_substitution_principle)
+as enforceable code: if the in-memory and postgres adapters diverge on
+any contract clause, the suite fails on the offender. The in-repo
+exemplar is `RunStorageConformance` in
+[backend/promo/app/conformance.go](../backend/promo/app/conformance.go):
+both `promo/adapter/inmemory_test.go` (default build) and
+`promo/adapter/postgres_test.go` (`//go:build integration`) invoke the
+same function with their own factory. The pattern is documented under
+[backend/internal/storagetest/](../backend/internal/storagetest/Readme.md)
+and is the recommended approach for any new bounded context that ships
+paired adapters.
+
 ### Conformist [cross-context]
 A strategic-design relationship where the downstream context accepts the
 upstream's model and vocabulary as-is, without a translation layer. Cheap
