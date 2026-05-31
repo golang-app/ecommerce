@@ -129,6 +129,16 @@ at the top of
 A presentation layer that only renders is a natural conformist. Contrast
 with [Anti-Corruption Layer](#anti-corruption-layer-acl-cross-context).
 
+### Core subdomain [strategic-design]
+A subdomain where the business strategically differentiates — where the
+deepest models, the heaviest patterns, and the team's best designers
+should live. In this codebase: `checkout` (event-sourced commercial
+lifecycle), `productcatalog` (the rich catalogue + stock), and
+`fulfillment` (the operational process manager). Contrast with
+[Supporting subdomain](#supporting-subdomain-strategic-design) and
+[Generic subdomain](#generic-subdomain-strategic-design). See
+[docs/subdomains.md](subdomains.md) for the full classification.
+
 ### Customer [auth]
 An authenticated end user, identified by email address. The aggregate is
 `Customer` in [backend/auth/domain/customer.go](../backend/auth/domain/customer.go).
@@ -197,6 +207,16 @@ Deliberately distinct from the *commercial* state on the checkout
 `Order` aggregate (`pending → paid / failed / cancelled`). Two
 lifecycles, two state machines, two stores: finance owns one,
 the warehouse owns the other.
+
+### Generic subdomain [strategic-design]
+A subdomain that solves a problem the wider industry has already solved —
+ideally bought (or imported as a library) rather than built. In this
+codebase: `auth`, `internal/mailer`, `internal/imagestore`,
+`internal/observability`, and the event-plumbing under `internal/eventbus`,
+`internal/outbox`, `internal/inbox`, `internal/idempotency`. Contrast with
+[Core subdomain](#core-subdomain-strategic-design) and
+[Supporting subdomain](#supporting-subdomain-strategic-design). See
+[docs/subdomains.md](subdomains.md) for the full classification.
 
 ### Hit [search]
 A single search result row: a [Document](#document) plus a relevance
@@ -437,6 +457,16 @@ and display currency. Lives in
 active store is resolved per request by `storeMiddleware` and threaded
 onto the request context. Distinct from "storage" (the term used in the
 `adapter` packages for the persistence interface).
+
+### Supporting subdomain [strategic-design]
+A subdomain that's necessary for the business to operate but isn't where
+the business differentiates — custom-built but routine, deserving less
+ceremony than a Core context. In this codebase: `cart`, `promo`,
+`reviews`, `wishlist`, `shippinginfo`, `store`, and `search` (the
+Open-Host-Service surface stays generic so the engine can be swapped).
+Contrast with [Core subdomain](#core-subdomain-strategic-design) and
+[Generic subdomain](#generic-subdomain-strategic-design). See
+[docs/subdomains.md](subdomains.md) for the full classification.
 
 ### Upcaster [checkout]
 The function that translates an old version of a domain event payload

@@ -123,6 +123,10 @@ The shared vocabulary used across these contexts is collected in the
 [docs/glossary.md](./docs/glossary.md) for the full DDD vocabulary used
 by this project — including the relationship-type definitions above.
 
+For a strategic lens — which contexts are Core / Supporting / Generic, and
+where the business actually differentiates — see
+[docs/subdomains.md](./docs/subdomains.md).
+
 
 ## Quick start
 
