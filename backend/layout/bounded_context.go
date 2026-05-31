@@ -18,6 +18,7 @@ import (
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
+	recommendationDomain "github.com/bkielbasa/go-ecommerce/backend/recommendation/domain"
 	repricingDomain "github.com/bkielbasa/go-ecommerce/backend/repricing/domain"
 	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
 	searchapp "github.com/bkielbasa/go-ecommerce/backend/search/app"
@@ -150,6 +151,29 @@ type repricingService interface {
 	ListAll(ctx context.Context) ([]repricingDomain.Reprice, error)
 }
 
+// recommendationsService is the narrow seam the storefront and the
+// admin handler use to talk to the recommendation bounded context.
+// Recommendations is the ONLY call site the product detail page
+// uses (the cold-start fallback is hidden inside the service);
+// Weights / SetWeights / LastRefresh power the admin dashboard.
+// The recommendation context returns its own ProductSummary value
+// object — translation back to productcatalog types stays inside
+// the context's adapters.
+type recommendationsService interface {
+	Recommendations(ctx context.Context, productID string) ([]recommendationDomain.ProductSummary, error)
+	Weights(ctx context.Context) (recommendationDomain.Weights, error)
+	SetWeights(ctx context.Context, w recommendationDomain.Weights) error
+	LastRefresh(ctx context.Context) (time.Time, bool, error)
+}
+
+// recommendationsRefresher is the narrow seam the admin "refresh
+// now" button uses. The handler kicks RefreshAll on a fresh
+// background context so the admin's HTTP round-trip stays snappy;
+// the refresher logs its own progress.
+type recommendationsRefresher interface {
+	RefreshAll(ctx context.Context) error
+}
+
 // promoService is the narrow seam the layout package needs from the
 // promo bounded context. Resolve runs the live validity / per-customer
 // checks for the checkout form; the CRUD methods power the admin pages.
@@ -238,30 +262,32 @@ type checkoutQueries interface {
 // POST /webhooks/payments endpoint. Pass an empty secret OR a nil
 // service to skip the registration entirely — tests that don't care
 // about webhooks then don't need to provide either.
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsWebhookSrv paymentsWebhookService) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, recommendationsSrv recommendationsService, recommendationsRfr recommendationsRefresher, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsWebhookSrv paymentsWebhookService) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
 		handler: httpHandler{
-			cartSrv:        cartSrv,
-			catalogSrv:     catalogSrv,
-			authSrv:        authSrv,
-			adminAuthSrv:   adminAuthSrv,
-			checkoutSrv:    checkoutSrv,
-			checkoutQry:    checkoutQry,
-			fulfillmentSrv: fulfillmentSrv,
-			repricingSrv:   repricingSrv,
-			shipSrv:        shipSrv,
-			reviewsSrv:     reviewsSrv,
-			wishlistSrv:    wishlistSrv,
-			promoSrv:       promoSrv,
-			searchSrv:      searchSrv,
-			storeSrv:       storeSrv,
-			imageStore:     imageStore,
-			mailer:         mailerSrv,
-			baseURL:        baseURL,
-			rates:          rates,
-			logger:         logger,
+			cartSrv:            cartSrv,
+			catalogSrv:         catalogSrv,
+			authSrv:            authSrv,
+			adminAuthSrv:       adminAuthSrv,
+			checkoutSrv:        checkoutSrv,
+			checkoutQry:        checkoutQry,
+			fulfillmentSrv:     fulfillmentSrv,
+			repricingSrv:       repricingSrv,
+			recommendationsSrv: recommendationsSrv,
+			recommendationsRfr: recommendationsRfr,
+			shipSrv:            shipSrv,
+			reviewsSrv:         reviewsSrv,
+			wishlistSrv:        wishlistSrv,
+			promoSrv:           promoSrv,
+			searchSrv:          searchSrv,
+			storeSrv:           storeSrv,
+			imageStore:         imageStore,
+			mailer:             mailerSrv,
+			baseURL:            baseURL,
+			rates:              rates,
+			logger:             logger,
 		},
 		uploadsDir:            uploadsDir,
 		paymentsWebhookSecret: paymentsWebhookSecret,

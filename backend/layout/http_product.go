@@ -14,6 +14,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	recommendationDomain "github.com/bkielbasa/go-ecommerce/backend/recommendation/domain"
 	searchapp "github.com/bkielbasa/go-ecommerce/backend/search/app"
 	searchdomain "github.com/bkielbasa/go-ecommerce/backend/search/domain"
 	"github.com/gorilla/mux"
@@ -243,6 +244,21 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		inWishlist = saved
 	}
 
+	// "You might also like" recs. Failures degrade silently — the
+	// recommendation context is supporting infrastructure and must
+	// not break the product detail page when its tables are empty
+	// or its read path errors. The template omits the section
+	// entirely when the slice is empty.
+	var recommendations []recommendationDomain.ProductSummary
+	if handler.recommendationsSrv != nil {
+		recs, recErr := handler.recommendationsSrv.Recommendations(r.Context(), productID)
+		if recErr != nil {
+			handler.logger.WithError(recErr).WithField("product_id", productID).Warn("cannot load recommendations")
+		} else {
+			recommendations = recs
+		}
+	}
+
 	handler.renderTemplate(w, r, "productCatalog/show", map[string]any{
 		"Product":         product,
 		"Variant":         variant,
@@ -251,6 +267,7 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		"CanReview":       canReview,
 		"AlreadyReviewed": alreadyReviewed,
 		"InWishlist":      inWishlist,
+		"Recommendations": recommendations,
 	})
 }
 

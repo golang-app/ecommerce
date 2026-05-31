@@ -1,0 +1,49 @@
+{{define "main"}}
+  <h2 class="account-card__title">recommendations</h2>
+  <p class="muted">The "you might also like" section on each product page is powered by a materialised top-N read model. A background refresher recomputes it every 15 minutes (configurable); use the button below to trigger a refresh immediately.</p>
+
+  <section class="admin-form">
+    <h3 class="account-card__title">refresh</h3>
+    {{if .HasRefresh}}
+      <p>last refresh: <code>{{.LastRefresh.Format "2006-01-02 15:04:05 MST"}}</code></p>
+    {{else}}
+      <p class="muted">no refresh has completed yet.</p>
+    {{end}}
+    <form class="form" method="post" action="/admin/recommendations/refresh">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <button type="submit" class="btn">refresh now</button>
+    </form>
+  </section>
+
+  <section class="admin-form">
+    <h3 class="account-card__title">scoring weights</h3>
+    <p class="muted">Score = α·co-purchase + β·text + γ·same-category + δ·attribute jaccard + ε·price proximity. Weights are non-negative; their absolute magnitude does not matter — only their ratios. Changes take effect at the next refresh.</p>
+    {{if eq .WeightsSum 0.0}}
+      <p class="flash flash--error">All weights are zero — every score will be zero and the storefront will fall back to the "popular in category" path.</p>
+    {{end}}
+    <form class="form" method="post" action="/admin/recommendations/weights">
+      <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+      <div class="field">
+        <label for="w-co">co-purchase (α)</label>
+        <input id="w-co" name="weight_copurchase" type="number" step="0.01" min="0" value="{{.Weights.CoPurchase}}" required>
+      </div>
+      <div class="field">
+        <label for="w-text">text similarity (β)</label>
+        <input id="w-text" name="weight_text" type="number" step="0.01" min="0" value="{{.Weights.Text}}" required>
+      </div>
+      <div class="field">
+        <label for="w-cat">same category (γ)</label>
+        <input id="w-cat" name="weight_category" type="number" step="0.01" min="0" value="{{.Weights.Category}}" required>
+      </div>
+      <div class="field">
+        <label for="w-attr">attribute jaccard (δ)</label>
+        <input id="w-attr" name="weight_attributes" type="number" step="0.01" min="0" value="{{.Weights.Attributes}}" required>
+      </div>
+      <div class="field">
+        <label for="w-price">price proximity (ε)</label>
+        <input id="w-price" name="weight_price" type="number" step="0.01" min="0" value="{{.Weights.Price}}" required>
+      </div>
+      <button type="submit" class="btn">save weights</button>
+    </form>
+  </section>
+{{end}}

@@ -41,23 +41,25 @@ func newCookieStore(key []byte, secure bool) *sessions.CookieStore {
 }
 
 type httpHandler struct {
-	cartSrv        cartService
-	catalogSrv     catalogService
-	authSrv        authService
-	adminAuthSrv   adminAuthService
-	checkoutSrv    checkoutCommands
-	checkoutQry    checkoutQueries
-	fulfillmentSrv fulfillmentService
-	repricingSrv   repricingService
-	shipSrv        shippingService
-	reviewsSrv     reviewsService
-	wishlistSrv    wishlistService
-	promoSrv       promoService
-	searchSrv      searchService
-	storeSrv       storeService
-	imageStore     imagestore.Store
-	mailer         mailer.Mailer
-	baseURL        string
+	cartSrv            cartService
+	catalogSrv         catalogService
+	authSrv            authService
+	adminAuthSrv       adminAuthService
+	checkoutSrv        checkoutCommands
+	checkoutQry        checkoutQueries
+	fulfillmentSrv     fulfillmentService
+	repricingSrv       repricingService
+	recommendationsSrv recommendationsService
+	recommendationsRfr recommendationsRefresher
+	shipSrv            shippingService
+	reviewsSrv         reviewsService
+	wishlistSrv        wishlistService
+	promoSrv           promoService
+	searchSrv          searchService
+	storeSrv           storeService
+	imageStore         imagestore.Store
+	mailer             mailer.Mailer
+	baseURL            string
 	// rates is the static, operator-configured FX table. It is shared
 	// across every render through the `money` template helper. The
 	// active currency comes from the request-bound store, but the
@@ -286,6 +288,16 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/repricing", observability.HTTPWrap(m.handler.AdminRepricing, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/repricing", observability.HTTPWrap(m.handler.AdminStartRepricing, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/repricing/{id}", observability.HTTPWrap(m.handler.AdminRepricingDetail, m.logger)).Methods("GET")
+
+	// Recommendations admin: a single page showing the last
+	// refresh time + current scoring weights, with two POST
+	// endpoints driving the "refresh now" button and the weight
+	// form. The refresh endpoint kicks the refresher on a
+	// background goroutine — same trade-off the repricing saga
+	// uses — so the admin's HTTP request returns immediately.
+	r.HandleFunc("/admin/recommendations", observability.HTTPWrap(m.handler.AdminRecommendations, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/recommendations/refresh", observability.HTTPWrap(m.handler.AdminRefreshRecommendations, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/recommendations/weights", observability.HTTPWrap(m.handler.AdminSaveRecommendationWeights, m.logger)).Methods("POST")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {

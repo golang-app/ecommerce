@@ -37,6 +37,8 @@ import (
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/promo"
+	"github.com/bkielbasa/go-ecommerce/backend/recommendation"
+	recommendationadapter "github.com/bkielbasa/go-ecommerce/backend/recommendation/adapter"
 	"github.com/bkielbasa/go-ecommerce/backend/repricing"
 	"github.com/bkielbasa/go-ecommerce/backend/reviews"
 	"github.com/bkielbasa/go-ecommerce/backend/search"
@@ -226,6 +228,24 @@ func main() {
 	)
 	repricingSrv = repricingSrv.WithLogger(logger)
 
+	// Recommendation context: a Supporting bounded context with
+	// ACLs over productcatalog (CatalogACL — product summaries +
+	// FTS-similar) and checkout (OrderHistoryACL — co-purchase
+	// pairs). The refresher runs on a timer that the operator
+	// tunes via RECOMMENDATION_REFRESH_INTERVAL; the storefront
+	// reads through the single Recommendations method on the
+	// service, with cold-start fallback to "popular in category"
+	// hidden behind that one entry point.
+	recommendationCatalog := recommendationadapter.NewCatalogACL(db)
+	recommendationHistory := recommendationadapter.NewOrderHistoryACL(db)
+	recommendationBD, recommendationSrv, recommendationRefresher := recommendation.New(db, recommendationCatalog, recommendationHistory)
+	recommendationRefresher = recommendationRefresher.
+		WithLogger(logger).
+		WithWindow(cfg.RecommendationWindowDays).
+		WithTopN(10).
+		WithCandidatesK(20)
+	go recommendationRefresher.RunForever(ctx, cfg.RecommendationRefreshInterval)
+
 	// Mailer is the outbound-email abstraction. When SMTP_HOST is empty
 	// (the dev default), New() returns a LogMailer that writes each email
 	// to the structured log instead of dialling — keeping the app bootable
@@ -383,7 +403,7 @@ func main() {
 	// remain stored and charged in DefaultCurrency (USD).
 	fxRates := fx.New(cfg.DefaultCurrency, cfg.SupportedCurrencies, cfg.FXRates, logger)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, repricingSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates, cfg.StripeWebhookSecret, paymentsSrv))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, repricingSrv, recommendationSrv, recommendationRefresher, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates, cfg.StripeWebhookSecret, paymentsSrv))
 	// StoreMiddleware resolves the active store per request and binds
 	// it on the request context. It MUST run before the CSRF middleware
 	// so the store is available to every handler/template — including
@@ -404,6 +424,7 @@ func main() {
 	app.AddBoundedContext(storeBD)
 	app.AddBoundedContext(paymentsBD)
 	app.AddBoundedContext(repricingBD)
+	app.AddBoundedContext(recommendationBD)
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock

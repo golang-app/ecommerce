@@ -51,6 +51,12 @@ services:
       # transparently either way).
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       OTEL_EXPORTER_OTLP_INSECURE: "true"
+      # Recommendation refresher cadence and co-purchase lookback
+      # window. The refresher recomputes the materialised top-N
+      # read model on every tick; the window bounds how far back
+      # it reaches for order-history pairs.
+      RECOMMENDATION_REFRESH_INTERVAL: ${RECOMMENDATION_REFRESH_INTERVAL:-15m}
+      RECOMMENDATION_WINDOW_DAYS: ${RECOMMENDATION_WINDOW_DAYS:-90}
     volumes:
       # User-uploaded admin images are persisted on the host. The Dockerfile
       # creates /uploads owned by the app user (uid 10001).

@@ -107,6 +107,18 @@ type config struct {
 	// the fake provider sees succeeds. Dev/test only — production
 	// payment failures come from the real provider's logic.
 	StripeFailCardEndingIn string `conf:"default:,STRIPE_FAIL_CARD_ENDING_IN"`
+	// RecommendationRefreshInterval is how often the
+	// recommendation refresher recomputes the per-product top-N
+	// read model. The default keeps the demo's storefront within
+	// 15 minutes of the latest catalogue / order-history state; a
+	// non-positive value falls back to the same default in the
+	// refresher itself.
+	RecommendationRefreshInterval time.Duration `conf:"default:15m"`
+	// RecommendationWindowDays bounds how far back the refresher
+	// reaches for co-purchase pairs. Longer windows accumulate
+	// more behaviour data but blunt seasonal signal; the default
+	// (90 days) is the demo's compromise.
+	RecommendationWindowDays int `conf:"default:90"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep

@@ -70,6 +70,22 @@
     </div>
   </article>
 
+  {{if .Recommendations}}
+    <section class="product-recs">
+      <h2 class="product-recs__title">you might also like</h2>
+      <ul class="product-recs__grid">
+        {{range $rec := .Recommendations}}
+          <li class="product-recs__item">
+            <a class="product-recs__link" href="/product/{{$rec.ID}}">
+              <span class="product-recs__name">{{$rec.Name}}</span>
+              <span class="product-recs__price">{{ money $rec.PriceMinor }}</span>
+            </a>
+          </li>
+        {{end}}
+      </ul>
+    </section>
+  {{end}}
+
   <section id="reviews" class="product-reviews">
     <h2 class="product-reviews__title">reviews</h2>
 
