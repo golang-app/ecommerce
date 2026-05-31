@@ -12,6 +12,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/auth"
 	"github.com/bkielbasa/go-ecommerce/backend/cart"
 	"github.com/bkielbasa/go-ecommerce/backend/checkout"
+	checkoutadapter "github.com/bkielbasa/go-ecommerce/backend/checkout/adapter"
 	checkoutdomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	checkoutintegration "github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
 	checkoutquery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
@@ -23,6 +24,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/application"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/fakestripe"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/inbox"
@@ -30,6 +32,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/outbox"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
+	"github.com/bkielbasa/go-ecommerce/backend/payments"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	"github.com/bkielbasa/go-ecommerce/backend/promo"
 	"github.com/bkielbasa/go-ecommerce/backend/reviews"
@@ -157,7 +160,17 @@ func main() {
 	// different strategy here.
 	taxStrategy := checkoutdomain.FlatTaxStrategy{RatePercent: cfg.TaxRatePercent}
 	shippingStrategy := checkoutdomain.ThresholdShippingStrategy{FreeShippingThreshold: cfg.FreeShippingThreshold}
-	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, outboxStore, catalogService, catalogService, taxStrategy, shippingStrategy)
+	// Payments bounded context: an INTERNAL ACL in front of the
+	// fake-Stripe provider. The composition root is the only place
+	// that knows fakestripe exists; checkout asks payments to charge
+	// through its narrow PaymentProcessor port (satisfied by the
+	// thin PaymentsProcessor adapter below). Three nested layers —
+	// checkout -> payments -> fakestripe — each translating into the
+	// next one's vocabulary.
+	fakestripeClient := fakestripe.NewClient(cfg.StripeFailCardEndingIn)
+	paymentsBD, paymentsSrv := payments.New(db, fakestripeClient)
+	checkoutPayments := checkoutadapter.NewPaymentsProcessor(paymentsSrv)
+	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, outboxStore, checkoutPayments, catalogService, catalogService, taxStrategy, shippingStrategy)
 	// Fulfillment Process Manager: subscribes to OrderPaid, spawns a
 	// state-stored Fulfillment, and owns the operational lifecycle
 	// (ship/deliver/refund). Stock release on refund goes through the
@@ -333,7 +346,7 @@ func main() {
 	// remain stored and charged in DefaultCurrency (USD).
 	fxRates := fx.New(cfg.DefaultCurrency, cfg.SupportedCurrencies, cfg.FXRates, logger)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates, cfg.StripeWebhookSecret, paymentsSrv))
 	// StoreMiddleware resolves the active store per request and binds
 	// it on the request context. It MUST run before the CSRF middleware
 	// so the store is available to every handler/template — including
@@ -352,6 +365,7 @@ func main() {
 	app.AddBoundedContext(promoBD)
 	app.AddBoundedContext(searchBD)
 	app.AddBoundedContext(storeBD)
+	app.AddBoundedContext(paymentsBD)
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock

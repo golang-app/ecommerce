@@ -219,7 +219,12 @@ type checkoutQueries interface {
 // csrfEnabled toggles the request-level CSRF check; production always wants
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates) application.BoundedContext {
+//
+// paymentsWebhookSecret + paymentsWebhookSrv power the
+// POST /webhooks/payments endpoint. Pass an empty secret OR a nil
+// service to skip the registration entirely — tests that don't care
+// about webhooks then don't need to provide either.
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsWebhookSrv paymentsWebhookService) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -243,13 +248,17 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			rates:          rates,
 			logger:         logger,
 		},
-		uploadsDir: uploadsDir,
-		logger:     logger,
+		uploadsDir:            uploadsDir,
+		paymentsWebhookSecret: paymentsWebhookSecret,
+		paymentsWebhookSrv:    paymentsWebhookSrv,
+		logger:                logger,
 	}
 }
 
 type boundedContext struct {
-	handler    httpHandler
-	uploadsDir string
-	logger     logrus.FieldLogger
+	handler               httpHandler
+	uploadsDir            string
+	paymentsWebhookSecret string
+	paymentsWebhookSrv    paymentsWebhookService
+	logger                logrus.FieldLogger
 }
