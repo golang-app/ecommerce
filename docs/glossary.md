@@ -50,6 +50,19 @@ Carrying both styles inside one project is intentional — the audit-heavy
 order log earns event sourcing; the flat operational record of a shipment
 does not.
 
+### Adapter [architecture]
+The concrete implementation that satisfies a [Port](#port-architecture). Adapters
+live under each context's `adapter/` package (e.g.
+[backend/cart/adapter/postgres.go](../backend/cart/adapter/postgres.go),
+[backend/cart/adapter/in_memory.go](../backend/cart/adapter/in_memory.go))
+or in the bounded-context wiring file when the adapter is a translator
+over another context (e.g. `transformProductCatalog` in
+[backend/cart/bounded_context.go](../backend/cart/bounded_context.go) — an
+[Anti-Corruption Layer](#anti-corruption-layer-acl-cross-context) is the
+adapter for the cart's `ProductCatalog` port). Swapping an adapter must
+never require a change in `domain/` or `app/`. See
+[backend/cart/Readme.md](../backend/cart/Readme.md) for a walkthrough.
+
 ### Anti-Corruption Layer (ACL) [cross-context]
 A translation layer placed between two bounded contexts so that neither
 leaks its types or semantics into the other. The reference example is
@@ -59,7 +72,9 @@ which turns a `productcatalog.Variant` into the cart's own `domain.Product`
 (re-checking stock and currency on the way through). The `reviews` context
 uses a similar small port (`VerifiedBuyerSource`) to ask checkout whether
 a customer actually bought a product without pulling the order aggregate
-into reviews.
+into reviews. An ACL is one specific kind of [Adapter](#adapter-architecture):
+it satisfies a port whose other side is another bounded context rather
+than a database or external service.
 
 ### Attribute set [productcatalog]
 A named, reusable grouping that selects which [Attribute types](#attribute-type)
@@ -323,6 +338,17 @@ contract; every cross-context seam is either
 [OHS](#open-host-service-ohs) /
 [Published Language](#published-language-cross-context), or
 [Conformist](#conformist-cross-context).
+
+### Port [architecture]
+A Go interface declared by a context's `app/` package that describes what
+the use case needs from the outside world, without saying how. The cart's
+[`CartStorage` and `ProductCatalog`](../backend/cart/app/cart.go) are the
+canonical example: one is the persistence port (satisfied by an
+[Adapter](#adapter-architecture) — Postgres or in-memory), the other is
+the cross-context information port (satisfied by an
+[Anti-Corruption Layer](#anti-corruption-layer-acl-cross-context)). Ports
+keep `domain/` and `app/` free of I/O. See
+[backend/cart/Readme.md](../backend/cart/Readme.md) for a walkthrough.
 
 ### Process Manager [fulfillment]
 A long-running coordinator that reacts to events from other aggregates
