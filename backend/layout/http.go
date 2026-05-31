@@ -48,6 +48,7 @@ type httpHandler struct {
 	checkoutSrv    checkoutCommands
 	checkoutQry    checkoutQueries
 	fulfillmentSrv fulfillmentService
+	repricingSrv   repricingService
 	shipSrv        shippingService
 	reviewsSrv     reviewsService
 	wishlistSrv    wishlistService
@@ -279,6 +280,12 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/stores/{id}/edit", observability.HTTPWrap(m.handler.AdminEditStoreForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/stores/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteStore, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/stores/{id}", observability.HTTPWrap(m.handler.AdminUpdateStore, m.logger)).Methods("POST")
+
+	// Repricing admin: list + start form on /admin/repricing; the
+	// /{id} detail page polls itself via HTMX while the saga runs.
+	r.HandleFunc("/admin/repricing", observability.HTTPWrap(m.handler.AdminRepricing, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/repricing", observability.HTTPWrap(m.handler.AdminStartRepricing, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/repricing/{id}", observability.HTTPWrap(m.handler.AdminRepricingDetail, m.logger)).Methods("GET")
 }
 
 func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {

@@ -22,7 +22,6 @@ import (
 	cartadapter "github.com/bkielbasa/go-ecommerce/backend/cart/adapter"
 	cartapp "github.com/bkielbasa/go-ecommerce/backend/cart/app"
 	cartdomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
-	checkoutadapter "github.com/bkielbasa/go-ecommerce/backend/checkout/adapter"
 	checkoutapp "github.com/bkielbasa/go-ecommerce/backend/checkout/app"
 	checkoutdomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	checkoutintegration "github.com/bkielbasa/go-ecommerce/backend/checkout/integration"
@@ -373,7 +372,7 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 	checkoutSrv := checkoutapp.NewCheckoutService(
 		cartSrv,
 		orderStore,
-		checkoutadapter.NewFakePayment(),
+		okPayment{},
 		pcSrv, // StockReserver / Release
 		nil,   // StockMovements (no audit log in tests)
 		newDeterministicIDGen(),
@@ -416,6 +415,14 @@ func newIntegrationFixture(t *testing.T) *integrationFixture {
 // of order ids ("ord-1", "ord-2", ...) so a test can assert on the exact id
 // the checkout flow produced. Independent of crypto/rand and time, which
 // would make per-run id assertions brittle.
+// okPayment is a no-op PaymentProcessor for cross-context tests. The real
+// FakePayment adapter was removed when checkout was wired to the payments
+// context (PR #124); these tests only care about the OrderPaid wiring, not
+// the charge flow itself.
+type okPayment struct{}
+
+func (okPayment) Charge(_ context.Context, _ int64, _, _ string) error { return nil }
+
 func newDeterministicIDGen() func() string {
 	var n int
 	var mu sync.Mutex

@@ -1,0 +1,73 @@
+{{define "main"}}
+  <h2 class="account-card__title">bulk repricing</h2>
+  <p class="muted">Apply a percentage price change to every product in a category. The operation is a state-stored saga — the page shows live progress and the run survives a process restart (resumes from the last processed item).</p>
+
+  {{if .HasActive}}
+    <section class="admin-form">
+      <h3 class="account-card__title">a reprice is in progress</h3>
+      <p>
+        Category <code>{{.ActiveRow.CategoryID}}</code> · {{.ActiveRow.PercentChange}}% ·
+        {{.ActiveRow.ProcessedItems}} / {{.ActiveRow.TotalItems}} items
+      </p>
+      <p><a href="/admin/repricing/{{.ActiveRow.ID}}">view progress &rarr;</a></p>
+    </section>
+  {{end}}
+
+  {{if .Reprices}}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>id</th>
+          <th>category</th>
+          <th>percent</th>
+          <th>status</th>
+          <th>progress</th>
+          <th>started</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $r := .Reprices}}
+          <tr>
+            <td><code>{{$r.ID}}</code></td>
+            <td>{{$r.CategoryID}}</td>
+            <td>{{$r.PercentChange}}%</td>
+            <td>{{$r.Status}}</td>
+            <td>{{$r.ProcessedItems}} / {{$r.TotalItems}}</td>
+            <td>{{$r.StartedAt.Format "2006-01-02 15:04"}}</td>
+            <td class="admin-table__actions">
+              <a href="/admin/repricing/{{$r.ID}}">view</a>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no reprices yet.</p>
+  {{end}}
+
+  {{if not .HasActive}}
+    <section class="admin-form">
+      <h3 class="account-card__title">start a reprice</h3>
+      <form class="form" method="post" action="/admin/repricing">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="field">
+          <label for="r-cat">category</label>
+          <select id="r-cat" name="category" required>
+            {{range .Categories}}
+              <option value="{{.Slug}}">{{.Name}} ({{.Slug}})</option>
+            {{end}}
+          </select>
+        </div>
+        <div class="field">
+          <label for="r-pct">percent change (e.g. -10 = drop prices by 10%, +5 = raise by 5%)</label>
+          <input id="r-pct" name="percent" type="number" step="0.1" min="-50" max="50" value="0" required>
+        </div>
+        <button type="submit" class="btn"
+                onclick="return confirm('This will update every product in the selected category. Continue?');">
+          start reprice
+        </button>
+      </form>
+    </section>
+  {{end}}
+{{end}}

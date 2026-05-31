@@ -18,6 +18,7 @@ import (
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
+	repricingDomain "github.com/bkielbasa/go-ecommerce/backend/repricing/domain"
 	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
 	searchapp "github.com/bkielbasa/go-ecommerce/backend/search/app"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
@@ -136,6 +137,19 @@ type fulfillmentService interface {
 	ByOrder(ctx context.Context, orderID string) (fulfillmentDomain.Fulfillment, error)
 }
 
+// repricingService is the narrow seam onto the repricing (bulk
+// reprice) Process Manager. The admin pages drive Start (form
+// submission), Active (header banner) and ListAll + ByID (list +
+// detail view). The service spawns the saga in a background
+// goroutine; the admin detail page polls ByID via HTMX to render
+// the progress bar.
+type repricingService interface {
+	Start(ctx context.Context, categorySlug string, percentChange float64) (string, error)
+	Active(ctx context.Context) (repricingDomain.Reprice, bool, error)
+	ByID(ctx context.Context, id string) (repricingDomain.Reprice, error)
+	ListAll(ctx context.Context) ([]repricingDomain.Reprice, error)
+}
+
 // promoService is the narrow seam the layout package needs from the
 // promo bounded context. Resolve runs the live validity / per-customer
 // checks for the checkout form; the CRUD methods power the admin pages.
@@ -224,7 +238,7 @@ type checkoutQueries interface {
 // POST /webhooks/payments endpoint. Pass an empty secret OR a nil
 // service to skip the registration entirely — tests that don't care
 // about webhooks then don't need to provide either.
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsWebhookSrv paymentsWebhookService) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsWebhookSrv paymentsWebhookService) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -236,6 +250,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			checkoutSrv:    checkoutSrv,
 			checkoutQry:    checkoutQry,
 			fulfillmentSrv: fulfillmentSrv,
+			repricingSrv:   repricingSrv,
 			shipSrv:        shipSrv,
 			reviewsSrv:     reviewsSrv,
 			wishlistSrv:    wishlistSrv,
