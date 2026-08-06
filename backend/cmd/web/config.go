@@ -106,7 +106,7 @@ type config struct {
 	// declined charge (status "failed"); leave empty and every charge
 	// the fake provider sees succeeds. Dev/test only — production
 	// payment failures come from the real provider's logic.
-	StripeFailCardEndingIn string `conf:"default:,STRIPE_FAIL_CARD_ENDING_IN"`
+	StripeFailCardEndingIn string `conf:"default:0000,STRIPE_FAIL_CARD_ENDING_IN"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep
