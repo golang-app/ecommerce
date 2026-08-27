@@ -14,19 +14,25 @@ The project is a very early stage so there's a lot of work to do so every contri
 ## Features
 
 **Storefront**
-- "New arrivals" homepage; full filterable catalog at `/products`.
-- Top menu with category links, cart and account/log out.
-- Faceted filters per category (numeric ranges + enum checkboxes), scoped to the active category.
-- Variant selectors (e.g. Color / Size) on product pages; add-to-cart over HTMX.
-- Customer accounts: orders history, saved shipping addresses, password change.
-- Checkout with personal pickup / courier / flat-rate shipping and card / PayPal / cash-on-delivery payment.
+
+* "New arrivals" homepage; full filterable catalog at `/products`.
+* Top menu with category links, cart and account/log out.
+* Faceted filters per category (numeric ranges + enum checkboxes), scoped to the active category.
+* Variant selectors (e.g. Color / Size) on product pages; add-to-cart over HTMX.
+* Customer accounts: orders history, saved shipping addresses, password change.
+* Checkout with personal pickup / courier / flat-rate shipping and card / PayPal / cash-on-delivery payment.
+
+![storefront](./docs/storefront.png)
 
 **Admin panel** (`/admin`, seeded user `admin@example.com` / `Admin123!`)
-- Dashboard with store counts.
-- Products: list, create (simple or with option types + variants), edit core fields, per-variant SKU/price/stock/image, add/edit/delete variants, manage option types on existing products (with consistent cascades), assign categories, attributes and an attribute set, delete.
-- Categories, attribute types and attribute sets: full CRUD.
-- Orders: list all, view detail, admin-cancel.
-- Dedicated admin shell (sidebar layout) separate from the storefront.
+
+* Dashboard with store counts.
+* Products: list, create (simple or with option types + variants), edit core fields, per-variant SKU/price/stock/image, add/edit/delete variants, manage option types on existing products (with consistent cascades), assign categories, attributes and an attribute set, delete.
+* Categories, attribute types and attribute sets: full CRUD.
+* Orders: list all, view detail, admin-cancel.
+* Dedicated admin shell (sidebar layout) separate from the storefront.
+
+![admin](./docs/admin.png)
 
 ## Context map
 
@@ -63,32 +69,32 @@ graph TD
 Each edge above is labelled with one of the standard DDD strategic-design
 relationships. The patterns realised in the code are:
 
-- **Anti-Corruption Layer (ACL)** — a translation layer that protects one
+* **Anti-Corruption Layer (ACL)** — a translation layer that protects one
   context from another's vocabulary. Here: `cart` translates a
   `productcatalog.Variant` into its own `domain.Product` (re-checking stock
   and currency) in
   [`transformProductCatalog`](./backend/cart/bounded_context.go) — cart
   never imports productcatalog types beyond that seam.
-- **Customer-Supplier** — two contexts collaborate on a port the customer
+* **Customer-Supplier** — two contexts collaborate on a port the customer
   needs; the supplier agrees to honour it. Here: `checkout` defines
   `CartReader` and the stock ports (`StockReserver`, `StockMovements`) in
   [`backend/checkout/bounded_context.go`](./backend/checkout/bounded_context.go);
   `cart` and `productcatalog` implement them. The contract is checkout-shaped,
   not a generic catalogue API.
-- **Published Language** — a documented, stable interchange schema. Here:
+* **Published Language** — a documented, stable interchange schema. Here:
   the integration event `checkout.OrderPaid`
   ([`backend/checkout/integration/events.go`](./backend/checkout/integration/events.go))
   is checkout's outward-facing shape — subscribers (cart, fulfillment, the
   email subscriber) consume it through the in-process bus + Outbox without
   checkout knowing they exist.
-- **Conformist** — the consumer accepts the producer's vocabulary with no
+* **Conformist** — the consumer accepts the producer's vocabulary with no
   translation. Here: `layout` declares narrow per-context interfaces but
   refers to each producer's domain types directly (e.g. `pcdomain.Product`,
   `checkoutDomain.Order`, `fulfillmentDomain.Fulfillment`); see the imports
   at the top of
   [`backend/layout/bounded_context.go`](./backend/layout/bounded_context.go).
   A presentation layer that just renders is a natural conformist.
-- **Open Host Service (OHS)** — a context exposes a deliberately stable,
+* **Open Host Service (OHS)** — a context exposes a deliberately stable,
   public API any other context can integrate with. Here: `search` publishes
   the `Document` value object plus the `Indexer` / `Querier` ports in
   [`backend/search/app/service.go`](./backend/search/app/service.go).
@@ -128,7 +134,6 @@ where the business actually differentiates — see
 [docs/subdomains.md](./docs/subdomains.md).
 
 For a worked example of how a context realises hexagonal architecture, see [backend/cart/Readme.md](./backend/cart/Readme.md).
-
 
 ## Quick start
 
