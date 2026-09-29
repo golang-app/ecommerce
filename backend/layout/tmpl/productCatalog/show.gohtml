@@ -7,13 +7,26 @@
   <p class="crumbs"><a href="/">products</a> / {{.Product.Name}}</p>
 
   <article class="product">
-    {{$img := .Product.Thumbnail}}{{if .Variant.Image}}{{$img = .Variant.Image}}{{end}}
-    {{if $img}}
-      <img id="product-image" class="product__image"
-           src="{{$img}}"
-           alt="{{.Product.Name}}"
-           width="800" height="800">
-    {{end}}
+    <div class="product__gallery">
+      {{$img := .Product.Thumbnail}}{{if .Variant.Image}}{{$img = .Variant.Image}}{{end}}
+      {{if $img}}
+        <img id="product-image" class="product__image"
+             src="{{$img}}"
+             alt="{{.Product.Name}}"
+             width="800" height="800">
+      {{end}}
+      {{if .Product.Images}}
+        <div class="product__thumbnails" role="tablist" aria-label="Product images">
+          {{range $i, $thumb := .Product.Images}}
+            <button type="button" class="product__thumb-btn {{if eq $thumb.URL $img}}is-active{{end}}"
+                    data-src="{{$thumb.URL}}"
+                    aria-label="Product thumbnail {{$i}}">
+              <img src="{{$thumb.URL}}" alt="{{$.Product.Name}} thumbnail" width="100" height="100">
+            </button>
+          {{end}}
+        </div>
+      {{end}}
+    </div>
 
     <div class="product__body">
       <h1 class="product__name">{{.Product.Name}}</h1>
@@ -117,4 +130,36 @@
       <p class="muted"><a href="/auth/login">log in</a> to leave a review.</p>
     {{end}}
   </section>
+
+  <script>
+    (function () {
+      var thumbs = document.querySelectorAll(".product__thumb-btn");
+      if (thumbs.length === 0) return;
+
+      function syncActive(url) {
+        thumbs.forEach(function (btn) {
+          var match = btn.getAttribute("data-src") === url;
+          btn.classList.toggle("is-active", match);
+        });
+      }
+
+      thumbs.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          var src = btn.getAttribute("data-src");
+          var mainImg = document.getElementById("product-image");
+          if (src && mainImg) {
+            mainImg.setAttribute("src", src);
+            syncActive(src);
+          }
+        });
+      });
+
+      document.addEventListener("htmx:afterSwap", function () {
+        var mainImg = document.getElementById("product-image");
+        if (mainImg) {
+          syncActive(mainImg.getAttribute("src"));
+        }
+      });
+    })();
+  </script>
 {{end}}
