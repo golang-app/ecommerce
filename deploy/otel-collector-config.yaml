@@ -40,6 +40,13 @@ exporters:
   debug:
     verbosity: detailed
 
+  # Loki exporter sends logs to the dev Loki instance on :3100.
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    default_labels_enabled:
+      exporter: false
+      job: true
+
 service:
   telemetry:
     logs:
@@ -56,4 +63,4 @@ service:
     logs:
       receivers: [otlp]
       processors: [batch]
-      exporters: [debug]
+      exporters: [debug, loki]

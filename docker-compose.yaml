@@ -50,6 +50,7 @@ services:
       # starts when the collector is down (the batcher tolerates it
       # transparently either way).
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: http://otel-collector:4318/v1/logs
       OTEL_EXPORTER_OTLP_INSECURE: "true"
     volumes:
       # User-uploaded admin images are persisted on the host. The Dockerfile
@@ -103,11 +104,12 @@ services:
 
   # ----- Observability stack ------------------------------------------------
   #
-  # The four services below form the dev telemetry pipeline:
+  # The five services below form the dev telemetry pipeline:
   #
   #   backend --OTLP/HTTP:4318-->  otel-collector  ---->  jaeger   (traces)
   #                                                 |--> prometheus (metrics)
-  #                                                 \--> stdout    (logs)
+  #                                                 |--> loki       (logs)
+  #                                                 \--> stdout    (debug)
   #
   # Images pinned to recent stable tags; bump deliberately. `:latest` is
   # avoided so a rebuild on a different day does not silently swap binaries.
@@ -127,6 +129,16 @@ services:
       - 18889:8889  # Prometheus scrape target
     depends_on:
       - jaeger
+      - loki
+    networks:
+      - ecommerce
+
+  loki:
+    image: grafana/loki:3.0.0
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    ports:
+      - 3100:3100
     networks:
       - ecommerce
 
@@ -169,6 +181,7 @@ services:
     depends_on:
       - prometheus
       - jaeger
+      - loki
     networks:
       - ecommerce
 
