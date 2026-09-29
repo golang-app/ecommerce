@@ -51,6 +51,10 @@ type catalogService interface {
 	SetProductAttributes(ctx context.Context, productID string, values []pcapp.AttributeAssignment) error
 	SetProductAttributeSet(ctx context.Context, productID, setID string) error
 	ProductAttributeTypes(ctx context.Context, productID string) ([]pcdomain.AttributeType, error)
+	AddProductImages(ctx context.Context, productID string, urls []string) ([]pcdomain.ProductImage, error)
+	SetPrimaryProductImage(ctx context.Context, productID, imageID string) error
+	DeleteProductImage(ctx context.Context, productID, imageID string) error
+	ProductImages(ctx context.Context, productID string) ([]pcdomain.ProductImage, error)
 
 	CreateCategory(ctx context.Context, name, slug string) error
 	UpdateCategory(ctx context.Context, id, name, slug string, position int) error
