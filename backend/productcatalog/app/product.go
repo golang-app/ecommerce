@@ -58,6 +58,10 @@ type ProductStorage interface {
 	ListProducts(ctx context.Context, q ProductQuery) ([]domain.Product, error)
 	Categories(ctx context.Context) ([]domain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]Facet, error)
+	AddProductImages(ctx context.Context, images []domain.ProductImage) error
+	DeleteProductImage(ctx context.Context, productID, imageID string) error
+	SetPrimaryProductImage(ctx context.Context, productID, imageID string) error
+	ProductImages(ctx context.Context, productID string) ([]domain.ProductImage, error)
 
 	CreateCategory(ctx context.Context, c domain.Category) error
 	UpdateCategory(ctx context.Context, c domain.Category) error

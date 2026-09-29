@@ -30,6 +30,7 @@ type inMemory struct {
 	// nextMovementID is the auto-increment cursor mirroring the postgres
 	// bigserial column.
 	nextMovementID int64
+	prodImages     map[string][]domain.ProductImage
 }
 
 // attrSetRow holds an attribute set's own fields (members are tracked
@@ -50,6 +51,7 @@ func NewInMemory() *inMemory {
 		prodSets:     map[string]string{},
 		attrSets:     map[string]attrSetRow{},
 		attrSetItems: map[string][]string{},
+		prodImages:   map[string][]domain.ProductImage{},
 	}
 }
 
@@ -169,7 +171,8 @@ func (im *inMemory) DeleteVariant(ctx context.Context, variantID string) error {
 func (im *inMemory) hydrate(p domain.Product) domain.Product {
 	return p.WithCatalog(im.optionTypes[string(p.ID())], im.variants[string(p.ID())]).
 		WithClassification(im.prodCats[string(p.ID())], im.prodAttrs[string(p.ID())]).
-		WithAttributeSet(im.prodSets[string(p.ID())])
+		WithAttributeSet(im.prodSets[string(p.ID())]).
+		WithImages(im.prodImages[string(p.ID())])
 }
 
 func (im *inMemory) All(ctx context.Context) ([]domain.Product, error) {
@@ -229,6 +232,7 @@ func (im *inMemory) DeleteProduct(ctx context.Context, id string) error {
 	delete(im.prodCats, id)
 	delete(im.prodAttrs, id)
 	delete(im.prodSets, id)
+	delete(im.prodImages, id)
 	return nil
 }
 
@@ -645,3 +649,103 @@ func (im *inMemory) Facets(ctx context.Context, categorySlug string) ([]app.Face
 	}
 	return facets, nil
 }
+
+func (im *inMemory) AddProductImages(ctx context.Context, images []domain.ProductImage) error {
+	for _, img := range images {
+		pid := img.ProductID()
+		if img.IsPrimary() {
+			for i, existing := range im.prodImages[pid] {
+				if existing.IsPrimary() {
+					newImg, _ := domain.NewProductImage(existing.ID(), existing.ProductID(), existing.URL(), domain.ImagePositionGallery)
+					im.prodImages[pid][i] = newImg
+				}
+			}
+			im.updateThumbnail(pid, img.URL())
+		}
+		im.prodImages[pid] = append(im.prodImages[pid], img)
+	}
+	return nil
+}
+
+func (im *inMemory) ProductImages(ctx context.Context, productID string) ([]domain.ProductImage, error) {
+	imgs := append([]domain.ProductImage(nil), im.prodImages[productID]...)
+	sort.SliceStable(imgs, func(i, j int) bool {
+		if imgs[i].IsPrimary() != imgs[j].IsPrimary() {
+			return imgs[i].IsPrimary()
+		}
+		return false
+	})
+	return imgs, nil
+}
+
+func (im *inMemory) SetPrimaryProductImage(ctx context.Context, productID, imageID string) error {
+	imgs := im.prodImages[productID]
+	var found bool
+	var newThumb string
+	for i, img := range imgs {
+		if img.ID() == imageID {
+			newImg, err := domain.NewProductImage(img.ID(), img.ProductID(), img.URL(), domain.ImagePositionPrimary)
+			if err != nil {
+				return err
+			}
+			imgs[i] = newImg
+			newThumb = img.URL()
+			found = true
+		} else if img.IsPrimary() {
+			newImg, err := domain.NewProductImage(img.ID(), img.ProductID(), img.URL(), domain.ImagePositionGallery)
+			if err != nil {
+				return err
+			}
+			imgs[i] = newImg
+		}
+	}
+	if !found {
+		return domain.ErrProductNotFound
+	}
+	im.prodImages[productID] = imgs
+	im.updateThumbnail(productID, newThumb)
+	return nil
+}
+
+func (im *inMemory) DeleteProductImage(ctx context.Context, productID, imageID string) error {
+	imgs := im.prodImages[productID]
+	var deletedWasPrimary bool
+	var newImgs []domain.ProductImage
+	for _, img := range imgs {
+		if img.ID() == imageID {
+			if img.IsPrimary() {
+				deletedWasPrimary = true
+			}
+		} else {
+			newImgs = append(newImgs, img)
+		}
+	}
+	if deletedWasPrimary {
+		if len(newImgs) > 0 {
+			first := newImgs[0]
+			promoted, err := domain.NewProductImage(first.ID(), first.ProductID(), first.URL(), domain.ImagePositionPrimary)
+			if err != nil {
+				return err
+			}
+			newImgs[0] = promoted
+			im.updateThumbnail(productID, promoted.URL())
+		} else {
+			im.updateThumbnail(productID, "")
+		}
+	}
+	im.prodImages[productID] = newImgs
+	return nil
+}
+
+func (im *inMemory) updateThumbnail(productID string, thumb string) {
+	for i, p := range im.products {
+		if string(p.ID()) == productID {
+			newP, err := domain.NewProduct(p.ID(), p.Name(), p.Description(), p.Price(), thumb)
+			if err == nil {
+				im.products[i] = newP
+			}
+			break
+		}
+	}
+}
+

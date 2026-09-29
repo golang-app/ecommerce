@@ -271,7 +271,11 @@ func (db postgres) withCatalog(ctx context.Context, p domain.Product) (domain.Pr
 	if err != nil {
 		return domain.Product{}, err
 	}
-	return p.WithCatalog(ots, vs).WithClassification(cats, attrs), nil
+	imgs, err := db.ProductImages(ctx, string(p.ID()))
+	if err != nil {
+		return domain.Product{}, err
+	}
+	return p.WithCatalog(ots, vs).WithClassification(cats, attrs).WithImages(imgs), nil
 }
 
 func (db postgres) productCategories(ctx context.Context, productID string) ([]domain.Category, error) {
@@ -1189,3 +1193,202 @@ func sortedEnumKeys(m map[string][]string) []string {
 	sort.Strings(keys)
 	return keys
 }
+
+func (db postgres) ProductImages(ctx context.Context, productID string) ([]domain.ProductImage, error) {
+	rows, err := db.db.QueryContext(ctx, `
+		SELECT id, product_id, url, position
+		FROM productcatalog_product_image
+		WHERE product_id = $1
+		ORDER BY (position = 'PRIMARY') DESC, created_at ASC
+	`, productID)
+	if err != nil {
+		return nil, fmt.Errorf("query product images: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []domain.ProductImage
+	for rows.Next() {
+		var id, pid, url, posStr string
+		if err := rows.Scan(&id, &pid, &url, &posStr); err != nil {
+			return nil, fmt.Errorf("scan product image: %w", err)
+		}
+		img, err := domain.NewProductImage(id, pid, url, domain.ImagePosition(posStr))
+		if err != nil {
+			return nil, fmt.Errorf("rebuild product image: %w", err)
+		}
+		out = append(out, img)
+	}
+	return out, rows.Err()
+}
+
+func (db postgres) AddProductImages(ctx context.Context, images []domain.ProductImage) error {
+	if len(images) == 0 {
+		return nil
+	}
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	for _, img := range images {
+		if img.IsPrimary() {
+			if _, err = tx.ExecContext(ctx, `
+				UPDATE productcatalog_product_image
+				SET position = 'GALLERY'
+				WHERE product_id = $1 AND position = 'PRIMARY'
+			`, img.ProductID()); err != nil {
+				return fmt.Errorf("demote existing primary images: %w", err)
+			}
+			if _, err = tx.ExecContext(ctx, `
+				UPDATE productcatalog_product
+				SET thumbnail = $2
+				WHERE id = $1
+			`, img.ProductID(), img.URL()); err != nil {
+				return fmt.Errorf("sync product thumbnail: %w", err)
+			}
+		}
+
+		if _, err = tx.ExecContext(ctx, `
+			INSERT INTO productcatalog_product_image (id, product_id, url, position)
+			VALUES ($1, $2, $3, $4::product_image_position)
+		`, img.ID(), img.ProductID(), img.URL(), string(img.Position())); err != nil {
+			return fmt.Errorf("insert product image %s: %w", img.ID(), err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit add product images: %w", err)
+	}
+	return nil
+}
+
+func (db postgres) SetPrimaryProductImage(ctx context.Context, productID, imageID string) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var imgURL string
+	err = tx.QueryRowContext(ctx, `
+		SELECT url FROM productcatalog_product_image
+		WHERE product_id = $1 AND id = $2
+	`, productID, imageID).Scan(&imgURL)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.ErrProductNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("find product image: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE productcatalog_product_image
+		SET position = 'GALLERY'
+		WHERE product_id = $1
+	`, productID); err != nil {
+		return fmt.Errorf("reset gallery positions: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE productcatalog_product_image
+		SET position = 'PRIMARY'
+		WHERE product_id = $1 AND id = $2
+	`, productID, imageID); err != nil {
+		return fmt.Errorf("set primary position: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+		UPDATE productcatalog_product
+		SET thumbnail = $2
+		WHERE id = $1
+	`, productID, imgURL); err != nil {
+		return fmt.Errorf("update product thumbnail: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit set primary product image: %w", err)
+	}
+	return nil
+}
+
+func (db postgres) DeleteProductImage(ctx context.Context, productID, imageID string) error {
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var posStr string
+	err = tx.QueryRowContext(ctx, `
+		SELECT position FROM productcatalog_product_image
+		WHERE product_id = $1 AND id = $2
+	`, productID, imageID).Scan(&posStr)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("query image position: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx, `
+		DELETE FROM productcatalog_product_image
+		WHERE product_id = $1 AND id = $2
+	`, productID, imageID); err != nil {
+		return fmt.Errorf("delete product image: %w", err)
+	}
+
+	if posStr == string(domain.ImagePositionPrimary) {
+		var nextID, nextURL string
+		err = tx.QueryRowContext(ctx, `
+			SELECT id, url FROM productcatalog_product_image
+			WHERE product_id = $1
+			ORDER BY created_at ASC
+			LIMIT 1
+		`, productID).Scan(&nextID, &nextURL)
+		if errors.Is(err, sql.ErrNoRows) {
+			if _, err = tx.ExecContext(ctx, `
+				UPDATE productcatalog_product
+				SET thumbnail = ''
+				WHERE id = $1
+			`, productID); err != nil {
+				return fmt.Errorf("clear product thumbnail: %w", err)
+			}
+		} else if err != nil {
+			return fmt.Errorf("find next primary image: %w", err)
+		} else {
+			if _, err = tx.ExecContext(ctx, `
+				UPDATE productcatalog_product_image
+				SET position = 'PRIMARY'
+				WHERE id = $1
+			`, nextID); err != nil {
+				return fmt.Errorf("promote next image to primary: %w", err)
+			}
+			if _, err = tx.ExecContext(ctx, `
+				UPDATE productcatalog_product
+				SET thumbnail = $2
+				WHERE id = $1
+			`, productID, nextURL); err != nil {
+				return fmt.Errorf("update product thumbnail to promoted image: %w", err)
+			}
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete product image: %w", err)
+	}
+	return nil
+}
+
