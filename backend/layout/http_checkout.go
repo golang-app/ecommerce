@@ -10,10 +10,12 @@ import (
 	fulfillmentApp "github.com/bkielbasa/go-ecommerce/backend/fulfillment/app"
 	fulfillmentDomain "github.com/bkielbasa/go-ecommerce/backend/fulfillment/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	promoapp "github.com/bkielbasa/go-ecommerce/backend/promo/app"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	"github.com/gorilla/mux"
+	"github.com/sirupsen/logrus"
 )
 
 // currentCustomerID returns the authenticated customer's id from the
@@ -76,8 +78,17 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	cardNumber := r.FormValue("card_number")
 	customerID := handler.currentCustomerID(r) // empty for anonymous
 
+	reqLog := observability.Logger(r.Context()).WithFields(logrus.Fields{
+		"cart_session_id": sessID,
+		"customer_id":     customerID,
+		"shipping_method": r.FormValue("ship_method"),
+		"payment_method":  r.FormValue("payment_method"),
+	})
+	reqLog.Info("Checkout form submitted")
+
 	method, err := checkoutDomain.ShippingMethodByCode(r.FormValue("ship_method"))
 	if err != nil {
+		reqLog.WithError(err).Warn("Invalid shipping method selected")
 		session, _ := store.Get(r, "ecommerce")
 		session.AddFlash("please choose a shipping method", "error")
 		_ = session.Save(r, w)
@@ -97,6 +108,7 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 			r.FormValue("ship_country"),
 		)
 		if err != nil {
+			reqLog.WithError(err).Warn("Invalid shipping address provided")
 			session, _ := store.Get(r, "ecommerce")
 			session.AddFlash(err.Error(), "error")
 			_ = session.Save(r, w)
@@ -107,6 +119,7 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 
 	payMethod, err := checkoutDomain.PaymentMethodByCode(r.FormValue("payment_method"))
 	if err != nil {
+		reqLog.WithError(err).Warn("Invalid payment method selected")
 		session, _ := store.Get(r, "ecommerce")
 		session.AddFlash("please choose a payment method", "error")
 		_ = session.Save(r, w)
@@ -116,6 +129,7 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 
 	// Card details are only required for the card payment method.
 	if payMethod.RequiresCard() && strings.TrimSpace(cardNumber) == "" {
+		reqLog.Warn("Card number missing for card payment")
 		session, _ := store.Get(r, "ecommerce")
 		session.AddFlash("card number is required for card payments", "error")
 		_ = session.Save(r, w)
@@ -134,21 +148,28 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	if promoCode != "" {
 		cart, cartErr := handler.cartSrv.Get(r.Context(), sessID)
 		if cartErr != nil || cart == nil || len(cart.Items()) == 0 {
+			reqLog.Warn("Cannot apply promo code: cart is empty or not found")
 			http.Redirect(w, r, "/cart", http.StatusSeeOther)
 			return
 		}
 		subtotal := cart.TotalPrice().Amount()
 		d, perr := handler.promoSrv.Resolve(r.Context(), promoCode, customerID, subtotal, method.Cost())
 		if perr != nil {
+			reqLog.WithField("promo_code", promoCode).WithError(perr).Warn("Promo code resolution failed")
 			handler.flash(w, r, promoCodeErrorMessage(perr), "error")
 			http.Redirect(w, r, "/checkout", http.StatusSeeOther)
 			return
 		}
+		reqLog.WithFields(logrus.Fields{
+			"promo_code":      promoCode,
+			"discount_amount": d.AmountMinor(),
+		}).Info("Promo code applied to checkout")
 		discount = d
 	}
 
 	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber, shipTo, method, payMethod, discount)
 	if errors.Is(err, checkoutDomain.ErrCartEmpty) {
+		reqLog.Warn("Checkout aborted: cart is empty")
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return
 	}
@@ -159,11 +180,13 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	// invalid Order into the event log. Map the sentinels to user-facing
 	// remediations rather than a generic 500.
 	if errors.Is(err, checkoutDomain.ErrAddressRequired) {
+		reqLog.Warn("Checkout failed: address required")
 		handler.flash(w, r, "please provide a shipping address for the chosen shipping method", "error")
 		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
 		return
 	}
 	if errors.Is(err, checkoutDomain.ErrPaymentMethodRequired) {
+		reqLog.Warn("Checkout failed: payment method required")
 		handler.flash(w, r, "please choose a payment method", "error")
 		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
 		return
@@ -172,19 +195,28 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		// The web flow always sets channel="web"; reaching this branch
 		// would indicate a programmer error. Render a generic message
 		// and send the customer back to the form rather than 500.
+		reqLog.Warn("Checkout failed: channel required")
 		handler.flash(w, r, "could not place the order; please try again", "error")
 		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
 		return
 	}
 	if errors.Is(err, pcdomain.ErrInsufficientStock) {
+		reqLog.Warn("Checkout failed: insufficient stock")
 		handler.flash(w, r, "Sorry — an item in your cart just went out of stock. Please review your cart.", "error")
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
 		return
 	}
 	if err != nil {
+		reqLog.WithError(err).Error("Checkout failed with unexpected error")
 		https.InternalError(w, "internal-error", err.Error())
 		return
 	}
+
+	reqLog.WithFields(logrus.Fields{
+		"order_id": order.ID(),
+		"total":    order.TotalAmount(),
+		"currency": order.TotalCurrency(),
+	}).Info("Order placed successfully, redirecting to confirmation page")
 
 	// Refresh the cart-count badge in the header.
 	w.Header().Add("HX-Trigger", "cartBudge")
@@ -213,6 +245,7 @@ func (handler httpHandler) Orders(w http.ResponseWriter, r *http.Request) {
 
 func (handler httpHandler) Order(w http.ResponseWriter, r *http.Request) {
 	orderID := mux.Vars(r)["orderID"]
+	observability.Logger(r.Context()).WithField("order_id", orderID).Info("Rendering order confirmation page")
 
 	order, err := handler.checkoutQry.Find(r.Context(), orderID)
 	if errors.Is(err, checkoutDomain.ErrOrderNotFound) {

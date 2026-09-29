@@ -10,6 +10,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -207,6 +208,14 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	))
 	defer span.End()
 
+	log := observability.Logger(ctx).WithFields(logrus.Fields{
+		"cart_session_id": sessID,
+		"customer_id":     customerID,
+		"payment_method":  payMethod.Code(),
+		"shipping_method": shipMethod.Code(),
+	})
+	log.Info("Starting checkout order processing")
+
 	// cart.get is a leaf child span so the trace clearly shows whether the
 	// hand-off into the cart context is the slow step.
 	cartCtx, cartSpan := tracer.Start(ctx, "cart.get", trace.WithAttributes(
@@ -217,18 +226,23 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		recordSpanError(cartSpan, err)
 		cartSpan.End()
 		if errors.Is(err, cartDomain.ErrCartNotFound) {
+			log.Warn("Checkout failed: cart not found")
 			recordSpanError(span, domain.ErrCartEmpty)
 			return domain.Order{}, domain.ErrCartEmpty
 		}
+		log.WithError(err).Error("Checkout failed: unable to get cart")
 		recordSpanError(span, err)
 		return domain.Order{}, fmt.Errorf("get cart: %w", err)
 	}
 	cartSpan.SetAttributes(attribute.Int("cart.item_count", len(cart.Items())))
 	cartSpan.End()
 	if len(cart.Items()) == 0 {
+		log.Warn("Checkout failed: cart is empty")
 		recordSpanError(span, domain.ErrCartEmpty)
 		return domain.Order{}, domain.ErrCartEmpty
 	}
+
+	log.WithField("items_count", len(cart.Items())).Info("Cart retrieved with items for checkout")
 
 	lines := make([]domain.Line, 0, len(cart.Items()))
 	quantities := map[string]int{}
@@ -253,6 +267,10 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		attribute.Int64("stock.total_units", reservedUnits),
 	))
 	if err := s.stock.Reserve(reserveCtx, quantities); err != nil {
+		log.WithFields(logrus.Fields{
+			"stock_variants": len(quantities),
+			"reserved_units": reservedUnits,
+		}).WithError(err).Warn("Failed to reserve stock for checkout")
 		recordSpanError(reserveSpan, err)
 		reserveSpan.End()
 		recordSpanError(span, err)
@@ -263,6 +281,12 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 
 	orderID := s.newID()
 	span.SetAttributes(attribute.String("order.id", orderID))
+	log = log.WithField("order_id", orderID)
+
+	log.WithFields(logrus.Fields{
+		"stock_variants": len(quantities),
+		"reserved_units": reservedUnits,
+	}).Info("Stock reserved successfully for order")
 
 	// Record reservation movements (best-effort: a failure here must not
 	// undo the reservation itself).
@@ -297,6 +321,7 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	// pricing service's output rather than threaded as separate args.
 	order, err := domain.NewOrderFactory().FromCart(orderID, sessID, customerID, shipTo, shipMethod, payMethod, lines, quote, discount.Code(), channel, s.now())
 	if err != nil {
+		log.WithError(err).Error("Failed to build order aggregate, releasing stock")
 		_ = s.stock.Release(ctx, quantities)
 		for vid, qty := range quantities {
 			_ = s.movements.Record(ctx, vid, qty, "release-place-failed", orderID)
@@ -309,6 +334,15 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		attribute.Int64("order.total", order.TotalAmount()),
 		attribute.String("order.currency", order.TotalCurrency()),
 	)
+
+	log.WithFields(logrus.Fields{
+		"subtotal": quote.Subtotal,
+		"tax":      quote.Tax,
+		"shipping": quote.ShippingCost,
+		"discount": quote.DiscountAmount,
+		"total":    order.TotalAmount(),
+		"currency": order.TotalCurrency(),
+	}).Info("Order aggregate created and price quote calculated")
 
 	// One placed-order counter increment per successful aggregate (before
 	// payment outcome): keeps Grafana's checkout-funnel view honest by
@@ -330,8 +364,19 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	// Implementations that don't care (the historical FakePayment
 	// path) simply never read these values.
 	chargeCtx = WithChargeContext(chargeCtx, orderID, "payment:"+orderID)
+
+	log.WithFields(logrus.Fields{
+		"amount":         order.TotalAmount(),
+		"currency":       order.TotalCurrency(),
+		"payment_method": payMethod.Code(),
+	}).Info("Attempting payment charge")
+
 	chargeErr := s.payment.Charge(chargeCtx, order.TotalAmount(), order.TotalCurrency(), cardNumber)
 	if chargeErr != nil {
+		log.WithFields(logrus.Fields{
+			"amount":   order.TotalAmount(),
+			"currency": order.TotalCurrency(),
+		}).WithError(chargeErr).Warn("Payment charge declined, releasing reserved stock")
 		recordSpanError(chargeSpan, chargeErr)
 		chargeSpan.End()
 		// Payment failed after reserving — give the stock back, record the
@@ -362,12 +407,18 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	chargeSpan.End()
 	observability.PaymentsChargedInc(ctx, order.TotalCurrency())
 
+	log.WithFields(logrus.Fields{
+		"amount":   order.TotalAmount(),
+		"currency": order.TotalCurrency(),
+	}).Info("Payment charge approved")
+
 	order.MarkPaid(s.now())
 	saveCtx, saveSpan := tracer.Start(ctx, "order.save", trace.WithAttributes(
 		attribute.String("order.id", orderID),
 		attribute.String("order.status", string(domain.StatusPaid)),
 	))
 	if err := s.storage.Save(saveCtx, order); err != nil {
+		log.WithError(err).Error("Failed to persist paid order to storage")
 		recordSpanError(saveSpan, err)
 		saveSpan.End()
 		// Order couldn't be persisted; return the reservation.
@@ -380,6 +431,12 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 		return domain.Order{}, fmt.Errorf("save order: %w", err)
 	}
 	saveSpan.End()
+
+	log.WithFields(logrus.Fields{
+		"status":   string(domain.StatusPaid),
+		"total":    order.TotalAmount(),
+		"currency": order.TotalCurrency(),
+	}).Info("Order placed and finalized successfully")
 
 	// Revenue + paid-finalisation are recorded only after the save succeeds
 	// so a write failure doesn't double-book the totals.

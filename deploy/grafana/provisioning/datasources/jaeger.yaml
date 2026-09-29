@@ -10,3 +10,12 @@ datasources:
     uid: jaeger
     url: http://jaeger:16686
     editable: true
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: 'loki'
+        spanStartTimeShift: '-5m'
+        spanEndTimeShift: '5m'
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: true
+        query: '{service_name=~".+"} |= "$${__trace.traceId}"'

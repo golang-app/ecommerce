@@ -3,6 +3,7 @@ package observability
 import (
 	"context"
 	"net/http"
+	"net/url"
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/bridges/otellogrus"
@@ -43,6 +44,9 @@ func InitLogs(ctx context.Context, appName string, base logrus.FieldLogger) (fun
 	}
 
 	opts := []otlploghttp.Option{otlploghttp.WithEndpointURL(endpoint)}
+	if u, err := url.Parse(endpoint); err == nil && (u.Path == "" || u.Path == "/") {
+		opts = append(opts, otlploghttp.WithURLPath("/v1/logs"))
+	}
 	if otlpInsecureFromEnv() {
 		opts = append(opts, otlploghttp.WithInsecure())
 	}

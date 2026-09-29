@@ -1,0 +1,19 @@
+# Auto-provision the Loki datasource. Grafana queries the Loki HTTP API on :3100.
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    uid: loki
+    url: http://loki:3100
+    isDefault: false
+    editable: true
+    jsonData:
+      maxLines: 1000
+      derivedFields:
+        - datasourceUid: jaeger
+          matcherRegex: '"trace\.id":"([a-f0-9]+)"'
+          name: TraceID
+          url: '$${__value.raw}'
