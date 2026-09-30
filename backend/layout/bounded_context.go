@@ -127,6 +127,8 @@ type checkoutCommands interface {
 	Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod, discount promodomain.Discount) (checkoutDomain.Order, error)
 	Cancel(ctx context.Context, orderID, customerID string) error
 	AdminCancel(ctx context.Context, orderID string) error
+	MarkPaid(ctx context.Context, orderID string) error
+	MarkPaymentFailed(ctx context.Context, orderID string, reason string) error
 }
 
 // fulfillmentService is the narrow seam onto the fulfillment Process
@@ -238,6 +240,7 @@ type paymentsService interface {
 	CreatePendingCharge(ctx context.Context, orderID string, amount int64, currency, provider string) (paymentsDomain.Charge, error)
 	ConfirmCharge(ctx context.Context, chargeID string) (paymentsDomain.Charge, error)
 	RejectCharge(ctx context.Context, chargeID string, reason string) (paymentsDomain.Charge, error)
+	FindCharge(ctx context.Context, id string) (paymentsDomain.Charge, error)
 	FindByOrderID(ctx context.Context, orderID string) (paymentsDomain.Charge, error)
 }
 

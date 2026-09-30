@@ -1,6 +1,7 @@
 package layout
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	fulfillmentDomain "github.com/bkielbasa/go-ecommerce/backend/fulfillment/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	paymentsDomain "github.com/bkielbasa/go-ecommerce/backend/payments/domain"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	promoapp "github.com/bkielbasa/go-ecommerce/backend/promo/app"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
@@ -29,11 +31,56 @@ func (handler httpHandler) currentCustomerID(r *http.Request) string {
 	if sessID == "" {
 		return ""
 	}
+	if handler.authSrv == nil {
+		return ""
+	}
 	sess, err := handler.authSrv.FindByToken(r.Context(), sessID)
 	if err != nil || sess == nil || sess.Expired() {
 		return ""
 	}
 	return sess.CustomerID()
+}
+
+func (handler httpHandler) availablePaymentMethods(ctx context.Context) []checkoutDomain.PaymentMethod {
+	all := checkoutDomain.PaymentMethods()
+	if handler.paymentsSrv == nil {
+		return all
+	}
+	providers, err := handler.paymentsSrv.ListProviders(ctx)
+	if err != nil {
+		handler.logger.WithError(err).Warn("cannot list payment providers for checkout")
+		return all
+	}
+	stripeEnabled := true
+	fakeEnabled := true
+	for _, p := range providers {
+		if p.ID() == paymentsDomain.ProviderStripe {
+			stripeEnabled = p.IsEnabled()
+		}
+		if p.ID() == paymentsDomain.ProviderFake {
+			fakeEnabled = p.IsEnabled()
+		}
+	}
+	filtered := make([]checkoutDomain.PaymentMethod, 0, len(all))
+	for _, m := range all {
+		if m.Code() == "card" && !stripeEnabled {
+			continue
+		}
+		if m.Code() == "fake" && !fakeEnabled {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	return filtered
+}
+
+func (handler httpHandler) isPaymentMethodEnabled(ctx context.Context, code string) bool {
+	for _, m := range handler.availablePaymentMethods(ctx) {
+		if m.Code() == code {
+			return true
+		}
+	}
+	return false
 }
 
 func (handler httpHandler) Checkout(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +102,7 @@ func (handler httpHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Cart":            cart,
 		"ShippingMethods": checkoutDomain.ShippingMethods(),
-		"PaymentMethods":  checkoutDomain.PaymentMethods(),
+		"PaymentMethods":  handler.availablePaymentMethods(r.Context()),
 	}
 
 	// Prefill the shipping form from the logged-in customer's default saved
@@ -123,6 +170,13 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		session, _ := store.Get(r, "ecommerce")
 		session.AddFlash("please choose a payment method", "error")
 		_ = session.Save(r, w)
+		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+		return
+	}
+
+	if !handler.isPaymentMethodEnabled(r.Context(), payMethod.Code()) {
+		reqLog.WithField("payment_method", payMethod.Code()).Warn("Selected payment method is currently unavailable")
+		handler.flash(w, r, "selected payment method is currently unavailable", "error")
 		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
 		return
 	}
@@ -210,6 +264,20 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		reqLog.WithError(err).Error("Checkout failed with unexpected error")
 		https.InternalError(w, "internal-error", err.Error())
 		return
+	}
+
+	if payMethod.Code() == "fake" {
+		if handler.paymentsSrv != nil {
+			charge, cerr := handler.paymentsSrv.CreatePendingCharge(r.Context(), order.ID(), order.TotalAmount(), order.TotalCurrency(), "fake")
+			if cerr != nil {
+				reqLog.WithError(cerr).Error("Failed to create pending charge for fake payment")
+				https.InternalError(w, "internal-error", cerr.Error())
+				return
+			}
+			w.Header().Add("HX-Trigger", "cartBudge")
+			http.Redirect(w, r, "/payments/fake/"+charge.ID(), http.StatusSeeOther)
+			return
+		}
 	}
 
 	reqLog.WithFields(logrus.Fields{

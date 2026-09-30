@@ -390,3 +390,35 @@ func TestService_FindByOrderID(t *testing.T) {
 		t.Errorf("Provider = %q, want fake", found.Provider())
 	}
 }
+
+func TestService_FindCharge(t *testing.T) {
+	storage := adapter.NewInMemoryStorage()
+	srv := app.NewService(storage, &stubProvider{}, func() string { return "ch-find-1" }, nil)
+	ctx := context.Background()
+
+	// 1. FindCharge returns ErrChargeNotFound when no charge exists
+	_, err := srv.FindCharge(ctx, "nonexistent")
+	if err == nil {
+		t.Fatalf("expected error for nonexistent charge, got nil")
+	}
+	if !errors.Is(err, app.ErrChargeNotFound) {
+		t.Errorf("expected ErrChargeNotFound, got %v", err)
+	}
+
+	// 2. Create pending charge and verify FindCharge returns it
+	created, err := srv.CreatePendingCharge(ctx, "ord-100", 5000, "USD", "fake")
+	if err != nil {
+		t.Fatalf("CreatePendingCharge: %v", err)
+	}
+
+	found, err := srv.FindCharge(ctx, created.ID())
+	if err != nil {
+		t.Fatalf("FindCharge: %v", err)
+	}
+	if found.ID() != created.ID() {
+		t.Errorf("ID = %q, want %q", found.ID(), created.ID())
+	}
+	if found.Amount() != 5000 {
+		t.Errorf("Amount = %d, want 5000", found.Amount())
+	}
+}

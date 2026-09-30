@@ -61,6 +61,10 @@ func (m *mockPaymentsService) FindByOrderID(ctx context.Context, orderID string)
 	return paymentsDomain.Charge{}, nil
 }
 
+func (m *mockPaymentsService) FindCharge(ctx context.Context, id string) (paymentsDomain.Charge, error) {
+	return paymentsDomain.Charge{}, nil
+}
+
 func (m *mockPaymentsService) MarkSucceeded(ctx context.Context, providerRef string) error {
 	return nil
 }

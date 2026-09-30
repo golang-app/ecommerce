@@ -1,0 +1,70 @@
+{{define "title"}}Payment Simulator · {{.SiteName}}{{end}}
+{{define "description"}}Test payment gateway simulator.{{end}}
+
+{{define "main"}}
+  <div class="simulator">
+    <div class="flash flash--info">
+      <strong>Test Payment Gateway Simulator</strong> &mdash; This is an interactive fake payment gateway simulator. Choose an outcome to test payment confirmation or failure handling.
+    </div>
+
+    <h1 class="page-title">payment simulator</h1>
+
+    <section class="checkout__summary">
+      <h2 class="checkout__heading">order summary</h2>
+      <p class="muted">order id: <code>{{.Order.ID}}</code></p>
+      <table class="cart-table">
+        <thead>
+          <tr>
+            <th>item</th>
+            <th class="col-qty">qty</th>
+            <th class="col-total">subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $item := .Order.Items}}
+            <tr>
+              <td>{{$item.ProductName}}</td>
+              <td class="col-qty">{{$item.Quantity}}</td>
+              <td class="col-total">{{ money $item.LineTotal }}</td>
+            </tr>
+          {{end}}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2">total</td>
+            <td class="col-total">{{ money .Order.TotalAmount }} {{.Order.TotalCurrency}}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </section>
+
+    <div class="simulator__actions" style="margin-top: 2rem; display: flex; gap: 2rem; flex-wrap: wrap;">
+      <section class="simulator__confirm" style="flex: 1; min-width: 250px;">
+        <h2 class="checkout__heading">confirm payment</h2>
+        <p class="muted" style="margin-bottom: 1rem;">Simulate a successful payment for this order.</p>
+        <form method="post" action="/payments/fake/{{.Charge.ID}}/confirm">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <button type="submit" class="btn btn--primary">Confirm Payment</button>
+        </form>
+      </section>
+
+      <section class="simulator__reject" style="flex: 1; min-width: 250px;">
+        <h2 class="checkout__heading">reject payment</h2>
+        <p class="muted" style="margin-bottom: 1rem;">Simulate a failed payment with a decline reason.</p>
+        <form method="post" action="/payments/fake/{{.Charge.ID}}/reject">
+          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+          <div class="field" style="margin-bottom: 1rem;">
+            <label for="decline-reason">decline reason</label>
+            <select id="decline-reason" name="reason">
+              <option value="insufficient_funds">insufficient_funds</option>
+              <option value="card_declined">card_declined</option>
+              <option value="suspected_fraud">suspected_fraud</option>
+              <option value="expired_card">expired_card</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn--danger">Reject Payment</button>
+        </form>
+      </section>
+    </div>
+  </div>
+{{end}}

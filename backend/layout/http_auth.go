@@ -25,11 +25,13 @@ func (handler httpHandler) AuthMenuItem(w http.ResponseWriter, r *http.Request) 
 	var loggedIn bool
 
 	sessID, _ := c.Values["session_id"].(string)
-	sess, err := handler.authSrv.FindByToken(r.Context(), sessID)
-	if err != nil {
-		loggedIn = false
-	} else {
-		loggedIn = !sess.Expired()
+	if handler.authSrv != nil && sessID != "" {
+		sess, err := handler.authSrv.FindByToken(r.Context(), sessID)
+		if err != nil {
+			loggedIn = false
+		} else {
+			loggedIn = !sess.Expired()
+		}
 	}
 
 	f, err := os.Open("./layout/tmpl/auth/menuItem.gohtml")

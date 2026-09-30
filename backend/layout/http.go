@@ -175,6 +175,10 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/order/{orderID}", observability.HTTPWrap(m.handler.Order, m.logger)).Methods("GET")
 	r.HandleFunc("/order/{orderID}/cancel", observability.HTTPWrap(m.handler.CancelOrder, m.logger)).Methods("POST")
 
+	r.HandleFunc("/payments/fake/{chargeID}", observability.HTTPWrap(m.handler.FakePaymentSimulator, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/payments/fake/{chargeID}/confirm", observability.HTTPWrap(m.handler.FakePaymentConfirm, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/payments/fake/{chargeID}/reject", observability.HTTPWrap(m.handler.FakePaymentReject, m.logger)).Methods(http.MethodPost)
+
 	r.HandleFunc("/account", observability.HTTPWrap(m.handler.AccountOverview, m.logger)).Methods("GET")
 	r.HandleFunc("/account/orders", observability.HTTPWrap(m.handler.AccountOrders, m.logger)).Methods("GET")
 	r.HandleFunc("/account/addresses", observability.HTTPWrap(m.handler.AccountAddresses, m.logger)).Methods("GET")
@@ -358,10 +362,14 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["SiteName"] = "GoCommerce"
 	data["CanonicalURL"] = requestBaseURL(r) + r.URL.Path
 	// NavCategories lets the storefront header list category links on every page.
-	navCategories, err := handler.catalogSrv.Categories(r.Context())
-	if err != nil {
-		handler.logger.WithError(err).Warn("cannot get nav categories")
-		navCategories = nil
+	var navCategories any
+	if handler.catalogSrv != nil {
+		nc, err := handler.catalogSrv.Categories(r.Context())
+		if err != nil {
+			handler.logger.WithError(err).Warn("cannot get nav categories")
+		} else {
+			navCategories = nc
+		}
 	}
 	data["NavCategories"] = navCategories
 	// Currency is the active display currency for the request, sourced

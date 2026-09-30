@@ -12,6 +12,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -105,6 +107,13 @@ type Service struct {
 // the ACL onto the external system; pass the same instance that wraps
 // fakestripe.Client in production wiring.
 func NewService(storage Storage, provider Provider, newID IDGenerator, now func() time.Time) *Service {
+	if newID == nil {
+		newID = func() string {
+			b := make([]byte, 16)
+			_, _ = rand.Read(b)
+			return hex.EncodeToString(b)
+		}
+	}
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
@@ -226,6 +235,11 @@ func (s *Service) transitionByProviderRef(ctx context.Context, providerRef strin
 // Find returns the Charge by its domain id. Exposed for log /
 // observability paths that want to render a row.
 func (s *Service) Find(ctx context.Context, id string) (domain.Charge, error) {
+	return s.storage.Find(ctx, id)
+}
+
+// FindCharge returns the Charge by its domain id.
+func (s *Service) FindCharge(ctx context.Context, id string) (domain.Charge, error) {
 	return s.storage.Find(ctx, id)
 }
 
