@@ -139,6 +139,14 @@ type orderRefundedDTO struct {
 	At      time.Time `json:"at"`
 }
 
+type orderTrackingUpdatedDTO struct {
+	OrderID      string    `json:"order_id"`
+	Carrier      string    `json:"carrier,omitempty"`
+	TrackingCode string    `json:"tracking_code,omitempty"`
+	At           time.Time `json:"at"`
+}
+
+
 // marshalEvent returns the stored type name, payload version, and JSON
 // payload for a domain event. Every event type owns its own version space:
 // OrderPlaced is at v2 (Channel field added); the rest are still on v1
@@ -186,6 +194,8 @@ func marshalEvent(e domain.Event) (string, int, []byte, error) {
 		payload = orderDeliveredDTO{OrderID: ev.OrderID, At: ev.At}
 	case domain.OrderRefunded:
 		payload = orderRefundedDTO{OrderID: ev.OrderID, Reason: ev.Reason, At: ev.At}
+	case domain.OrderTrackingUpdated:
+		payload = orderTrackingUpdatedDTO{OrderID: ev.OrderID, Carrier: ev.Carrier, TrackingCode: ev.TrackingCode, At: ev.At}
 	default:
 		return "", 0, nil, fmt.Errorf("no codec for event %s", e.EventType())
 	}
@@ -274,10 +284,20 @@ func unmarshalEvent(eventType string, version int, payload []byte) (domain.Event
 			return nil, fmt.Errorf("unmarshal OrderRefunded: %w", err)
 		}
 		return domain.OrderRefunded{OrderID: dto.OrderID, Reason: dto.Reason, At: dto.At}, nil
+	case "OrderTrackingUpdated":
+		if version != 1 {
+			return nil, fmt.Errorf("unknown OrderTrackingUpdated version %d", version)
+		}
+		var dto orderTrackingUpdatedDTO
+		if err := json.Unmarshal(payload, &dto); err != nil {
+			return nil, fmt.Errorf("unmarshal OrderTrackingUpdated: %w", err)
+		}
+		return domain.OrderTrackingUpdated{OrderID: dto.OrderID, Carrier: dto.Carrier, TrackingCode: dto.TrackingCode, At: dto.At}, nil
 	default:
 		return nil, fmt.Errorf("unknown event type %q", eventType)
 	}
 }
+
 
 // upcastOrderPlacedV1 is the upcaster for the OrderPlaced v1 → v2 schema
 // jump. v1 rows pre-date the Channel field; we materialise them with

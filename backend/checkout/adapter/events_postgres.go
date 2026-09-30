@@ -266,10 +266,21 @@ func projectEventTx(ctx context.Context, tx *sql.Tx, e domain.Event) error {
 		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusDelivered))
 	case domain.OrderRefunded:
 		return setOrderStatus(ctx, tx, ev.OrderID, string(domain.StatusRefunded))
+	case domain.OrderTrackingUpdated:
+		_, err := tx.ExecContext(ctx, `
+			UPDATE checkout_order
+			SET carrier = $2, tracking_code = $3
+			WHERE id = $1
+		`, ev.OrderID, ev.Carrier, ev.TrackingCode)
+		if err != nil {
+			return fmt.Errorf("project tracking updated: %w", err)
+		}
+		return nil
 	default:
 		return fmt.Errorf("no projection for event %s", e.EventType())
 	}
 }
+
 
 // projectAnalyticsPaid bumps the analytics_daily_sales counter for the day
 // (in UTC) of the order's placed_at and its currency. The order's total +

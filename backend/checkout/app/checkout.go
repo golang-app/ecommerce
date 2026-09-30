@@ -124,6 +124,7 @@ type CheckoutService struct {
 	now              func() time.Time
 	taxStrategy      domain.TaxStrategy
 	shippingStrategy domain.ShippingStrategy
+	shippingStorage  ShippingStorage
 }
 
 // NewCheckoutService constructs the checkout command service.
@@ -169,6 +170,7 @@ func NewCheckoutService(
 		now:              func() time.Time { return time.Now().UTC() },
 		taxStrategy:      taxStrategy,
 		shippingStrategy: shippingStrategy,
+		shippingStorage:  NewInMemoryShippingStorage(),
 	}
 }
 
@@ -182,6 +184,16 @@ func (s CheckoutService) WithPromoRedeemer(p PromoRedeemer) CheckoutService {
 	s.promo = p
 	return s
 }
+
+// WithShippingStorage wires the shipping methods storage.
+func (s CheckoutService) WithShippingStorage(storage ShippingStorage) CheckoutService {
+	if storage == nil {
+		storage = NewInMemoryShippingStorage()
+	}
+	s.shippingStorage = storage
+	return s
+}
+
 
 // Place runs the checkout command: it snapshots the cart into a new order
 // aggregate (OrderPlaced), attempts the charge, records the outcome
@@ -737,3 +749,63 @@ func (s CheckoutService) MarkPaymentFailed(ctx context.Context, orderID string, 
 // stay on checkout/domain for replay / back-compat: historical event
 // logs that include OrderShipped / OrderDelivered / OrderRefunded
 // still apply cleanly when rebuilding read models or aggregates.
+
+func (s CheckoutService) shipping() ShippingStorage {
+	if s.shippingStorage != nil {
+		return s.shippingStorage
+	}
+	return NewInMemoryShippingStorage()
+}
+
+// ListShippingMethods returns all configured shipping methods.
+func (s CheckoutService) ListShippingMethods(ctx context.Context) ([]domain.ShippingMethod, error) {
+	return s.shipping().ListShippingMethods(ctx)
+}
+
+// FindShippingMethod retrieves a shipping method by code.
+func (s CheckoutService) FindShippingMethod(ctx context.Context, code string) (domain.ShippingMethod, error) {
+	return s.shipping().FindShippingMethod(ctx, code)
+}
+
+// UpdateShippingMethod updates attributes of an existing shipping method.
+func (s CheckoutService) UpdateShippingMethod(ctx context.Context, code string, enabled bool, label string, cost int64, carrier string) error {
+	storage := s.shipping()
+	existing, err := storage.FindShippingMethod(ctx, code)
+	if err != nil {
+		return err
+	}
+	updated := domain.NewShippingMethod(code, label, cost, existing.RequiresAddress(), carrier, enabled)
+	return storage.SaveShippingMethod(ctx, updated)
+}
+
+// UpdateTracking updates the tracking details for an existing order.
+func (s CheckoutService) UpdateTracking(ctx context.Context, orderID, carrier, trackingCode string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.UpdateTracking", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+		attribute.String("carrier", carrier),
+		attribute.String("tracking_code", trackingCode),
+	))
+	defer span.End()
+
+	order, err := s.storage.Load(ctx, orderID)
+	if err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+
+	order.SetTracking(carrier, trackingCode, s.now())
+
+	saveCtx, saveSpan := tracer.Start(ctx, "order.save", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+	))
+	if err := s.storage.Save(saveCtx, order); err != nil {
+		recordSpanError(saveSpan, err)
+		saveSpan.End()
+		recordSpanError(span, err)
+		return fmt.Errorf("save tracking: %w", err)
+	}
+	saveSpan.End()
+
+	return nil
+}
+

@@ -459,4 +459,106 @@ func TestMarkPaymentFailed_DefaultReason(t *testing.T) {
 	}
 }
 
+func TestCheckoutService_ShippingMethods(t *testing.T) {
+	ctx := context.Background()
+	svc := app.NewCheckoutService(nil, nil, nil, nil, nil, nil, nil, nil)
+
+	// ListShippingMethods returns default methods
+	methods, err := svc.ListShippingMethods(ctx)
+	if err != nil {
+		t.Fatalf("ListShippingMethods: %v", err)
+	}
+	if len(methods) != 3 {
+		t.Fatalf("expected 3 shipping methods, got %d", len(methods))
+	}
+
+	// FindShippingMethod by code
+	m, err := svc.FindShippingMethod(ctx, "courier")
+	if err != nil {
+		t.Fatalf("FindShippingMethod courier: %v", err)
+	}
+	if m.Code() != "courier" || m.Cost() != 1500 {
+		t.Errorf("unexpected method: %+v", m)
+	}
+
+	// FindShippingMethod not found
+	_, err = svc.FindShippingMethod(ctx, "nonexistent")
+	if !errors.Is(err, app.ErrShippingMethodNotFound) {
+		t.Fatalf("expected ErrShippingMethodNotFound, got %v", err)
+	}
+
+	// UpdateShippingMethod
+	err = svc.UpdateShippingMethod(ctx, "courier", false, "Courier Express", 2000, "DHL")
+	if err != nil {
+		t.Fatalf("UpdateShippingMethod: %v", err)
+	}
+
+	updated, err := svc.FindShippingMethod(ctx, "courier")
+	if err != nil {
+		t.Fatalf("FindShippingMethod courier after update: %v", err)
+	}
+	if updated.Label() != "Courier Express" || updated.Cost() != 2000 || updated.Carrier() != "DHL" || updated.IsEnabled() != false {
+		t.Errorf("updated method mismatch: %+v", updated)
+	}
+}
+
+func TestCheckoutService_WithShippingStorage(t *testing.T) {
+	ctx := context.Background()
+	customStorage := app.NewInMemoryShippingStorage()
+	_ = customStorage.SaveShippingMethod(ctx, domain.NewShippingMethod("custom", "Custom Post", 300, true, "Local Post", true))
+
+	svc := app.NewCheckoutService(nil, nil, nil, nil, nil, nil, nil, nil).WithShippingStorage(customStorage)
+
+	m, err := svc.FindShippingMethod(ctx, "custom")
+	if err != nil {
+		t.Fatalf("FindShippingMethod custom: %v", err)
+	}
+	if m.Code() != "custom" {
+		t.Errorf("expected code 'custom', got %q", m.Code())
+	}
+}
+
+func TestCheckoutService_UpdateTracking(t *testing.T) {
+	ctx := context.Background()
+	storage := &fakeOrderStorage{}
+	svc := app.NewCheckoutService(nil, storage, nil, nil, nil, nil, nil, nil)
+
+	lines := []domain.Line{domain.NewLine("prod-1", "Shoes", 1, 5000, "USD")}
+	method := domain.RebuildShippingMethod("courier", "Courier", 1500)
+	order, err := domain.PlaceOrder("order-trk", "sess-1", "cust-1", domain.Address{},
+		method, domain.RebuildPaymentMethod("fake", "Fake"), lines, 0, 1500, "", 0, "web", time.Now())
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	storage.saved = order
+
+	err = svc.UpdateTracking(ctx, "order-trk", "DHL Express", "TRACK-999")
+	if err != nil {
+		t.Fatalf("UpdateTracking: %v", err)
+	}
+
+	if storage.saved.Carrier() != "DHL Express" {
+		t.Errorf("expected carrier 'DHL Express', got %q", storage.saved.Carrier())
+	}
+	if storage.saved.TrackingCode() != "TRACK-999" {
+		t.Errorf("expected tracking code 'TRACK-999', got %q", storage.saved.TrackingCode())
+	}
+
+	// Check that OrderTrackingUpdated event was raised
+	pending := storage.saved.PendingEvents()
+	var found bool
+	for _, ev := range pending {
+		if trk, ok := ev.(domain.OrderTrackingUpdated); ok {
+			found = true
+			if trk.OrderID != "order-trk" || trk.Carrier != "DHL Express" || trk.TrackingCode != "TRACK-999" {
+				t.Errorf("unexpected event payload: %+v", trk)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("OrderTrackingUpdated event was not found in pending events: %+v", pending)
+	}
+}
+
+
 
