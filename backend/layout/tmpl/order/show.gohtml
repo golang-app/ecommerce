@@ -14,6 +14,10 @@
         <h1 class="order__title">delivered.</h1>
       {{else if eq .Order.Status "shipped"}}
         <h1 class="order__title">on its way.</h1>
+      {{else if eq .Order.Status "failed"}}
+        <h1 class="order__title">payment declined.</h1>
+      {{else if eq .Order.Status "pending"}}
+        <h1 class="order__title">payment pending.</h1>
       {{else}}
         <h1 class="order__title">thank you.</h1>
       {{end}}
@@ -23,6 +27,16 @@
         placed {{.Order.PlacedAt.Format "Jan 2, 2006 15:04 MST"}}
       </p>
     </header>
+
+    {{if eq .Order.Status "failed"}}
+      <div class="flash flash--error">
+        Your payment was declined. The items have been released back to stock. You may retry your purchase or continue shopping.
+      </div>
+    {{else if eq .Order.Status "pending"}}
+      <div class="flash flash--info">
+        Your order is pending payment confirmation.
+      </div>
+    {{end}}
 
     <table class="cart-table order__lines">
       <thead>
@@ -150,13 +164,18 @@
     <p class="order__hint muted">a confirmation email would normally be on its way. this is a demo, so nothing was actually charged or sent.</p>
 
     <div class="order__actions">
-      <a href="/" class="btn btn--ghost">continue shopping</a>
-      {{if .CanCancel}}
-        <form method="post" action="/order/{{.Order.ID}}/cancel"
-              onsubmit="return confirm('Cancel this order? Reserved stock will be released.');">
-          <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
-          <button type="submit" class="linkbtn linkbtn--danger">cancel order</button>
-        </form>
+      {{if eq .Order.Status "failed"}}
+        <a href="/cart" class="btn">Return to Cart</a>
+        <a href="/" class="btn btn--ghost">Continue Shopping</a>
+      {{else}}
+        <a href="/" class="btn btn--ghost">continue shopping</a>
+        {{if .CanCancel}}
+          <form method="post" action="/order/{{.Order.ID}}/cancel"
+                onsubmit="return confirm('Cancel this order? Reserved stock will be released.');">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <button type="submit" class="linkbtn linkbtn--danger">cancel order</button>
+          </form>
+        {{end}}
       {{end}}
     </div>
   </article>

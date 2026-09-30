@@ -104,10 +104,10 @@
 
         <fieldset class="fieldset">
           <legend class="fieldset__legend">payment method</legend>
-          {{range .PaymentMethods}}
+          {{range $i, $m := .PaymentMethods}}
             <label class="radio">
-              <input type="radio" name="payment_method" value="{{.Code}}" {{if eq .Code "card"}}checked{{end}}>
-              <span class="radio__label">{{.Label}}</span>
+              <input type="radio" name="payment_method" value="{{$m.Code}}" {{if eq $i 0}}checked{{end}}>
+              <span class="radio__label">{{$m.Label}}</span>
             </label>
           {{end}}
         </fieldset>

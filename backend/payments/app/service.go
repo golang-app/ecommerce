@@ -12,6 +12,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -23,6 +25,10 @@ import (
 // the lookup. The webhook handler relies on it to distinguish "we
 // have not seen this provider_ref" from a real storage failure.
 var ErrChargeNotFound = errors.New("payments: charge not found")
+
+// ErrProviderNotFound is returned by Storage when no ProviderConfig exists
+// for the given provider ID.
+var ErrProviderNotFound = errors.New("payments: provider not found")
 
 // Storage is the persistence seam for Charges. The postgres and
 // in-memory adapters both implement it.
@@ -40,6 +46,10 @@ type Storage interface {
 	UpdateStatus(ctx context.Context, id string, status domain.Status, providerRef string, updatedAt time.Time) error
 	FindByIdempotencyKey(ctx context.Context, key string) (domain.Charge, bool, error)
 	FindByProviderRef(ctx context.Context, providerRef string) (domain.Charge, error)
+	FindByOrderID(ctx context.Context, orderID string) (domain.Charge, error)
+	ListProviders(ctx context.Context) ([]domain.ProviderConfig, error)
+	FindProvider(ctx context.Context, id string) (domain.ProviderConfig, error)
+	SaveProvider(ctx context.Context, cfg domain.ProviderConfig) error
 }
 
 // ErrIdempotencyKeyConflict signals a UNIQUE-violation on the
@@ -97,6 +107,13 @@ type Service struct {
 // the ACL onto the external system; pass the same instance that wraps
 // fakestripe.Client in production wiring.
 func NewService(storage Storage, provider Provider, newID IDGenerator, now func() time.Time) *Service {
+	if newID == nil {
+		newID = func() string {
+			b := make([]byte, 16)
+			_, _ = rand.Read(b)
+			return hex.EncodeToString(b)
+		}
+	}
 	if now == nil {
 		now = func() time.Time { return time.Now().UTC() }
 	}
@@ -133,7 +150,7 @@ func (s *Service) Charge(ctx context.Context, orderID string, amount int64, curr
 	}
 
 	chargeID := s.newID()
-	pending := domain.NewCharge(chargeID, idempotencyKey, amount, currency, s.now())
+	pending := domain.NewCharge(chargeID, idempotencyKey, amount, currency, domain.ProviderStripe, orderID, s.now())
 	if err := s.storage.Insert(ctx, pending); err != nil {
 		if errors.Is(err, ErrIdempotencyKeyConflict) && idempotencyKey != "" {
 			// A concurrent first-time insert won the race. Read
@@ -220,3 +237,98 @@ func (s *Service) transitionByProviderRef(ctx context.Context, providerRef strin
 func (s *Service) Find(ctx context.Context, id string) (domain.Charge, error) {
 	return s.storage.Find(ctx, id)
 }
+
+// FindCharge returns the Charge by its domain id.
+func (s *Service) FindCharge(ctx context.Context, id string) (domain.Charge, error) {
+	return s.storage.Find(ctx, id)
+}
+
+// ListProviders returns all registered payment provider configurations.
+func (s *Service) ListProviders(ctx context.Context) ([]domain.ProviderConfig, error) {
+	return s.storage.ListProviders(ctx)
+}
+
+// FindProvider returns the configuration for the specified provider ID.
+func (s *Service) FindProvider(ctx context.Context, id string) (domain.ProviderConfig, error) {
+	return s.storage.FindProvider(ctx, id)
+}
+
+// UpdateProvider modifies the enabled status and configuration map of an existing provider,
+// updating the modification timestamp.
+func (s *Service) UpdateProvider(ctx context.Context, id string, enabled bool, config map[string]string) error {
+	existing, err := s.storage.FindProvider(ctx, id)
+	if err != nil {
+		return fmt.Errorf("payments: find provider %s: %w", id, err)
+	}
+	updated := existing.WithEnabled(enabled).WithConfig(config, s.now())
+	if err := s.storage.SaveProvider(ctx, updated); err != nil {
+		return fmt.Errorf("payments: save provider %s: %w", id, err)
+	}
+	return nil
+}
+
+// CreatePendingCharge creates and stores a new pending charge associated with an order and provider.
+func (s *Service) CreatePendingCharge(ctx context.Context, orderID string, amount int64, currency, provider string) (domain.Charge, error) {
+	chargeID := s.newID()
+	pending := domain.NewCharge(chargeID, "", amount, currency, provider, orderID, s.now())
+	if err := s.storage.Insert(ctx, pending); err != nil {
+		return domain.Charge{}, fmt.Errorf("payments: insert pending charge: %w", err)
+	}
+	return pending, nil
+}
+
+// ConfirmCharge transitions a pending Charge into the succeeded terminal status.
+// Idempotent: confirming an already succeeded charge is a no-op returning the existing charge.
+// Attempting to confirm a failed charge returns an error.
+func (s *Service) ConfirmCharge(ctx context.Context, chargeID string) (domain.Charge, error) {
+	charge, err := s.storage.Find(ctx, chargeID)
+	if err != nil {
+		return domain.Charge{}, fmt.Errorf("payments: find charge %s: %w", chargeID, err)
+	}
+	if charge.Status() == domain.StatusSucceeded {
+		return charge, nil
+	}
+	if charge.Status() == domain.StatusFailed {
+		return domain.Charge{}, fmt.Errorf("payments: cannot confirm charge %s in failed status", chargeID)
+	}
+	providerRef := charge.ProviderRef()
+	if providerRef == "" {
+		providerRef = chargeID
+	}
+	updated := charge.WithStatus(domain.StatusSucceeded, providerRef, s.now())
+	if err := s.storage.UpdateStatus(ctx, chargeID, updated.Status(), updated.ProviderRef(), updated.UpdatedAt()); err != nil {
+		return domain.Charge{}, fmt.Errorf("payments: update charge status %s: %w", chargeID, err)
+	}
+	return updated, nil
+}
+
+// RejectCharge transitions a pending Charge into the failed terminal status with reason.
+// Idempotent: rejecting an already failed charge is a no-op returning the existing charge.
+// Attempting to reject a succeeded charge returns an error.
+func (s *Service) RejectCharge(ctx context.Context, chargeID string, reason string) (domain.Charge, error) {
+	charge, err := s.storage.Find(ctx, chargeID)
+	if err != nil {
+		return domain.Charge{}, fmt.Errorf("payments: find charge %s: %w", chargeID, err)
+	}
+	if charge.Status() == domain.StatusFailed {
+		return charge, nil
+	}
+	if charge.Status() == domain.StatusSucceeded {
+		return domain.Charge{}, fmt.Errorf("payments: cannot reject charge %s in succeeded status", chargeID)
+	}
+	providerRef := reason
+	if providerRef == "" {
+		providerRef = "declined"
+	}
+	updated := charge.WithStatus(domain.StatusFailed, providerRef, s.now())
+	if err := s.storage.UpdateStatus(ctx, chargeID, updated.Status(), updated.ProviderRef(), updated.UpdatedAt()); err != nil {
+		return domain.Charge{}, fmt.Errorf("payments: update charge status %s: %w", chargeID, err)
+	}
+	return updated, nil
+}
+
+// FindByOrderID returns the most recent Charge associated with orderID.
+func (s *Service) FindByOrderID(ctx context.Context, orderID string) (domain.Charge, error) {
+	return s.storage.FindByOrderID(ctx, orderID)
+}
+

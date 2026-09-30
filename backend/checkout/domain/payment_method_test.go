@@ -15,6 +15,7 @@ func TestPaymentMethodByCode(t *testing.T) {
 		{"card", true},
 		{"paypal", false},
 		{"cod", false},
+		{"fake", false},
 	}
 	for _, c := range cases {
 		m, err := domain.PaymentMethodByCode(c.code)

@@ -349,6 +349,22 @@ func (s CheckoutService) Place(ctx context.Context, sessID, customerID, cardNumb
 	// separating "we attempted" from "we charged".
 	observability.OrdersPlacedInc(ctx, payMethod.Code(), shipMethod.Code())
 
+	if payMethod.Code() == "fake" {
+		saveCtx, saveSpan := tracer.Start(ctx, "order.save", trace.WithAttributes(
+			attribute.String("order.id", orderID),
+			attribute.String("order.status", string(domain.StatusPending)),
+		))
+		if err := s.storage.Save(saveCtx, order); err != nil {
+			log.WithError(err).Error("Failed to persist pending order to storage")
+			recordSpanError(saveSpan, err)
+			saveSpan.End()
+			_ = s.stock.Release(ctx, quantities)
+			return domain.Order{}, fmt.Errorf("save pending order: %w", err)
+		}
+		saveSpan.End()
+		return *order, nil
+	}
+
 	chargeCtx, chargeSpan := tracer.Start(ctx, "payment.charge", trace.WithAttributes(
 		attribute.Int64("payment.amount", order.TotalAmount()),
 		attribute.String("payment.currency", order.TotalCurrency()),
@@ -588,6 +604,124 @@ func (s CheckoutService) ExpirePending(ctx context.Context, orderID string) erro
 	observability.OrdersFinalizedInc(ctx, string(domain.StatusFailed))
 	return nil
 }
+
+// MarkPaid records a successful payment capture for an order (e.g. from an async payment webhook).
+func (s CheckoutService) MarkPaid(ctx context.Context, orderID string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.MarkPaid", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+	))
+	defer span.End()
+
+	log := observability.Logger(ctx).WithField("order_id", orderID)
+
+	order, err := s.storage.Load(ctx, orderID)
+	if err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+
+	if order.Status() == domain.StatusPaid {
+		span.SetAttributes(attribute.String("mark_paid.outcome", "noop"))
+		return nil
+	}
+
+	if order.Status() != domain.StatusPending {
+		err := errors.New("order is not pending")
+		recordSpanError(span, err)
+		return err
+	}
+
+	order.MarkPaid(s.now())
+
+	saveCtx, saveSpan := tracer.Start(ctx, "order.save", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+		attribute.String("order.status", string(domain.StatusPaid)),
+	))
+	if err := s.storage.Save(saveCtx, order); err != nil {
+		log.WithError(err).Error("Failed to persist paid order to storage")
+		recordSpanError(saveSpan, err)
+		saveSpan.End()
+		recordSpanError(span, err)
+		return fmt.Errorf("save order: %w", err)
+	}
+	saveSpan.End()
+
+	log.WithFields(logrus.Fields{
+		"status":   string(domain.StatusPaid),
+		"total":    order.TotalAmount(),
+		"currency": order.TotalCurrency(),
+	}).Info("Order marked paid successfully")
+
+	observability.PaymentsChargedInc(ctx, order.TotalCurrency())
+	observability.RevenueAdd(ctx, order.TotalAmount(), order.TotalCurrency())
+	observability.OrdersFinalizedInc(ctx, string(domain.StatusPaid))
+
+	if order.DiscountCode() != "" {
+		discount := promodomain.NewDiscount(order.DiscountCode(), "", order.DiscountAmount(), order.TotalCurrency(), false)
+		if err := s.promo.Redeem(ctx, order.DiscountCode(), order.ID(), order.CustomerID(), discount); err != nil {
+			span.AddEvent("promo.redeem.failed", trace.WithAttributes(
+				attribute.String("promo.code", order.DiscountCode()),
+				attribute.String("error", err.Error()),
+			))
+		}
+	}
+
+	return nil
+}
+
+// MarkPaymentFailed records a declined or failed payment for an order (e.g. from an async payment webhook).
+func (s CheckoutService) MarkPaymentFailed(ctx context.Context, orderID string, reason string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.MarkPaymentFailed", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+		attribute.String("reason", reason),
+	))
+	defer span.End()
+
+	log := observability.Logger(ctx).WithField("order_id", orderID)
+
+	order, err := s.storage.Load(ctx, orderID)
+	if err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+
+	if order.Status() == domain.StatusFailed {
+		span.SetAttributes(attribute.String("mark_payment_failed.outcome", "noop"))
+		return nil
+	}
+
+	if order.Status() != domain.StatusPending {
+		err := errors.New("order is not pending")
+		recordSpanError(span, err)
+		return err
+	}
+
+	if reason == "" {
+		reason = "payment declined"
+	}
+
+	order.MarkFailed(reason, s.now())
+
+	saveCtx, saveSpan := tracer.Start(ctx, "order.save", trace.WithAttributes(
+		attribute.String("order.id", orderID),
+		attribute.String("order.status", string(domain.StatusFailed)),
+	))
+	if err := s.storage.Save(saveCtx, order); err != nil {
+		log.WithError(err).Error("Failed to persist failed order to storage")
+		recordSpanError(saveSpan, err)
+		saveSpan.End()
+		recordSpanError(span, err)
+		return fmt.Errorf("save failed order: %w", err)
+	}
+	saveSpan.End()
+
+	s.releaseStock(ctx, order, "release-payment-rejected")
+
+	observability.OrdersFinalizedInc(ctx, string(domain.StatusFailed))
+
+	return nil
+}
+
 
 // MarkShipped / MarkDelivered / Refund used to live on this service:
 // they applied the matching domain commands on the Order aggregate

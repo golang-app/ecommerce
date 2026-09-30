@@ -1,0 +1,59 @@
+{{define "main"}}
+  <h2 class="account-card__title">payment providers</h2>
+  <p class="muted">Manage payment gateway credentials and simulator settings.</p>
+
+  {{if .Providers}}
+    {{range $p := .Providers}}
+      <section class="admin-section">
+        <h3 class="admin-section__title">
+          {{if eq $p.ID "stripe"}}Stripe{{else if eq $p.ID "fake"}}Fake Payment Simulator{{else}}{{$p.ID}}{{end}}
+          {{if $p.IsEnabled}}<span class="badge badge--success" style="font-size:0.75rem; margin-left:8px; vertical-align:middle;">enabled</span>{{else}}<span class="badge badge--muted" style="font-size:0.75rem; margin-left:8px; vertical-align:middle;">disabled</span>{{end}}
+        </h3>
+
+        <form class="form" method="post" action="/admin/payment-providers/{{$p.ID}}">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+
+          <div class="field field--check">
+            <label>
+              <input type="checkbox" name="enabled" value="1" {{if $p.IsEnabled}}checked{{end}}>
+              Enabled
+            </label>
+          </div>
+
+          {{if eq $p.ID "stripe"}}
+            <div class="field">
+              <label for="stripe-fail-card-{{$p.ID}}">fail card ending in (simulation)</label>
+              <input id="stripe-fail-card-{{$p.ID}}" name="fail_card_ending_in" type="text" value="{{$p.ConfigValue "fail_card_ending_in"}}" placeholder="0000">
+              <span class="form__aside muted">Test card ending in this suffix will simulate a card failure.</span>
+            </div>
+            <div class="field">
+              <label for="stripe-pub-key-{{$p.ID}}">publishable key</label>
+              <input id="stripe-pub-key-{{$p.ID}}" name="publishable_key" type="text" value="{{$p.ConfigValue "publishable_key"}}" placeholder="pk_test_...">
+            </div>
+            <div class="field">
+              <label for="stripe-sec-key-{{$p.ID}}">secret key</label>
+              <input id="stripe-sec-key-{{$p.ID}}" name="secret_key" type="text" value="{{$p.ConfigValue "secret_key"}}" placeholder="sk_test_...">
+            </div>
+            <div class="field">
+              <label for="stripe-wh-sec-{{$p.ID}}">webhook secret</label>
+              <input id="stripe-wh-sec-{{$p.ID}}" name="webhook_secret" type="text" value="{{$p.ConfigValue "webhook_secret"}}" placeholder="whsec_...">
+            </div>
+          {{else if eq $p.ID "fake"}}
+            <div class="field">
+              <label for="fake-name-{{$p.ID}}">name</label>
+              <input id="fake-name-{{$p.ID}}" name="name" type="text" value="{{$p.ConfigValue "name"}}" placeholder="Fake Payment Simulator">
+            </div>
+            <div class="field">
+              <label for="fake-desc-{{$p.ID}}">description</label>
+              <textarea id="fake-desc-{{$p.ID}}" name="description" placeholder="Interactive payment simulator for testing payment outcomes.">{{$p.ConfigValue "description"}}</textarea>
+            </div>
+          {{end}}
+
+          <button type="submit" class="btn">save changes</button>
+        </form>
+      </section>
+    {{end}}
+  {{else}}
+    <p class="muted">no payment providers configured.</p>
+  {{end}}
+{{end}}

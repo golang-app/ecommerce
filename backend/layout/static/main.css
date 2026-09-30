@@ -586,6 +586,9 @@ main {
   border-color: var(--rule);
 }
 .btn--ghost:hover { border-color: var(--fg); background: transparent; }
+.btn--primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.btn--danger { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn--danger:hover { background: transparent; color: var(--danger); }
 .btn--block { display: flex; width: 100%; }
 
 /* ---------- cart ---------- */
