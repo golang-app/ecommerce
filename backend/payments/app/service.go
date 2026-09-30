@@ -133,7 +133,7 @@ func (s *Service) Charge(ctx context.Context, orderID string, amount int64, curr
 	}
 
 	chargeID := s.newID()
-	pending := domain.NewCharge(chargeID, idempotencyKey, amount, currency, s.now())
+	pending := domain.NewCharge(chargeID, idempotencyKey, amount, currency, domain.ProviderStripe, "", s.now())
 	if err := s.storage.Insert(ctx, pending); err != nil {
 		if errors.Is(err, ErrIdempotencyKeyConflict) && idempotencyKey != "" {
 			// A concurrent first-time insert won the race. Read

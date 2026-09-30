@@ -136,7 +136,7 @@ func scanCharge(r rowScanner) (domain.Charge, error) {
 	if err != nil {
 		return domain.Charge{}, fmt.Errorf("payments postgres: scan: %w", err)
 	}
-	return domain.RebuildCharge(id, key, amount, currency, domain.Status(status), providerRef, createdAt, updatedAt), nil
+	return domain.RebuildCharge(id, key, amount, currency, domain.Status(status), providerRef, "", "", createdAt, updatedAt), nil
 }
 
 // isUniqueViolationOnIdempotencyKey heuristically detects the

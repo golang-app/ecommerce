@@ -70,16 +70,22 @@ type Charge struct {
 	currency       string
 	status         Status
 	providerRef    string
+	provider       string
+	orderID        string
 	createdAt      time.Time
 	updatedAt      time.Time
 }
 
 // NewCharge constructs a fresh pending Charge. providerRef is empty
 // at this point — it is filled in once the provider returns a
-// reference. idempotencyKey may be blank, but for the Place flow it is
+// reference. provider defaults to ProviderStripe if empty.
+// idempotencyKey may be blank, but for the Place flow it is
 // always derived from the order id (so two attempts for the same
 // order can't double-charge).
-func NewCharge(id, idempotencyKey string, amount int64, currency string, at time.Time) Charge {
+func NewCharge(id, idempotencyKey string, amount int64, currency, provider, orderID string, at time.Time) Charge {
+	if provider == "" {
+		provider = ProviderStripe
+	}
 	return Charge{
 		id:             id,
 		idempotencyKey: idempotencyKey,
@@ -87,6 +93,8 @@ func NewCharge(id, idempotencyKey string, amount int64, currency string, at time
 		currency:       currency,
 		status:         StatusPending,
 		providerRef:    "",
+		provider:       provider,
+		orderID:        orderID,
 		createdAt:      at,
 		updatedAt:      at,
 	}
@@ -96,8 +104,11 @@ func NewCharge(id, idempotencyKey string, amount int64, currency string, at time
 // rows without having to expose setters for every field. The function
 // is deliberately separate from NewCharge so the constructor path
 // stays narrow (status defaults to pending; createdAt/updatedAt come
-// from the clock).
-func RebuildCharge(id, idempotencyKey string, amount int64, currency string, status Status, providerRef string, createdAt, updatedAt time.Time) Charge {
+// from the clock). provider defaults to ProviderStripe if empty.
+func RebuildCharge(id, idempotencyKey string, amount int64, currency string, status Status, providerRef, provider, orderID string, createdAt, updatedAt time.Time) Charge {
+	if provider == "" {
+		provider = ProviderStripe
+	}
 	return Charge{
 		id:             id,
 		idempotencyKey: idempotencyKey,
@@ -105,6 +116,8 @@ func RebuildCharge(id, idempotencyKey string, amount int64, currency string, sta
 		currency:       currency,
 		status:         status,
 		providerRef:    providerRef,
+		provider:       provider,
+		orderID:        orderID,
 		createdAt:      createdAt,
 		updatedAt:      updatedAt,
 	}
@@ -123,6 +136,22 @@ func (c Charge) WithStatus(status Status, providerRef string, at time.Time) Char
 	return c
 }
 
+// WithProvider returns a copy of the charge with the provider replaced.
+// If provider is empty, it defaults to ProviderStripe.
+func (c Charge) WithProvider(provider string) Charge {
+	if provider == "" {
+		provider = ProviderStripe
+	}
+	c.provider = provider
+	return c
+}
+
+// WithOrderID returns a copy of the charge with the orderID replaced.
+func (c Charge) WithOrderID(orderID string) Charge {
+	c.orderID = orderID
+	return c
+}
+
 // Accessors. Exported as methods (not fields) so the struct stays a
 // proper value object — callers must go through the constructors to
 // build one.
@@ -132,5 +161,12 @@ func (c Charge) Amount() int64          { return c.amount }
 func (c Charge) Currency() string       { return c.currency }
 func (c Charge) Status() Status         { return c.status }
 func (c Charge) ProviderRef() string    { return c.providerRef }
-func (c Charge) CreatedAt() time.Time   { return c.createdAt }
-func (c Charge) UpdatedAt() time.Time   { return c.updatedAt }
+func (c Charge) Provider() string {
+	if c.provider == "" {
+		return ProviderStripe
+	}
+	return c.provider
+}
+func (c Charge) OrderID() string      { return c.orderID }
+func (c Charge) CreatedAt() time.Time { return c.createdAt }
+func (c Charge) UpdatedAt() time.Time { return c.updatedAt }
