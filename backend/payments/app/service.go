@@ -24,6 +24,10 @@ import (
 // have not seen this provider_ref" from a real storage failure.
 var ErrChargeNotFound = errors.New("payments: charge not found")
 
+// ErrProviderNotFound is returned by Storage when no ProviderConfig exists
+// for the given provider ID.
+var ErrProviderNotFound = errors.New("payments: provider not found")
+
 // Storage is the persistence seam for Charges. The postgres and
 // in-memory adapters both implement it.
 //
@@ -40,6 +44,10 @@ type Storage interface {
 	UpdateStatus(ctx context.Context, id string, status domain.Status, providerRef string, updatedAt time.Time) error
 	FindByIdempotencyKey(ctx context.Context, key string) (domain.Charge, bool, error)
 	FindByProviderRef(ctx context.Context, providerRef string) (domain.Charge, error)
+	FindByOrderID(ctx context.Context, orderID string) (domain.Charge, error)
+	ListProviders(ctx context.Context) ([]domain.ProviderConfig, error)
+	FindProvider(ctx context.Context, id string) (domain.ProviderConfig, error)
+	SaveProvider(ctx context.Context, cfg domain.ProviderConfig) error
 }
 
 // ErrIdempotencyKeyConflict signals a UNIQUE-violation on the
