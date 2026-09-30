@@ -56,6 +56,7 @@ type httpHandler struct {
 	searchSrv      searchService
 	storeSrv       storeService
 	imageStore     imagestore.Store
+	paymentsSrv    paymentsService
 	mailer         mailer.Mailer
 	baseURL        string
 	// rates is the static, operator-configured FX table. It is shared
@@ -283,6 +284,11 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/stores/{id}/edit", observability.HTTPWrap(m.handler.AdminEditStoreForm, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/stores/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteStore, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/stores/{id}", observability.HTTPWrap(m.handler.AdminUpdateStore, m.logger)).Methods("POST")
+
+	// Payment providers admin: list on /admin/payment-providers;
+	// update on /admin/payment-providers/{id}.
+	r.HandleFunc("/admin/payment-providers", observability.HTTPWrap(m.handler.AdminPaymentProviders, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/payment-providers/{id}", observability.HTTPWrap(m.handler.AdminUpdatePaymentProvider, m.logger)).Methods(http.MethodPost)
 
 	// Repricing admin: list + start form on /admin/repricing; the
 	// /{id} detail page polls itself via HTMX while the saga runs.

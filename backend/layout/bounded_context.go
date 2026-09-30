@@ -17,6 +17,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	paymentsDomain "github.com/bkielbasa/go-ecommerce/backend/payments/domain"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	repricingDomain "github.com/bkielbasa/go-ecommerce/backend/repricing/domain"
 	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
@@ -229,6 +230,17 @@ type checkoutQueries interface {
 	TodaysSales(ctx context.Context) (map[string]checkoutQuery.DailySalesRow, error)
 }
 
+type paymentsService interface {
+	paymentsWebhookService
+	ListProviders(ctx context.Context) ([]paymentsDomain.ProviderConfig, error)
+	FindProvider(ctx context.Context, id string) (paymentsDomain.ProviderConfig, error)
+	UpdateProvider(ctx context.Context, id string, enabled bool, config map[string]string) error
+	CreatePendingCharge(ctx context.Context, orderID string, amount int64, currency, provider string) (paymentsDomain.Charge, error)
+	ConfirmCharge(ctx context.Context, chargeID string) (paymentsDomain.Charge, error)
+	RejectCharge(ctx context.Context, chargeID string, reason string) (paymentsDomain.Charge, error)
+	FindByOrderID(ctx context.Context, orderID string) (paymentsDomain.Charge, error)
+}
+
 // New wires the layout bounded context. It also initialises the process-wide
 // session cookie store from the supplied secret and Secure flag. Callers must
 // supply a non-empty sessionSecret; main.go enforces the production-vs-default
@@ -238,11 +250,11 @@ type checkoutQueries interface {
 // true, and only local debugging should ever flip it to false (see
 // cmd/web/config.go CSRFEnabled for the operator-facing knob).
 //
-// paymentsWebhookSecret + paymentsWebhookSrv power the
-// POST /webhooks/payments endpoint. Pass an empty secret OR a nil
-// service to skip the registration entirely — tests that don't care
-// about webhooks then don't need to provide either.
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsWebhookSrv paymentsWebhookService) application.BoundedContext {
+// paymentsWebhookSecret + paymentsSrv power the
+// POST /webhooks/payments endpoint and the payment provider admin UI.
+// Pass an empty secret OR a nil service to skip the webhook registration entirely —
+// tests that don't care about webhooks then don't need to provide either.
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	return &boundedContext{
@@ -262,6 +274,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			searchSrv:      searchSrv,
 			storeSrv:       storeSrv,
 			imageStore:     imageStore,
+			paymentsSrv:    paymentsSrv,
 			mailer:         mailerSrv,
 			baseURL:        baseURL,
 			rates:          rates,
@@ -269,7 +282,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 		},
 		uploadsDir:            uploadsDir,
 		paymentsWebhookSecret: paymentsWebhookSecret,
-		paymentsWebhookSrv:    paymentsWebhookSrv,
+		paymentsWebhookSrv:    paymentsSrv,
 		logger:                logger,
 	}
 }
