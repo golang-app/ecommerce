@@ -320,11 +320,25 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 				}
 			}
 		case "failed":
+			if order.Status() != checkoutDomain.StatusPending {
+				handler.flash(w, r, "Only pending orders can be marked as failed. Use cancel or refund instead.", "error")
+				http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+				return
+			}
 			if err := handler.checkoutSrv.MarkPaymentFailed(r.Context(), orderID, "admin_override"); err != nil {
 				https.InternalError(w, "internal-error", err.Error())
 				return
 			}
 		case "cancelled":
+			if handler.fulfillmentSrv != nil {
+				if ff, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID); ferr == nil {
+					if ff.Status() == fulfillmentDomain.StatusShipped || ff.Status() == fulfillmentDomain.StatusDelivered {
+						handler.flash(w, r, "An order with shipped or delivered fulfillment cannot be cancelled. Use refund instead.", "error")
+						http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+						return
+					}
+				}
+			}
 			if err := handler.checkoutSrv.AdminCancel(r.Context(), orderID); err != nil {
 				if errors.Is(err, checkoutDomain.ErrOrderNotCancellable) {
 					handler.flash(w, r, "This order can no longer be cancelled.", "error")

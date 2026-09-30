@@ -139,16 +139,17 @@
             </div>
             <div class="field">
               <label for="delivery_status">Delivery Status</label>
-              <select id="delivery_status" name="delivery_status">
+              <select id="delivery_status" name="delivery_status" {{if not .HasFulfillment}}disabled{{end}}>
                 {{if not .HasFulfillment}}
                   <option value="" selected>None (not fulfilled yet)</option>
+                {{else}}
+                  <option value="scheduled" {{if eq (printf "%s" .Fulfillment.Status) "scheduled"}}selected{{end}}>Scheduled</option>
+                  <option value="labeled" {{if eq (printf "%s" .Fulfillment.Status) "labeled"}}selected{{end}}>Labeled</option>
+                  <option value="shipped" {{if eq (printf "%s" .Fulfillment.Status) "shipped"}}selected{{end}}>Shipped</option>
+                  <option value="delivered" {{if eq (printf "%s" .Fulfillment.Status) "delivered"}}selected{{end}}>Delivered</option>
+                  <option value="returned" {{if eq (printf "%s" .Fulfillment.Status) "returned"}}selected{{end}}>Returned</option>
+                  <option value="refunded" {{if eq (printf "%s" .Fulfillment.Status) "refunded"}}selected{{end}}>Refunded</option>
                 {{end}}
-                <option value="scheduled" {{if eq (printf "%s" .Fulfillment.Status) "scheduled"}}selected{{end}}>Scheduled</option>
-                <option value="labeled" {{if eq (printf "%s" .Fulfillment.Status) "labeled"}}selected{{end}}>Labeled</option>
-                <option value="shipped" {{if eq (printf "%s" .Fulfillment.Status) "shipped"}}selected{{end}}>Shipped</option>
-                <option value="delivered" {{if eq (printf "%s" .Fulfillment.Status) "delivered"}}selected{{end}}>Delivered</option>
-                <option value="returned" {{if eq (printf "%s" .Fulfillment.Status) "returned"}}selected{{end}}>Returned</option>
-                <option value="refunded" {{if eq (printf "%s" .Fulfillment.Status) "refunded"}}selected{{end}}>Refunded</option>
               </select>
             </div>
             <div class="field">

@@ -64,7 +64,8 @@ type StockMovements interface {
 // automatic free-shipping override" behaviour.
 func New(db *sql.DB, cart CartReader, outbox adapter.OutboxAppender, payment app.PaymentProcessor, stock StockReserver, movements StockMovements, taxStrategy domain.TaxStrategy, shippingStrategy domain.ShippingStrategy) (application.BoundedContext, app.CheckoutService, query.Service) {
 	storage := adapter.NewPostgres(db, outbox)
-	cmd := app.NewCheckoutService(cart, storage, payment, stock, movements, newOrderID, taxStrategy, shippingStrategy)
+	shippingStorage := adapter.NewPostgresShippingStorage(db)
+	cmd := app.NewCheckoutService(cart, storage, payment, stock, movements, newOrderID, taxStrategy, shippingStrategy).WithShippingStorage(shippingStorage)
 	queries := query.NewService(storage)
 	return &boundedContext{}, cmd, queries
 }

@@ -741,3 +741,104 @@ func TestAdminUpdateOrderStatus_PendingOrder_WithDeliveryStatusFormValue_DoesNot
 		t.Errorf("expected UpdateTracking to be called")
 	}
 }
+
+func TestAdminUpdateOrderStatus_PaidOrder_CannotTransitionToFailed(t *testing.T) {
+	setupTestEnvironment(t)
+
+	orderID := "ord-paid-cannot-fail"
+	orderView := makeTestOrderView(orderID, checkoutDomain.StatusPaid, "", "")
+
+	var markPaymentFailedCalled bool
+	checkoutCmds := &mockStatusCheckoutCmds{
+		markPaymentFailedFn: func(ctx context.Context, oID, reason string) error {
+			markPaymentFailedCalled = true
+			return nil
+		},
+	}
+	checkoutQry := &mockStatusCheckoutQry{
+		findFn: func(ctx context.Context, id string) (checkoutQuery.OrderView, error) {
+			if id == orderID {
+				return orderView, nil
+			}
+			return checkoutQuery.OrderView{}, checkoutDomain.ErrOrderNotFound
+		},
+	}
+	fulfillmentSrv := &mockStatusFulfillmentSrv{
+		byOrderFn: func(ctx context.Context, oID string) (fulfillmentDomain.Fulfillment, error) {
+			return fulfillmentDomain.Fulfillment{}, fulfillmentApp.ErrNotFound
+		},
+	}
+
+	handler := newTestOrderStatusHandler(checkoutCmds, checkoutQry, fulfillmentSrv)
+
+	form := url.Values{}
+	form.Set("payment_status", "failed")
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/orders/"+orderID+"/status", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"orderID": orderID})
+	setAdminSession(t, req)
+
+	rec := httptest.NewRecorder()
+	handler.AdminUpdateOrderStatus(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if markPaymentFailedCalled {
+		t.Errorf("markPaymentFailed should not have been called on paid order")
+	}
+	cookie := rec.Header().Get("Set-Cookie")
+	if !strings.Contains(cookie, "ecommerce=") {
+		t.Fatalf("expected session cookie with flash, got none")
+	}
+}
+
+func TestAdminUpdateOrderStatus_ShippedOrder_CannotBeCancelled(t *testing.T) {
+	setupTestEnvironment(t)
+
+	orderID := "ord-shipped-cannot-cancel"
+	orderView := makeTestOrderView(orderID, checkoutDomain.StatusPaid, "DHL", "DHL-123")
+
+	var cancelCalled bool
+	checkoutCmds := &mockStatusCheckoutCmds{
+		adminCancelFn: func(ctx context.Context, oID string) error {
+			cancelCalled = true
+			return nil
+		},
+	}
+	checkoutQry := &mockStatusCheckoutQry{
+		findFn: func(ctx context.Context, id string) (checkoutQuery.OrderView, error) {
+			if id == orderID {
+				return orderView, nil
+			}
+			return checkoutQuery.OrderView{}, checkoutDomain.ErrOrderNotFound
+		},
+	}
+	ff := fulfillmentDomain.Rebuild("ful-1", orderID, fulfillmentDomain.StatusShipped, "DHL", "DHL-123", time.Now(), time.Now(), time.Time{}, "", 1)
+	fulfillmentSrv := &mockStatusFulfillmentSrv{
+		byOrderFn: func(ctx context.Context, oID string) (fulfillmentDomain.Fulfillment, error) {
+			return ff, nil
+		},
+	}
+
+	handler := newTestOrderStatusHandler(checkoutCmds, checkoutQry, fulfillmentSrv)
+
+	form := url.Values{}
+	form.Set("payment_status", "cancelled")
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/orders/"+orderID+"/status", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"orderID": orderID})
+	setAdminSession(t, req)
+
+	rec := httptest.NewRecorder()
+	handler.AdminUpdateOrderStatus(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if cancelCalled {
+		t.Errorf("adminCancel should NOT have been called on a shipped order")
+	}
+}
