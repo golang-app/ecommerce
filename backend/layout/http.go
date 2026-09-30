@@ -294,6 +294,11 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/payment-providers", observability.HTTPWrap(m.handler.AdminPaymentProviders, m.logger)).Methods(http.MethodGet)
 	r.HandleFunc("/admin/payment-providers/{id}", observability.HTTPWrap(m.handler.AdminUpdatePaymentProvider, m.logger)).Methods(http.MethodPost)
 
+	// Shipping providers admin: list on /admin/shipping-providers;
+	// update on /admin/shipping-providers/{code}.
+	r.HandleFunc("/admin/shipping-providers", observability.HTTPWrap(m.handler.AdminShippingProviders, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/shipping-providers/{code}", observability.HTTPWrap(m.handler.AdminUpdateShippingProvider, m.logger)).Methods(http.MethodPost)
+
 	// Repricing admin: list + start form on /admin/repricing; the
 	// /{id} detail page polls itself via HTMX while the saga runs.
 	r.HandleFunc("/admin/repricing", observability.HTTPWrap(m.handler.AdminRepricing, m.logger)).Methods("GET")

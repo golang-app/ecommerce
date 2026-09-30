@@ -129,6 +129,10 @@ type checkoutCommands interface {
 	AdminCancel(ctx context.Context, orderID string) error
 	MarkPaid(ctx context.Context, orderID string) error
 	MarkPaymentFailed(ctx context.Context, orderID string, reason string) error
+	ListShippingMethods(ctx context.Context) ([]checkoutDomain.ShippingMethod, error)
+	FindShippingMethod(ctx context.Context, code string) (checkoutDomain.ShippingMethod, error)
+	UpdateShippingMethod(ctx context.Context, code string, enabled bool, label string, cost int64, carrier string) error
+	UpdateTracking(ctx context.Context, orderID, carrier, trackingCode string) error
 }
 
 // fulfillmentService is the narrow seam onto the fulfillment Process
