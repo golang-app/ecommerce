@@ -146,6 +146,8 @@ type fulfillmentService interface {
 	Deliver(ctx context.Context, orderID string) error
 	Refund(ctx context.Context, orderID, reason string) error
 	ByOrder(ctx context.Context, orderID string) (fulfillmentDomain.Fulfillment, error)
+	UpdateTracking(ctx context.Context, orderID, carrier, trackingCode string) error
+	SetStatus(ctx context.Context, orderID string, target fulfillmentDomain.Status) error
 }
 
 // repricingService is the narrow seam onto the repricing (bulk

@@ -124,6 +124,42 @@
           </section>
         {{end}}
 
+        <section class="order__ship">
+          <h2 class="order__ship-heading">Status & Tracking Management</h2>
+          <form class="form" method="post" action="/admin/orders/{{.Order.ID}}/status">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="field">
+              <label for="payment_status">Payment Status</label>
+              <select id="payment_status" name="payment_status">
+                <option value="pending" {{if eq (printf "%s" .Order.Status) "pending"}}selected{{end}}>Pending</option>
+                <option value="paid" {{if eq (printf "%s" .Order.Status) "paid"}}selected{{end}}>Paid</option>
+                <option value="failed" {{if eq (printf "%s" .Order.Status) "failed"}}selected{{end}}>Failed</option>
+                <option value="cancelled" {{if eq (printf "%s" .Order.Status) "cancelled"}}selected{{end}}>Cancelled</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="delivery_status">Delivery Status</label>
+              <select id="delivery_status" name="delivery_status">
+                <option value="scheduled" {{if eq (printf "%s" .Fulfillment.Status) "scheduled"}}selected{{end}}>Scheduled</option>
+                <option value="labeled" {{if eq (printf "%s" .Fulfillment.Status) "labeled"}}selected{{end}}>Labeled</option>
+                <option value="shipped" {{if eq (printf "%s" .Fulfillment.Status) "shipped"}}selected{{end}}>Shipped</option>
+                <option value="delivered" {{if eq (printf "%s" .Fulfillment.Status) "delivered"}}selected{{end}}>Delivered</option>
+                <option value="returned" {{if eq (printf "%s" .Fulfillment.Status) "returned"}}selected{{end}}>Returned</option>
+                <option value="refunded" {{if eq (printf "%s" .Fulfillment.Status) "refunded"}}selected{{end}}>Refunded</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="carrier">Carrier</label>
+              <input id="carrier" name="carrier" type="text" value="{{if .HasFulfillment}}{{.Fulfillment.Carrier}}{{else}}{{.Order.Carrier}}{{end}}" placeholder="Carrier">
+            </div>
+            <div class="field">
+              <label for="tracking_code">Tracking Number</label>
+              <input id="tracking_code" name="tracking_code" type="text" value="{{if .HasFulfillment}}{{.Fulfillment.TrackingCode}}{{else}}{{.Order.TrackingCode}}{{end}}" placeholder="Tracking Number">
+            </div>
+            <button type="submit" class="btn">Update Status & Tracking</button>
+          </form>
+        </section>
+
         <div class="order__actions">
           <a href="/admin/orders" class="btn btn--ghost">back to orders</a>
           {{if .CanShip}}

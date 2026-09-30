@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	fulfillmentApp "github.com/bkielbasa/go-ecommerce/backend/fulfillment/app"
@@ -245,3 +246,112 @@ func (handler httpHandler) AdminRefundOrder(w http.ResponseWriter, r *http.Reque
 	}
 	http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
 }
+
+// AdminUpdateOrderStatus handles status changes and tracking updates for an order.
+func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		https.InternalError(w, "internal-error", err.Error())
+		return
+	}
+	orderID := mux.Vars(r)["orderID"]
+	order, err := handler.checkoutQry.Find(r.Context(), orderID)
+	if errors.Is(err, checkoutDomain.ErrOrderNotFound) {
+		http.NotFound(w, r)
+		return
+	}
+	if err != nil {
+		https.InternalError(w, "internal-error", err.Error())
+		return
+	}
+
+	paymentStatus := strings.TrimSpace(r.FormValue("payment_status"))
+	deliveryStatus := strings.TrimSpace(r.FormValue("delivery_status"))
+	carrier := strings.TrimSpace(r.FormValue("carrier"))
+	trackingCode := strings.TrimSpace(r.FormValue("tracking_code"))
+
+	trackingChanged := carrier != order.Carrier() || trackingCode != order.TrackingCode()
+	if trackingChanged {
+		if err := handler.checkoutSrv.UpdateTracking(r.Context(), orderID, carrier, trackingCode); err != nil {
+			https.InternalError(w, "internal-error", err.Error())
+			return
+		}
+	}
+	if handler.fulfillmentSrv != nil {
+		ff, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
+		if ferr == nil && (trackingChanged || carrier != ff.Carrier() || trackingCode != ff.TrackingCode()) {
+			if err := handler.fulfillmentSrv.UpdateTracking(r.Context(), orderID, carrier, trackingCode); err != nil {
+				https.InternalError(w, "internal-error", err.Error())
+				return
+			}
+		}
+	}
+
+	if paymentStatus != "" && paymentStatus != string(order.Status()) {
+		switch paymentStatus {
+		case "paid":
+			if err := handler.checkoutSrv.MarkPaid(r.Context(), orderID); err != nil {
+				https.InternalError(w, "internal-error", err.Error())
+				return
+			}
+			if handler.fulfillmentSrv != nil {
+				_, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
+				if errors.Is(ferr, fulfillmentApp.ErrNotFound) {
+					if err := handler.fulfillmentSrv.OnOrderPaid(r.Context(), orderID, time.Now()); err != nil {
+						https.InternalError(w, "internal-error", err.Error())
+						return
+					}
+				}
+			}
+		case "failed":
+			if err := handler.checkoutSrv.MarkPaymentFailed(r.Context(), orderID, "admin_override"); err != nil {
+				https.InternalError(w, "internal-error", err.Error())
+				return
+			}
+		case "cancelled":
+			if err := handler.checkoutSrv.AdminCancel(r.Context(), orderID); err != nil {
+				if errors.Is(err, checkoutDomain.ErrOrderNotCancellable) {
+					handler.flash(w, r, "This order can no longer be cancelled.", "error")
+					http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+					return
+				}
+				https.InternalError(w, "internal-error", err.Error())
+				return
+			}
+		}
+	}
+
+	if deliveryStatus != "" && handler.fulfillmentSrv != nil {
+		ff, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
+		isPaid := order.Status() == checkoutDomain.StatusPaid || paymentStatus == "paid"
+		if errors.Is(ferr, fulfillmentApp.ErrNotFound) && isPaid {
+			if err := handler.fulfillmentSrv.OnOrderPaid(r.Context(), orderID, time.Now()); err != nil {
+				https.InternalError(w, "internal-error", err.Error())
+				return
+			}
+			ff, ferr = handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
+		}
+		if ferr == nil || errors.Is(ferr, fulfillmentApp.ErrNotFound) {
+			if ferr != nil || deliveryStatus != string(ff.Status()) {
+				if err := handler.fulfillmentSrv.SetStatus(r.Context(), orderID, fulfillmentDomain.Status(deliveryStatus)); err != nil {
+					if errors.Is(err, fulfillmentDomain.ErrInvalidTransition) {
+						handler.flash(w, r, "This order cannot be transitioned to that delivery status.", "error")
+						http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+						return
+					}
+					https.InternalError(w, "internal-error", err.Error())
+					return
+				}
+			}
+		} else {
+			https.InternalError(w, "internal-error", ferr.Error())
+			return
+		}
+	}
+
+	handler.flash(w, r, "Order status and tracking updated successfully.", "info")
+	http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+}
+

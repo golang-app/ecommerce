@@ -257,6 +257,7 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/orders/{orderID}/ship", observability.HTTPWrap(m.handler.AdminShipOrder, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/orders/{orderID}/deliver", observability.HTTPWrap(m.handler.AdminDeliverOrder, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/orders/{orderID}/refund", observability.HTTPWrap(m.handler.AdminRefundOrder, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/orders/{orderID}/status", observability.HTTPWrap(m.handler.AdminUpdateOrderStatus, m.logger)).Methods(http.MethodPost)
 	r.HandleFunc("/admin/orders/{orderID}", observability.HTTPWrap(m.handler.AdminOrderDetail, m.logger)).Methods("GET")
 
 	r.HandleFunc("/admin/inventory", observability.HTTPWrap(m.handler.AdminInventory, m.logger)).Methods("GET")
