@@ -59,11 +59,11 @@
 
         <fieldset class="fieldset">
           <legend class="fieldset__legend">shipping method</legend>
-          {{range .ShippingMethods}}
+          {{range $i, $m := .ShippingMethods}}
             <label class="radio">
-              <input type="radio" name="ship_method" value="{{.Code}}" {{if eq .Code "flat"}}checked{{end}}>
-              <span class="radio__label">{{.Label}}</span>
-              <span class="radio__cost muted">{{ money .Cost }}</span>
+              <input type="radio" name="ship_method" value="{{$m.Code}}" {{if eq $i 0}}checked{{end}}>
+              <span class="radio__label">{{$m.Label}}</span>
+              <span class="radio__cost muted">{{ money $m.Cost }}</span>
             </label>
           {{end}}
         </fieldset>
