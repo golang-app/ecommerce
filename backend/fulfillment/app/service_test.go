@@ -294,3 +294,187 @@ func TestByOrder_NotFound(t *testing.T) {
 		t.Errorf("got %v, want ErrNotFound", err)
 	}
 }
+
+func TestUpdateTracking(t *testing.T) {
+	srv, storage, _ := newServiceFixture(t)
+	ctx := context.Background()
+
+	if err := srv.OnOrderPaid(ctx, "ord-1", time.Now()); err != nil {
+		t.Fatalf("OnOrderPaid: %v", err)
+	}
+
+	if err := srv.UpdateTracking(ctx, "ord-1", "DHL", "DHL-12345"); err != nil {
+		t.Fatalf("UpdateTracking: %v", err)
+	}
+
+	f, err := storage.FindByOrder(ctx, "ord-1")
+	if err != nil {
+		t.Fatalf("FindByOrder: %v", err)
+	}
+	if f.Carrier() != "DHL" {
+		t.Errorf("carrier = %q, want DHL", f.Carrier())
+	}
+	if f.TrackingCode() != "DHL-12345" {
+		t.Errorf("trackingCode = %q, want DHL-12345", f.TrackingCode())
+	}
+	if f.Version() != 2 {
+		t.Errorf("version = %d, want 2", f.Version())
+	}
+}
+
+func TestSetStatus_AllowsTransitions(t *testing.T) {
+	cases := []struct {
+		name       string
+		target     domain.Status
+		verifyFunc func(t *testing.T, f domain.Fulfillment, pub *recordingPublisher)
+	}{
+		{
+			name:   "to scheduled",
+			target: domain.StatusScheduled,
+			verifyFunc: func(t *testing.T, f domain.Fulfillment, pub *recordingPublisher) {
+				if f.Status() != domain.StatusScheduled {
+					t.Errorf("status = %q, want scheduled", f.Status())
+				}
+			},
+		},
+		{
+			name:   "to labeled",
+			target: domain.StatusLabeled,
+			verifyFunc: func(t *testing.T, f domain.Fulfillment, pub *recordingPublisher) {
+				if f.Status() != domain.StatusLabeled {
+					t.Errorf("status = %q, want labeled", f.Status())
+				}
+			},
+		},
+		{
+			name:   "to shipped",
+			target: domain.StatusShipped,
+			verifyFunc: func(t *testing.T, f domain.Fulfillment, pub *recordingPublisher) {
+				if f.Status() != domain.StatusShipped {
+					t.Errorf("status = %q, want shipped", f.Status())
+				}
+				if f.ShippedAt().IsZero() {
+					t.Errorf("expected shippedAt to be set")
+				}
+				if len(pub.events) != 1 {
+					t.Fatalf("got %d events, want 1", len(pub.events))
+				}
+				shipped, ok := pub.events[0].(integration.OrderShipped)
+				if !ok {
+					t.Fatalf("event = %T, want OrderShipped", pub.events[0])
+				}
+				if shipped.OrderID != "ord-1" {
+					t.Errorf("orderID = %q, want ord-1", shipped.OrderID)
+				}
+			},
+		},
+		{
+			name:   "to delivered",
+			target: domain.StatusDelivered,
+			verifyFunc: func(t *testing.T, f domain.Fulfillment, pub *recordingPublisher) {
+				if f.Status() != domain.StatusDelivered {
+					t.Errorf("status = %q, want delivered", f.Status())
+				}
+				if f.DeliveredAt().IsZero() {
+					t.Errorf("expected deliveredAt to be set")
+				}
+				if len(pub.events) != 1 {
+					t.Fatalf("got %d events, want 1", len(pub.events))
+				}
+				delivered, ok := pub.events[0].(integration.OrderDelivered)
+				if !ok {
+					t.Fatalf("event = %T, want OrderDelivered", pub.events[0])
+				}
+				if delivered.OrderID != "ord-1" {
+					t.Errorf("orderID = %q, want ord-1", delivered.OrderID)
+				}
+			},
+		},
+		{
+			name:   "to returned",
+			target: domain.StatusReturned,
+			verifyFunc: func(t *testing.T, f domain.Fulfillment, pub *recordingPublisher) {
+				if f.Status() != domain.StatusReturned {
+					t.Errorf("status = %q, want returned", f.Status())
+				}
+				if len(pub.events) != 0 {
+					t.Errorf("unexpected events published: %v", pub.events)
+				}
+			},
+		},
+		{
+			name:   "to refunded",
+			target: domain.StatusRefunded,
+			verifyFunc: func(t *testing.T, f domain.Fulfillment, pub *recordingPublisher) {
+				if f.Status() != domain.StatusRefunded {
+					t.Errorf("status = %q, want refunded", f.Status())
+				}
+				if f.RefundReason() != "admin_override" {
+					t.Errorf("refundReason = %q, want admin_override", f.RefundReason())
+				}
+				if len(pub.events) != 1 {
+					t.Fatalf("got %d events, want 1", len(pub.events))
+				}
+				refunded, ok := pub.events[0].(integration.OrderRefunded)
+				if !ok {
+					t.Fatalf("event = %T, want OrderRefunded", pub.events[0])
+				}
+				if refunded.OrderID != "ord-1" || refunded.Reason != "admin_override" {
+					t.Errorf("refunded = %+v, want ord-1 / admin_override", refunded)
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, storage, pub := newServiceFixture(t)
+			ctx := context.Background()
+			if err := srv.OnOrderPaid(ctx, "ord-1", time.Now()); err != nil {
+				t.Fatalf("OnOrderPaid: %v", err)
+			}
+			if err := srv.SetStatus(ctx, "ord-1", tc.target); err != nil {
+				t.Fatalf("SetStatus: %v", err)
+			}
+			f, err := storage.FindByOrder(ctx, "ord-1")
+			if err != nil {
+				t.Fatalf("FindByOrder: %v", err)
+			}
+			tc.verifyFunc(t, f, pub)
+		})
+	}
+}
+
+func TestSetStatus_Refunded_ReleasesStock(t *testing.T) {
+	srv, _, _ := newServiceFixture(t)
+	stock := &recordingStock{}
+	srv.WithStockReleaser(stock).WithOrderLines(staticLines{q: map[string]int{"item-1": 3}})
+	ctx := context.Background()
+
+	if err := srv.OnOrderPaid(ctx, "ord-1", time.Now()); err != nil {
+		t.Fatalf("OnOrderPaid: %v", err)
+	}
+	if err := srv.SetStatus(ctx, "ord-1", domain.StatusRefunded); err != nil {
+		t.Fatalf("SetStatus: %v", err)
+	}
+	if len(stock.released) != 1 {
+		t.Fatalf("released %d batches, want 1", len(stock.released))
+	}
+	if stock.released[0]["item-1"] != 3 {
+		t.Errorf("released[item-1] = %d, want 3", stock.released[0]["item-1"])
+	}
+}
+
+func TestSetStatus_InvalidStatus(t *testing.T) {
+	srv, _, _ := newServiceFixture(t)
+	ctx := context.Background()
+
+	if err := srv.OnOrderPaid(ctx, "ord-1", time.Now()); err != nil {
+		t.Fatalf("OnOrderPaid: %v", err)
+	}
+	err := srv.SetStatus(ctx, "ord-1", domain.Status("unknown_status"))
+	if !errors.Is(err, domain.ErrInvalidTransition) {
+		t.Errorf("got %v, want ErrInvalidTransition", err)
+	}
+}
+

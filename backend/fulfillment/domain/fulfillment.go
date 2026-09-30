@@ -354,3 +354,57 @@ func (f *Fulfillment) Refund(reason string, at time.Time) error {
 	})
 	return nil
 }
+
+// SetTracking overrides the carrier and tracking code on the fulfillment record
+// without changing its operational status. Increments the aggregate version.
+func (f *Fulfillment) SetTracking(carrier, trackingCode string) {
+	f.carrier = carrier
+	f.trackingCode = trackingCode
+	f.version++
+}
+
+// AdminOverrideStatus forcefully transitions the fulfillment to target status,
+// appending appropriate lifecycle events if applicable. Returns ErrInvalidTransition
+// if target is not a recognized operational status.
+func (f *Fulfillment) AdminOverrideStatus(target Status, at time.Time) error {
+	switch target {
+	case StatusScheduled, StatusLabeled, StatusShipped, StatusDelivered, StatusReturned, StatusRefunded:
+		// allowed
+	default:
+		return ErrInvalidTransition
+	}
+
+	f.status = target
+
+	if target == StatusShipped && f.shippedAt.IsZero() {
+		f.shippedAt = at
+		f.pendingEvents = append(f.pendingEvents, FulfillmentShipped{
+			ID:      f.id,
+			OrderID: f.orderID,
+			At:      at,
+		})
+	}
+
+	if target == StatusDelivered && f.deliveredAt.IsZero() {
+		f.deliveredAt = at
+		f.pendingEvents = append(f.pendingEvents, FulfillmentDelivered{
+			ID:      f.id,
+			OrderID: f.orderID,
+			At:      at,
+		})
+	}
+
+	if target == StatusRefunded {
+		f.refundReason = "admin_override"
+		f.pendingEvents = append(f.pendingEvents, FulfillmentRefunded{
+			ID:      f.id,
+			OrderID: f.orderID,
+			Reason:  "admin_override",
+			At:      at,
+		})
+	}
+
+	f.version++
+	return nil
+}
+
