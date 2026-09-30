@@ -21,6 +21,7 @@ var availablePaymentMethods = []PaymentMethod{
 	{code: "card", label: "Credit / debit card", requiresCard: true},
 	{code: "paypal", label: "PayPal", requiresCard: false},
 	{code: "cod", label: "Cash on delivery", requiresCard: false},
+	{code: "fake", label: "Fake Payment Simulator", requiresCard: false},
 }
 
 // PaymentMethods returns the offered methods in display order.
