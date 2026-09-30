@@ -89,6 +89,7 @@ type Product struct {
 	// types this product has and in what order. Empty when the product has no
 	// set (it then falls back to all attribute types).
 	attributeSetID string
+	images         []ProductImage
 }
 
 var emptyProduct = Product{}
@@ -165,6 +166,25 @@ func (p Product) WithClassification(categories []Category, attributes []Attribut
 
 func (p Product) Categories() []Category       { return p.categories }
 func (p Product) Attributes() []AttributeValue { return p.attributes }
+
+// WithImages returns a copy of the product with its gallery images attached.
+func (p Product) WithImages(images []ProductImage) Product {
+	p.images = images
+	return p
+}
+
+func (p Product) Images() []ProductImage {
+	return p.images
+}
+
+func (p Product) PrimaryImage() string {
+	for _, img := range p.images {
+		if img.IsPrimary() {
+			return img.url
+		}
+	}
+	return p.thumbnail
+}
 
 // AttributeSetID returns the id of the product's attribute set (empty when it
 // has none).

@@ -55,10 +55,8 @@ type seedProduct struct {
 }
 
 // seedProducts is a hand-picked catalogue of artisan home goods. Prices are
-// stored in minor units (cents). Thumbnail URLs use loremflickr with a fixed
-// `lock` per product so each row consistently returns the same real Flickr
-// photo matching the keywords. If a specific photo doesn't look right, bump
-// the lock number for that product.
+// stored in minor units (cents). Thumbnail URLs point to local realistic
+// artisan photography served from /uploads/seeds/.
 var seedProducts = []seedProduct{
 	{
 		id:              "brass-paperclips",
@@ -66,7 +64,7 @@ var seedProducts = []seedProduct{
 		description:     "A set of twelve solid brass clips in a small kraft box. Patina deepens over time.",
 		priceMinorUnits: 900,
 		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/paperclip,brass?lock=33",
+		thumbnail:       "/uploads/seeds/brass-paperclips-1.jpg",
 	},
 	{
 		id:              "walnut-serving-spoon",
@@ -74,7 +72,7 @@ var seedProducts = []seedProduct{
 		description:     "Hand-carved from a single piece of black walnut. Finished with food-safe oil. 25cm long.",
 		priceMinorUnits: 1800,
 		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/wooden,spoon?lock=44",
+		thumbnail:       "/uploads/seeds/walnut-spoon-1.jpg",
 	},
 	{
 		id:              "wool-throw-charcoal",
@@ -82,7 +80,7 @@ var seedProducts = []seedProduct{
 		description:     "100% New Zealand wool blanket in charcoal. Edges left raw with a short fringe. 130 x 180cm.",
 		priceMinorUnits: 14500,
 		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/wool,blanket?lock=55",
+		thumbnail:       "/uploads/seeds/wool-throw-1.jpg",
 	},
 	{
 		id:              "glass-carafe-1l",
@@ -90,7 +88,7 @@ var seedProducts = []seedProduct{
 		description:     "Mouth-blown borosilicate carafe with a flat cork stopper. Holds one litre. Dishwasher-safe.",
 		priceMinorUnits: 4200,
 		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/carafe,water?lock=66",
+		thumbnail:       "/uploads/seeds/glass-carafe-1.jpg",
 	},
 	{
 		id:              "leather-notebook-a5",
@@ -98,7 +96,7 @@ var seedProducts = []seedProduct{
 		description:     "Vegetable-tanned cover wrapping 192 pages of unlined cream paper. Bound flat so it stays open on a desk.",
 		priceMinorUnits: 3600,
 		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/leather,notebook?lock=77",
+		thumbnail:       "/uploads/seeds/leather-notebook-1.jpg",
 	},
 	{
 		id:              "cast-iron-skillet-10in",
@@ -106,7 +104,7 @@ var seedProducts = []seedProduct{
 		description:     "A 10-inch pre-seasoned cast iron pan with a helper handle. American foundry. One of those buy-it-once tools.",
 		priceMinorUnits: 8900,
 		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/castiron,skillet?lock=88",
+		thumbnail:       "/uploads/seeds/cast-iron-skillet-1.jpg",
 	},
 	{
 		id:              "stoneware-vase-grey",
@@ -114,7 +112,7 @@ var seedProducts = []seedProduct{
 		description:     "Matte-glaze stoneware vase in dove grey. Built for a single stem or a short bunch. 18cm tall.",
 		priceMinorUnits: 3200,
 		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/vase,pottery?lock=99",
+		thumbnail:       "/uploads/seeds/stoneware-vase-1.jpg",
 	},
 	{
 		id:              "cotton-tea-towels-set",
@@ -122,7 +120,7 @@ var seedProducts = []seedProduct{
 		description:     "A set of three loose-weave cotton towels in natural, sand, and stone. Absorbent from the first wash.",
 		priceMinorUnits: 2200,
 		currency:        "USD",
-		thumbnail:       "https://loremflickr.com/800/800/teatowel,kitchen?lock=110",
+		thumbnail:       "/uploads/seeds/tea-towels-1.jpg",
 	},
 }
 
@@ -139,8 +137,8 @@ type variantSeed struct {
 // Per-colour apron images, shared across that colour's size variants so
 // changing size keeps the image and changing colour swaps it.
 const (
-	natApron  = "https://loremflickr.com/800/800/apron,linen?lock=22"
-	navyApron = "https://loremflickr.com/800/800/apron,navy?lock=222"
+	natApron  = "/uploads/seeds/linen-apron-natural.jpg"
+	navyApron = "/uploads/seeds/linen-apron-navy.jpg"
 )
 
 // variantSeeds are products with selectable options where each variant has
@@ -152,13 +150,13 @@ var variantSeeds = []variantSeed{
 		name:        "Ceramic Mug",
 		description: "A small-batch mug thrown by a single potter in Tokyo. Speckled stoneware, holds 350ml.",
 		currency:    "USD",
-		thumbnail:   "https://loremflickr.com/800/800/ceramic,mug?lock=11",
+		thumbnail:   "/uploads/seeds/ceramic-mug-cream.jpg",
 		optionTypes: []app.OptionTypeInput{
 			{Name: "Color", Values: []string{"Cream", "Charcoal"}},
 		},
 		variants: []app.VariantInput{
-			{ID: "ceramic-mug-cream", SKU: "MUG-CRM", Options: map[string]string{"Color": "Cream"}, Price: 2400, Image: "https://loremflickr.com/800/800/ceramic,mug,cream?lock=11", Stock: 40},
-			{ID: "ceramic-mug-charcoal", SKU: "MUG-CHR", Options: map[string]string{"Color": "Charcoal"}, Price: 2600, Image: "https://loremflickr.com/800/800/ceramic,mug,black?lock=211", Stock: 0},
+			{ID: "ceramic-mug-cream", SKU: "MUG-CRM", Options: map[string]string{"Color": "Cream"}, Price: 2400, Image: "/uploads/seeds/ceramic-mug-cream.jpg", Stock: 40},
+			{ID: "ceramic-mug-charcoal", SKU: "MUG-CHR", Options: map[string]string{"Color": "Charcoal"}, Price: 2600, Image: "/uploads/seeds/ceramic-mug-charcoal.jpg", Stock: 0},
 		},
 	},
 	{
@@ -166,7 +164,7 @@ var variantSeeds = []variantSeed{
 		name:        "Linen Apron",
 		description: "Heavyweight Belgian linen apron. Long cotton ties, double-stitched seams. Washes softer with every use.",
 		currency:    "USD",
-		thumbnail:   "https://loremflickr.com/800/800/apron,linen?lock=22",
+		thumbnail:   "/uploads/seeds/linen-apron-natural.jpg",
 		optionTypes: []app.OptionTypeInput{
 			{Name: "Color", Values: []string{"Natural", "Navy"}},
 			{Name: "Size", Values: []string{"S", "M", "L"}},
@@ -299,6 +297,58 @@ var productAttributeSeeds = []productAttributeSeed{
 	{productID: "linen-apron", attributeTypeID: "material", text: "linen"},
 }
 
+type productImageSeed struct {
+	id        string
+	productID string
+	url       string
+	position  string
+}
+
+var productImageSeeds = []productImageSeed{
+	// Brass Paperclips
+	{id: "img-brass-paperclips-1", productID: "brass-paperclips", url: "/uploads/seeds/brass-paperclips-1.jpg", position: "PRIMARY"},
+	{id: "img-brass-paperclips-2", productID: "brass-paperclips", url: "/uploads/seeds/brass-paperclips-2.jpg", position: "GALLERY"},
+
+	// Walnut Serving Spoon
+	{id: "img-walnut-spoon-1", productID: "walnut-serving-spoon", url: "/uploads/seeds/walnut-spoon-1.jpg", position: "PRIMARY"},
+	{id: "img-walnut-spoon-2", productID: "walnut-serving-spoon", url: "/uploads/seeds/walnut-spoon-2.jpg", position: "GALLERY"},
+	{id: "img-walnut-spoon-3", productID: "walnut-serving-spoon", url: "/uploads/seeds/walnut-spoon-3.jpg", position: "GALLERY"},
+
+	// Wool Throw
+	{id: "img-wool-throw-1", productID: "wool-throw-charcoal", url: "/uploads/seeds/wool-throw-1.jpg", position: "PRIMARY"},
+	{id: "img-wool-throw-2", productID: "wool-throw-charcoal", url: "/uploads/seeds/wool-throw-2.jpg", position: "GALLERY"},
+
+	// Glass Carafe
+	{id: "img-glass-carafe-1", productID: "glass-carafe-1l", url: "/uploads/seeds/glass-carafe-1.jpg", position: "PRIMARY"},
+	{id: "img-glass-carafe-2", productID: "glass-carafe-1l", url: "/uploads/seeds/glass-carafe-2.jpg", position: "GALLERY"},
+
+	// Leather Notebook
+	{id: "img-leather-notebook-1", productID: "leather-notebook-a5", url: "/uploads/seeds/leather-notebook-1.jpg", position: "PRIMARY"},
+	{id: "img-leather-notebook-2", productID: "leather-notebook-a5", url: "/uploads/seeds/leather-notebook-2.jpg", position: "GALLERY"},
+
+	// Cast Iron Skillet
+	{id: "img-cast-iron-skillet-1", productID: "cast-iron-skillet-10in", url: "/uploads/seeds/cast-iron-skillet-1.jpg", position: "PRIMARY"},
+	{id: "img-cast-iron-skillet-2", productID: "cast-iron-skillet-10in", url: "/uploads/seeds/cast-iron-skillet-2.jpg", position: "GALLERY"},
+
+	// Stoneware Vase
+	{id: "img-stoneware-vase-1", productID: "stoneware-vase-grey", url: "/uploads/seeds/stoneware-vase-1.jpg", position: "PRIMARY"},
+	{id: "img-stoneware-vase-2", productID: "stoneware-vase-grey", url: "/uploads/seeds/stoneware-vase-2.jpg", position: "GALLERY"},
+
+	// Cotton Tea Towels
+	{id: "img-tea-towels-1", productID: "cotton-tea-towels-set", url: "/uploads/seeds/tea-towels-1.jpg", position: "PRIMARY"},
+	{id: "img-tea-towels-2", productID: "cotton-tea-towels-set", url: "/uploads/seeds/tea-towels-2.jpg", position: "GALLERY"},
+
+	// Ceramic Mug
+	{id: "img-ceramic-mug-cream", productID: "ceramic-mug", url: "/uploads/seeds/ceramic-mug-cream.jpg", position: "PRIMARY"},
+	{id: "img-ceramic-mug-charcoal", productID: "ceramic-mug", url: "/uploads/seeds/ceramic-mug-charcoal.jpg", position: "GALLERY"},
+	{id: "img-ceramic-mug-detail", productID: "ceramic-mug", url: "/uploads/seeds/ceramic-mug-detail.jpg", position: "GALLERY"},
+
+	// Linen Apron
+	{id: "img-linen-apron-natural", productID: "linen-apron", url: "/uploads/seeds/linen-apron-natural.jpg", position: "PRIMARY"},
+	{id: "img-linen-apron-navy", productID: "linen-apron", url: "/uploads/seeds/linen-apron-navy.jpg", position: "GALLERY"},
+	{id: "img-linen-apron-detail", productID: "linen-apron", url: "/uploads/seeds/linen-apron-detail.jpg", position: "GALLERY"},
+}
+
 // storeSeed describes a predefined storefront facade. The two seeded
 // stores model a US storefront on the canonical localhost host and a EU
 // storefront on a subdomain alias — operators are expected to point an
@@ -342,6 +392,13 @@ const (
 		(product_id, category_id)
 		VALUES ($1, $2)
 		ON CONFLICT (product_id, category_id) DO NOTHING`
+
+	insertProductImage = `INSERT INTO productcatalog_product_image
+		(id, product_id, url, position)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (id) DO UPDATE SET
+			url = EXCLUDED.url,
+			position = EXCLUDED.position`
 
 	insertProductAttributeNumeric = `INSERT INTO productcatalog_product_attribute
 		(product_id, attribute_type_id, num_value, text_value)
@@ -451,6 +508,13 @@ func seedReferenceData(ctx context.Context, db *sql.DB) error {
 		}
 	}
 
+	for _, img := range productImageSeeds {
+		if _, err := db.ExecContext(ctx, insertProductImage,
+			img.id, img.productID, img.url, img.position); err != nil {
+			return fmt.Errorf("seed product-image %s: %w", img.id, err)
+		}
+	}
+
 	return nil
 }
 
@@ -526,8 +590,8 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				return err
 			}
 
-			fmt.Printf("seeded %d simple + %d variant products, %d attribute types, %d categories, %d category assignments, %d attribute values, %d stores, admin user %s (password reset required on first login)\n",
-				len(seedProducts), len(variantSeeds), len(attributeTypeSeeds), len(categorySeeds),
+			fmt.Printf("seeded %d simple + %d variant products, %d product images, %d attribute types, %d categories, %d category assignments, %d attribute values, %d stores, admin user %s (password reset required on first login)\n",
+				len(seedProducts), len(variantSeeds), len(productImageSeeds), len(attributeTypeSeeds), len(categorySeeds),
 				countCategoryAssignments(), len(productAttributeSeeds), len(storeSeeds), seedAdminEmail)
 			return nil
 		},

@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -58,6 +60,10 @@ type ProductStorage interface {
 	ListProducts(ctx context.Context, q ProductQuery) ([]domain.Product, error)
 	Categories(ctx context.Context) ([]domain.Category, error)
 	Facets(ctx context.Context, categorySlug string) ([]Facet, error)
+	AddProductImages(ctx context.Context, images []domain.ProductImage) error
+	DeleteProductImage(ctx context.Context, productID, imageID string) error
+	SetPrimaryProductImage(ctx context.Context, productID, imageID string) error
+	ProductImages(ctx context.Context, productID string) ([]domain.ProductImage, error)
 
 	CreateCategory(ctx context.Context, c domain.Category) error
 	UpdateCategory(ctx context.Context, c domain.Category) error
@@ -208,6 +214,80 @@ func (ps ProductService) Release(ctx context.Context, quantities map[string]int)
 		return err
 	}
 	return nil
+}
+
+func newRandomImageID() string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return fmt.Sprintf("img-%d", time.Now().UnixNano())
+	}
+	return "img-" + hex.EncodeToString(buf)
+}
+
+func (ps ProductService) AddProductImages(ctx context.Context, productID string, urls []string) ([]domain.ProductImage, error) {
+	if len(urls) == 0 {
+		return nil, nil
+	}
+	prod, err := ps.storage.Find(ctx, productID)
+	if err != nil {
+		return nil, fmt.Errorf("find product %s: %w", productID, err)
+	}
+
+	existingImages, err := ps.storage.ProductImages(ctx, productID)
+	if err != nil {
+		return nil, fmt.Errorf("load existing product images: %w", err)
+	}
+
+	hasPrimary := false
+	for _, img := range existingImages {
+		if img.IsPrimary() {
+			hasPrimary = true
+			break
+		}
+	}
+	if !hasPrimary && prod.Thumbnail() != "" {
+		hasPrimary = true
+	}
+
+	images := make([]domain.ProductImage, 0, len(urls))
+	for i, u := range urls {
+		pos := domain.ImagePositionGallery
+		if !hasPrimary && i == 0 {
+			pos = domain.ImagePositionPrimary
+		}
+		imgID := newRandomImageID()
+		img, err := domain.NewProductImage(imgID, productID, u, pos)
+		if err != nil {
+			return nil, fmt.Errorf("create product image: %w", err)
+		}
+		images = append(images, img)
+	}
+
+	if err := ps.storage.AddProductImages(ctx, images); err != nil {
+		return nil, fmt.Errorf("store product images: %w", err)
+	}
+	ps.reindexProduct(ctx, productID)
+	return images, nil
+}
+
+func (ps ProductService) SetPrimaryProductImage(ctx context.Context, productID, imageID string) error {
+	if err := ps.storage.SetPrimaryProductImage(ctx, productID, imageID); err != nil {
+		return err
+	}
+	ps.reindexProduct(ctx, productID)
+	return nil
+}
+
+func (ps ProductService) DeleteProductImage(ctx context.Context, productID, imageID string) error {
+	if err := ps.storage.DeleteProductImage(ctx, productID, imageID); err != nil {
+		return err
+	}
+	ps.reindexProduct(ctx, productID)
+	return nil
+}
+
+func (ps ProductService) ProductImages(ctx context.Context, productID string) ([]domain.ProductImage, error) {
+	return ps.storage.ProductImages(ctx, productID)
 }
 
 // List returns the products matching the given listing-page query.

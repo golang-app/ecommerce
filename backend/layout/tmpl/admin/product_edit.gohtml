@@ -6,6 +6,7 @@
     <button type="button" role="tab" aria-controls="tab-details" data-tab="details" class="admin-tabs__btn is-active">Details</button>
     <button type="button" role="tab" aria-controls="tab-options-variants" data-tab="options-variants" class="admin-tabs__btn">Options &amp; variants</button>
     <button type="button" role="tab" aria-controls="tab-attributes" data-tab="attributes" class="admin-tabs__btn">Attributes</button>
+    <button type="button" role="tab" aria-controls="tab-images" data-tab="images" class="admin-tabs__btn">Images</button>
   </div>
 
   <div class="admin-tab" id="tab-details" data-tab="details" role="tabpanel">
@@ -195,6 +196,59 @@
         </form>
       {{else}}
         <p class="muted">no attribute types defined.</p>
+      {{end}}
+    </section>
+  </div>
+
+  <div class="admin-tab" id="tab-images" data-tab="images" role="tabpanel" hidden>
+    <section class="admin-section">
+      <h3 class="admin-section__title">upload images</h3>
+      <form class="form" method="post" action="/admin/products/{{.Product.ID}}/images" data-tab="images" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="field">
+          <label for="p-gallery-images">select image files (multiple allowed)</label>
+          <input id="p-gallery-images" type="file" name="images" multiple accept="image/jpeg,image/png,image/webp,image/gif" required>
+          <p class="form__aside muted">JPEG, PNG, WebP or GIF up to 5MB each. You can select multiple files at once.</p>
+        </div>
+        <button type="submit" class="btn">upload images</button>
+      </form>
+    </section>
+
+    <section class="admin-section">
+      <h3 class="admin-section__title">gallery images ({{len .Product.Images}})</h3>
+      {{if .Product.Images}}
+        <div class="admin-gallery-grid">
+          {{range $img := .Product.Images}}
+            <div class="admin-gallery-card {{if $img.IsPrimary}}admin-gallery-card--primary{{end}}">
+              <div class="admin-gallery-card__thumb">
+                <img src="{{$img.URL}}" alt="Product image">
+              </div>
+              <div class="admin-gallery-card__body">
+                <div class="admin-gallery-card__meta">
+                  {{if $img.IsPrimary}}
+                    <span class="badge badge--success">PRIMARY</span>
+                  {{else}}
+                    <span class="badge badge--muted">GALLERY</span>
+                  {{end}}
+                </div>
+                <div class="admin-gallery-card__actions">
+                  {{if not $img.IsPrimary}}
+                    <form method="post" action="/admin/products/{{$.Product.ID}}/images/{{$img.ID}}/primary" data-tab="images">
+                      <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                      <button type="submit" class="btn btn--small btn--ghost">Set Primary</button>
+                    </form>
+                  {{end}}
+                  <form method="post" action="/admin/products/{{$.Product.ID}}/images/{{$img.ID}}/delete" data-tab="images" onsubmit="return confirm('Are you sure you want to delete this image?');">
+                    <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                    <button type="submit" class="btn btn--small btn--danger">Delete</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          {{end}}
+        </div>
+      {{else}}
+        <p class="muted">no gallery images uploaded yet.</p>
       {{end}}
     </section>
   </div>

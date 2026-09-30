@@ -2,6 +2,7 @@ package layout
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"mime/multipart"
 	"net/http"
@@ -769,3 +770,82 @@ func (handler httpHandler) AdminDeleteProduct(w http.ResponseWriter, r *http.Req
 	}
 	http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
 }
+
+// AdminUploadProductImages handles multi-file upload for product gallery.
+func (handler httpHandler) AdminUploadProductImages(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		handler.flash(w, r, "Failed to parse form: "+err.Error(), "error")
+		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+		return
+	}
+
+	if r.MultipartForm == nil || len(r.MultipartForm.File["images"]) == 0 {
+		handler.flash(w, r, "Please select at least one image file to upload", "error")
+		http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+		return
+	}
+
+	files := r.MultipartForm.File["images"]
+	var urls []string
+	for _, fh := range files {
+		f, err := fh.Open()
+		if err != nil {
+			handler.flash(w, r, "Failed to open uploaded file: "+err.Error(), "error")
+			http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+			return
+		}
+		url, err := handler.imageStore.Save(r.Context(), fh.Filename, fh.Header.Get("Content-Type"), f)
+		_ = f.Close()
+		if err != nil {
+			handler.flash(w, r, "Failed to save image "+fh.Filename+": "+err.Error(), "error")
+			http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+			return
+		}
+		urls = append(urls, url)
+	}
+
+	if _, err := handler.catalogSrv.AddProductImages(r.Context(), id, urls); err != nil {
+		handler.flash(w, r, "Failed to attach images: "+err.Error(), "error")
+	} else {
+		handler.flash(w, r, fmt.Sprintf("%d image(s) uploaded successfully", len(urls)), "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
+// AdminSetPrimaryProductImage designates a gallery image as the primary product image.
+func (handler httpHandler) AdminSetPrimaryProductImage(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	imageID := mux.Vars(r)["imageId"]
+
+	if err := handler.catalogSrv.SetPrimaryProductImage(r.Context(), id, imageID); err != nil {
+		handler.flash(w, r, "Failed to set primary image: "+err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Primary image updated", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
+// AdminDeleteProductImage removes a gallery image from the product.
+func (handler httpHandler) AdminDeleteProductImage(w http.ResponseWriter, r *http.Request) {
+	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	id := mux.Vars(r)["id"]
+	imageID := mux.Vars(r)["imageId"]
+
+	if err := handler.catalogSrv.DeleteProductImage(r.Context(), id, imageID); err != nil {
+		handler.flash(w, r, "Failed to delete image: "+err.Error(), "error")
+	} else {
+		handler.flash(w, r, "Image deleted", "info")
+	}
+	http.Redirect(w, r, "/admin/products/"+id+"/edit", http.StatusSeeOther)
+}
+
