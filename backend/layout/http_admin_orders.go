@@ -303,6 +303,20 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 						https.InternalError(w, "internal-error", err.Error())
 						return
 					}
+					effCarrier := carrier
+					if effCarrier == "" {
+						effCarrier = order.Carrier()
+					}
+					effTracking := trackingCode
+					if effTracking == "" {
+						effTracking = order.TrackingCode()
+					}
+					if effCarrier != "" || effTracking != "" {
+						if err := handler.fulfillmentSrv.UpdateTracking(r.Context(), orderID, effCarrier, effTracking); err != nil {
+							https.InternalError(w, "internal-error", err.Error())
+							return
+						}
+					}
 				}
 			}
 		case "failed":
@@ -330,6 +344,20 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 			if err := handler.fulfillmentSrv.OnOrderPaid(r.Context(), orderID, time.Now()); err != nil {
 				https.InternalError(w, "internal-error", err.Error())
 				return
+			}
+			effCarrier := carrier
+			if effCarrier == "" {
+				effCarrier = order.Carrier()
+			}
+			effTracking := trackingCode
+			if effTracking == "" {
+				effTracking = order.TrackingCode()
+			}
+			if effCarrier != "" || effTracking != "" {
+				if err := handler.fulfillmentSrv.UpdateTracking(r.Context(), orderID, effCarrier, effTracking); err != nil {
+					https.InternalError(w, "internal-error", err.Error())
+					return
+				}
 			}
 			ff, ferr = handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
 		}
