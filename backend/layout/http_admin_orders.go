@@ -333,8 +333,8 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 			}
 			ff, ferr = handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
 		}
-		if ferr == nil || errors.Is(ferr, fulfillmentApp.ErrNotFound) {
-			if ferr != nil || deliveryStatus != string(ff.Status()) {
+		if ferr == nil {
+			if deliveryStatus != string(ff.Status()) {
 				if err := handler.fulfillmentSrv.SetStatus(r.Context(), orderID, fulfillmentDomain.Status(deliveryStatus)); err != nil {
 					if errors.Is(err, fulfillmentDomain.ErrInvalidTransition) {
 						handler.flash(w, r, "This order cannot be transitioned to that delivery status.", "error")
@@ -345,7 +345,7 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 					return
 				}
 			}
-		} else {
+		} else if !errors.Is(ferr, fulfillmentApp.ErrNotFound) {
 			https.InternalError(w, "internal-error", ferr.Error())
 			return
 		}

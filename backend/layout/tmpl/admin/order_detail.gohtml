@@ -140,6 +140,9 @@
             <div class="field">
               <label for="delivery_status">Delivery Status</label>
               <select id="delivery_status" name="delivery_status">
+                {{if not .HasFulfillment}}
+                  <option value="" selected>None (not fulfilled yet)</option>
+                {{end}}
                 <option value="scheduled" {{if eq (printf "%s" .Fulfillment.Status) "scheduled"}}selected{{end}}>Scheduled</option>
                 <option value="labeled" {{if eq (printf "%s" .Fulfillment.Status) "labeled"}}selected{{end}}>Labeled</option>
                 <option value="shipped" {{if eq (printf "%s" .Fulfillment.Status) "shipped"}}selected{{end}}>Shipped</option>

@@ -187,6 +187,9 @@ func (m *mockStatusFulfillmentSrv) SetStatus(ctx context.Context, orderID string
 	if m.setStatusFn != nil {
 		return m.setStatusFn(ctx, orderID, target)
 	}
+	if _, err := m.ByOrder(ctx, orderID); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -682,5 +685,59 @@ func TestAdminUpdateOrderStatus_RouteRegistered(t *testing.T) {
 	}
 	if !updateTrackingCalled {
 		t.Errorf("expected UpdateTracking to be called through router")
+	}
+}
+
+func TestAdminUpdateOrderStatus_PendingOrder_WithDeliveryStatusFormValue_DoesNot500(t *testing.T) {
+	setupTestEnvironment(t)
+
+	orderID := "ord-pending-123"
+	orderView := makeTestOrderView(orderID, checkoutDomain.StatusPending, "", "")
+
+	var updateTrackingCalled bool
+	checkoutCmds := &mockStatusCheckoutCmds{
+		updateTrackingFn: func(ctx context.Context, oID, carrier, trackingCode string) error {
+			updateTrackingCalled = true
+			if carrier != "DHL" || trackingCode != "TRACK-PENDING" {
+				t.Errorf("unexpected carrier/tracking: %s / %s", carrier, trackingCode)
+			}
+			return nil
+		},
+	}
+	checkoutQry := &mockStatusCheckoutQry{
+		findFn: func(ctx context.Context, id string) (checkoutQuery.OrderView, error) {
+			if id == orderID {
+				return orderView, nil
+			}
+			return checkoutQuery.OrderView{}, checkoutDomain.ErrOrderNotFound
+		},
+	}
+	fulfillmentSrv := &mockStatusFulfillmentSrv{
+		byOrderFn: func(ctx context.Context, oID string) (fulfillmentDomain.Fulfillment, error) {
+			return fulfillmentDomain.Fulfillment{}, fulfillmentApp.ErrNotFound
+		},
+	}
+
+	handler := newTestOrderStatusHandler(checkoutCmds, checkoutQry, fulfillmentSrv)
+
+	form := url.Values{}
+	form.Set("payment_status", "pending")
+	form.Set("delivery_status", "scheduled")
+	form.Set("carrier", "DHL")
+	form.Set("tracking_code", "TRACK-PENDING")
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/orders/"+orderID+"/status", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"orderID": orderID})
+	setAdminSession(t, req)
+
+	rec := httptest.NewRecorder()
+	handler.AdminUpdateOrderStatus(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if !updateTrackingCalled {
+		t.Errorf("expected UpdateTracking to be called")
 	}
 }
