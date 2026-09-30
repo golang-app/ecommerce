@@ -136,7 +136,7 @@ func (p Postgres) ListProviders(ctx context.Context) ([]domain.ProviderConfig, e
 	if err != nil {
 		return nil, fmt.Errorf("payments postgres: list providers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var providers []domain.ProviderConfig
 	for rows.Next() {
