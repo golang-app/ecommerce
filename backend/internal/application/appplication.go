@@ -74,7 +74,6 @@ func (app *App) HTTPServer() *http.Server {
 	return app.httpServer
 }
 
-
 // For debugging purpose, it exports
 func (app *App) Run() error {
 	go func() {
