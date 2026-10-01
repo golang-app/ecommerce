@@ -76,7 +76,10 @@ func (handler httpHandler) AdminOrderDetail(w http.ResponseWriter, r *http.Reque
 	}
 
 	commercial := order.Status()
-	canCancel := commercial == checkoutDomain.StatusPaid && !hasFulfillment
+	canCancel := (commercial == checkoutDomain.StatusPaid || commercial == checkoutDomain.StatusPending) &&
+		(!hasFulfillment || (fulfillment.Status() != fulfillmentDomain.StatusShipped &&
+			fulfillment.Status() != fulfillmentDomain.StatusDelivered &&
+			fulfillment.Status() != fulfillmentDomain.StatusRefunded))
 	// Once a fulfillment exists, ship/deliver/refund are gated on its
 	// operational status rather than the order's commercial status.
 	canShip := hasFulfillment && fulfillment.Status() == fulfillmentDomain.StatusScheduled
@@ -102,6 +105,15 @@ func (handler httpHandler) AdminCancelOrder(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	orderID := mux.Vars(r)["orderID"]
+	if handler.fulfillmentSrv != nil {
+		if ff, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID); ferr == nil {
+			if ff.Status() == fulfillmentDomain.StatusShipped || ff.Status() == fulfillmentDomain.StatusDelivered {
+				handler.flash(w, r, "An order with shipped or delivered fulfillment cannot be cancelled. Use refund instead.", "error")
+				http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+				return
+			}
+		}
+	}
 	err := handler.checkoutSrv.AdminCancel(r.Context(), orderID)
 	switch {
 	case errors.Is(err, checkoutDomain.ErrOrderNotFound):
@@ -111,7 +123,8 @@ func (handler httpHandler) AdminCancelOrder(w http.ResponseWriter, r *http.Reque
 	case errors.Is(err, checkoutDomain.ErrOrderNotCancellable):
 		handler.flash(w, r, "This order can no longer be cancelled.", "error")
 	case err != nil:
-		https.InternalError(w, "internal-error", err.Error())
+		handler.flash(w, r, "Unable to cancel order.", "error")
+		http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
 		return
 	default:
 		handler.flash(w, r, "Order cancelled.", "info")

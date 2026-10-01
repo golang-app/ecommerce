@@ -560,5 +560,63 @@ func TestCheckoutService_UpdateTracking(t *testing.T) {
 	}
 }
 
+func TestAdminCancel_PendingOrder(t *testing.T) {
+	ctx := context.Background()
+	storage := &fakeOrderStorage{}
+	stock := &fakeStockReserver{}
+	svc := app.NewCheckoutService(nil, storage, nil, stock, nil, nil, nil, nil)
+
+	lines := []domain.Line{domain.NewLine("prod-1", "Shoes", 2, 5000, "USD")}
+	method := domain.RebuildShippingMethod("courier", "Courier", 1500)
+	order, err := domain.PlaceOrder("order-pending-cancel", "sess-1", "cust-1", domain.Address{},
+		method, domain.RebuildPaymentMethod("fake", "Fake"), lines, 0, 1500, "", 0, "web", time.Now())
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	storage.saved = order
+
+	err = svc.AdminCancel(ctx, "order-pending-cancel")
+	if err != nil {
+		t.Fatalf("AdminCancel on pending order failed: %v", err)
+	}
+
+	if storage.saved.Status() != domain.StatusCancelled {
+		t.Errorf("expected status %s, got %s", domain.StatusCancelled, storage.saved.Status())
+	}
+	if stock.released["prod-1"] != 2 {
+		t.Errorf("expected 2 units released, got %d", stock.released["prod-1"])
+	}
+}
+
+func TestAdminCancel_PaidOrder(t *testing.T) {
+	ctx := context.Background()
+	storage := &fakeOrderStorage{}
+	stock := &fakeStockReserver{}
+	svc := app.NewCheckoutService(nil, storage, nil, stock, nil, nil, nil, nil)
+
+	lines := []domain.Line{domain.NewLine("prod-1", "Shoes", 1, 5000, "USD")}
+	method := domain.RebuildShippingMethod("courier", "Courier", 1500)
+	order, err := domain.PlaceOrder("order-paid-cancel", "sess-1", "cust-1", domain.Address{},
+		method, domain.RebuildPaymentMethod("fake", "Fake"), lines, 0, 1500, "", 0, "web", time.Now())
+	if err != nil {
+		t.Fatalf("PlaceOrder: %v", err)
+	}
+	order.MarkPaid(time.Now())
+	storage.saved = order
+
+	err = svc.AdminCancel(ctx, "order-paid-cancel")
+	if err != nil {
+		t.Fatalf("AdminCancel on paid order failed: %v", err)
+	}
+
+	if storage.saved.Status() != domain.StatusCancelled {
+		t.Errorf("expected status %s, got %s", domain.StatusCancelled, storage.saved.Status())
+	}
+	if stock.released["prod-1"] != 1 {
+		t.Errorf("expected 1 unit released, got %d", stock.released["prod-1"])
+	}
+}
+
+
 
 
