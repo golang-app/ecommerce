@@ -252,18 +252,24 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
 	}
+	orderID := mux.Vars(r)["orderID"]
+	fail := func(msg string) {
+		handler.flash(w, r, msg, "error")
+		http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+	}
+
 	if err := r.ParseForm(); err != nil {
-		https.InternalError(w, "internal-error", err.Error())
+		fail("Invalid form data: " + err.Error())
 		return
 	}
-	orderID := mux.Vars(r)["orderID"]
 	order, err := handler.checkoutQry.Find(r.Context(), orderID)
 	if errors.Is(err, checkoutDomain.ErrOrderNotFound) {
 		http.NotFound(w, r)
 		return
 	}
 	if err != nil {
-		https.InternalError(w, "internal-error", err.Error())
+		handler.flash(w, r, "Failed to load order: "+err.Error(), "error")
+		http.Redirect(w, r, "/admin/orders", http.StatusSeeOther)
 		return
 	}
 
@@ -275,7 +281,7 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 	trackingChanged := carrier != order.Carrier() || trackingCode != order.TrackingCode()
 	if trackingChanged {
 		if err := handler.checkoutSrv.UpdateTracking(r.Context(), orderID, carrier, trackingCode); err != nil {
-			https.InternalError(w, "internal-error", err.Error())
+			fail(err.Error())
 			return
 		}
 	}
@@ -283,7 +289,7 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 		ff, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
 		if ferr == nil && (trackingChanged || carrier != ff.Carrier() || trackingCode != ff.TrackingCode()) {
 			if err := handler.fulfillmentSrv.UpdateTracking(r.Context(), orderID, carrier, trackingCode); err != nil {
-				https.InternalError(w, "internal-error", err.Error())
+				fail(err.Error())
 				return
 			}
 		}
@@ -293,14 +299,14 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 		switch paymentStatus {
 		case "paid":
 			if err := handler.checkoutSrv.MarkPaid(r.Context(), orderID); err != nil {
-				https.InternalError(w, "internal-error", err.Error())
+				fail(err.Error())
 				return
 			}
 			if handler.fulfillmentSrv != nil {
 				_, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID)
 				if errors.Is(ferr, fulfillmentApp.ErrNotFound) {
 					if err := handler.fulfillmentSrv.OnOrderPaid(r.Context(), orderID, time.Now()); err != nil {
-						https.InternalError(w, "internal-error", err.Error())
+						fail(err.Error())
 						return
 					}
 					effCarrier := carrier
@@ -313,7 +319,7 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 					}
 					if effCarrier != "" || effTracking != "" {
 						if err := handler.fulfillmentSrv.UpdateTracking(r.Context(), orderID, effCarrier, effTracking); err != nil {
-							https.InternalError(w, "internal-error", err.Error())
+							fail(err.Error())
 							return
 						}
 					}
@@ -321,31 +327,28 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 			}
 		case "failed":
 			if order.Status() != checkoutDomain.StatusPending {
-				handler.flash(w, r, "Only pending orders can be marked as failed. Use cancel or refund instead.", "error")
-				http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+				fail("Only pending orders can be marked as failed. Use cancel or refund instead.")
 				return
 			}
 			if err := handler.checkoutSrv.MarkPaymentFailed(r.Context(), orderID, "admin_override"); err != nil {
-				https.InternalError(w, "internal-error", err.Error())
+				fail(err.Error())
 				return
 			}
 		case "cancelled":
 			if handler.fulfillmentSrv != nil {
 				if ff, ferr := handler.fulfillmentSrv.ByOrder(r.Context(), orderID); ferr == nil {
 					if ff.Status() == fulfillmentDomain.StatusShipped || ff.Status() == fulfillmentDomain.StatusDelivered {
-						handler.flash(w, r, "An order with shipped or delivered fulfillment cannot be cancelled. Use refund instead.", "error")
-						http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+						fail("An order with shipped or delivered fulfillment cannot be cancelled. Use refund instead.")
 						return
 					}
 				}
 			}
 			if err := handler.checkoutSrv.AdminCancel(r.Context(), orderID); err != nil {
 				if errors.Is(err, checkoutDomain.ErrOrderNotCancellable) {
-					handler.flash(w, r, "This order can no longer be cancelled.", "error")
-					http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+					fail("This order can no longer be cancelled.")
 					return
 				}
-				https.InternalError(w, "internal-error", err.Error())
+				fail(err.Error())
 				return
 			}
 		}
@@ -356,7 +359,7 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 		isPaid := order.Status() == checkoutDomain.StatusPaid || paymentStatus == "paid"
 		if errors.Is(ferr, fulfillmentApp.ErrNotFound) && isPaid {
 			if err := handler.fulfillmentSrv.OnOrderPaid(r.Context(), orderID, time.Now()); err != nil {
-				https.InternalError(w, "internal-error", err.Error())
+				fail(err.Error())
 				return
 			}
 			effCarrier := carrier
@@ -369,7 +372,7 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 			}
 			if effCarrier != "" || effTracking != "" {
 				if err := handler.fulfillmentSrv.UpdateTracking(r.Context(), orderID, effCarrier, effTracking); err != nil {
-					https.InternalError(w, "internal-error", err.Error())
+					fail(err.Error())
 					return
 				}
 			}
@@ -379,16 +382,15 @@ func (handler httpHandler) AdminUpdateOrderStatus(w http.ResponseWriter, r *http
 			if deliveryStatus != string(ff.Status()) {
 				if err := handler.fulfillmentSrv.SetStatus(r.Context(), orderID, fulfillmentDomain.Status(deliveryStatus)); err != nil {
 					if errors.Is(err, fulfillmentDomain.ErrInvalidTransition) {
-						handler.flash(w, r, "This order cannot be transitioned to that delivery status.", "error")
-						http.Redirect(w, r, "/admin/orders/"+orderID, http.StatusSeeOther)
+						fail("This order cannot be transitioned to that delivery status.")
 						return
 					}
-					https.InternalError(w, "internal-error", err.Error())
+					fail(err.Error())
 					return
 				}
 			}
 		} else if !errors.Is(ferr, fulfillmentApp.ErrNotFound) {
-			https.InternalError(w, "internal-error", ferr.Error())
+			fail(ferr.Error())
 			return
 		}
 	}

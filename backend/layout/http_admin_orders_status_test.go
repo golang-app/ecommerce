@@ -2,6 +2,7 @@ package layout
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -842,3 +843,139 @@ func TestAdminUpdateOrderStatus_ShippedOrder_CannotBeCancelled(t *testing.T) {
 		t.Errorf("adminCancel should NOT have been called on a shipped order")
 	}
 }
+
+func TestAdminUpdateOrderStatus_Failure_FlashesErrorAndRedirects(t *testing.T) {
+	setupTestEnvironment(t)
+
+	orderID := "ord-error-flash"
+	orderView := makeTestOrderView(orderID, checkoutDomain.StatusPending, "", "")
+
+	checkoutCmds := &mockStatusCheckoutCmds{
+		markPaidFn: func(ctx context.Context, oID string) error {
+			return errors.New("gateway connection timeout")
+		},
+	}
+	checkoutQry := &mockStatusCheckoutQry{
+		findFn: func(ctx context.Context, id string) (checkoutQuery.OrderView, error) {
+			if id == orderID {
+				return orderView, nil
+			}
+			return checkoutQuery.OrderView{}, checkoutDomain.ErrOrderNotFound
+		},
+	}
+	fulfillmentSrv := &mockStatusFulfillmentSrv{
+		byOrderFn: func(ctx context.Context, oID string) (fulfillmentDomain.Fulfillment, error) {
+			return fulfillmentDomain.Fulfillment{}, fulfillmentApp.ErrNotFound
+		},
+	}
+
+	handler := newTestOrderStatusHandler(checkoutCmds, checkoutQry, fulfillmentSrv)
+
+	form := url.Values{}
+	form.Set("payment_status", "paid")
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/orders/"+orderID+"/status", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"orderID": orderID})
+	setAdminSession(t, req)
+
+	rec := httptest.NewRecorder()
+	handler.AdminUpdateOrderStatus(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect status 303, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/orders/"+orderID {
+		t.Fatalf("expected redirect to /admin/orders/%s, got %s", orderID, loc)
+	}
+	cookie := rec.Header().Get("Set-Cookie")
+	if !strings.Contains(cookie, "ecommerce=") {
+		t.Fatalf("expected session cookie with flash message, got none")
+	}
+}
+
+func TestAdminUpdateOrderStatus_UpdateTrackingFailure_FlashesError(t *testing.T) {
+	setupTestEnvironment(t)
+
+	orderID := "ord-track-fail"
+	orderView := makeTestOrderView(orderID, checkoutDomain.StatusPending, "OldCarrier", "OldCode")
+
+	checkoutCmds := &mockStatusCheckoutCmds{
+		updateTrackingFn: func(ctx context.Context, oID, carrier, trackingCode string) error {
+			return errors.New("db error writing tracking")
+		},
+	}
+	checkoutQry := &mockStatusCheckoutQry{
+		findFn: func(ctx context.Context, id string) (checkoutQuery.OrderView, error) {
+			if id == orderID {
+				return orderView, nil
+			}
+			return checkoutQuery.OrderView{}, checkoutDomain.ErrOrderNotFound
+		},
+	}
+	fulfillmentSrv := &mockStatusFulfillmentSrv{
+		byOrderFn: func(ctx context.Context, oID string) (fulfillmentDomain.Fulfillment, error) {
+			return fulfillmentDomain.Fulfillment{}, fulfillmentApp.ErrNotFound
+		},
+	}
+
+	handler := newTestOrderStatusHandler(checkoutCmds, checkoutQry, fulfillmentSrv)
+
+	form := url.Values{}
+	form.Set("carrier", "NewCarrier")
+	form.Set("tracking_code", "NewCode")
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/orders/"+orderID+"/status", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"orderID": orderID})
+	setAdminSession(t, req)
+
+	rec := httptest.NewRecorder()
+	handler.AdminUpdateOrderStatus(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect status 303, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/orders/"+orderID {
+		t.Fatalf("expected redirect to /admin/orders/%s, got %s", orderID, loc)
+	}
+	cookie := rec.Header().Get("Set-Cookie")
+	if !strings.Contains(cookie, "ecommerce=") {
+		t.Fatalf("expected session cookie with flash message, got none")
+	}
+}
+
+func TestAdminUpdateOrderStatus_FindOrderFailure_FlashesError(t *testing.T) {
+	setupTestEnvironment(t)
+
+	orderID := "ord-find-fail"
+	checkoutCmds := &mockStatusCheckoutCmds{}
+	checkoutQry := &mockStatusCheckoutQry{
+		findFn: func(ctx context.Context, id string) (checkoutQuery.OrderView, error) {
+			return checkoutQuery.OrderView{}, errors.New("database connection down")
+		},
+	}
+	fulfillmentSrv := &mockStatusFulfillmentSrv{}
+
+	handler := newTestOrderStatusHandler(checkoutCmds, checkoutQry, fulfillmentSrv)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/orders/"+orderID+"/status", strings.NewReader(""))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"orderID": orderID})
+	setAdminSession(t, req)
+
+	rec := httptest.NewRecorder()
+	handler.AdminUpdateOrderStatus(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected redirect status 303, got %d (body: %s)", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/orders" {
+		t.Fatalf("expected redirect to /admin/orders, got %s", loc)
+	}
+	cookie := rec.Header().Get("Set-Cookie")
+	if !strings.Contains(cookie, "ecommerce=") {
+		t.Fatalf("expected session cookie with flash message, got none")
+	}
+}
+
