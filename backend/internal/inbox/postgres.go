@@ -85,3 +85,17 @@ func (p Postgres) MarkHandled(ctx context.Context, subscriber string, eventID in
 	// insert took effect and the caller now owns the side effect.
 	return n == 0, nil
 }
+
+// UnmarkHandled removes the (subscriber, eventID) record from inbox_handled.
+// Called by Wrap when a subscriber returns an error so that the Outbox dispatcher
+// can retry the event on subsequent ticks.
+func (p Postgres) UnmarkHandled(ctx context.Context, subscriber string, eventID int64) error {
+	_, err := p.db.ExecContext(ctx, `
+		DELETE FROM inbox_handled
+		WHERE subscriber = $1 AND event_id = $2
+	`, subscriber, eventID)
+	if err != nil {
+		return fmt.Errorf("inbox: unmark handled (%s, %d): %w", subscriber, eventID, err)
+	}
+	return nil
+}

@@ -115,20 +115,29 @@ type config struct {
 const defaultSessionSecret = "dev-only-do-not-use-in-production"
 
 type postgresConfig struct {
-	User     string `conf:"default:postgres"`
-	Password string `conf:"default:postgres"`
-	Port     int    `conf:"default:5432"`
-	Host     string `conf:"default:localhost"`
-	Db       string `conf:"default:ecommerce"`
+	User            string        `conf:"default:postgres"`
+	Password        string        `conf:"default:postgres"`
+	Port            int           `conf:"default:5432"`
+	Host            string        `conf:"default:localhost"`
+	Db              string        `conf:"default:ecommerce"`
+	SSLMode         string        `conf:"default:disable"`
+	MaxOpenConns    int           `conf:"default:25"`
+	MaxIdleConns    int           `conf:"default:25"`
+	ConnMaxLifetime time.Duration `conf:"default:15m"`
+	ConnMaxIdleTime time.Duration `conf:"default:5m"`
 }
 
 func (pc postgresConfig) connectionString() string {
 	var conn string
+	sslMode := pc.SSLMode
+	if sslMode == "" {
+		sslMode = "disable"
+	}
 
 	if pc.Password != "" {
-		conn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", pc.Host, pc.Port, pc.User, pc.Password, pc.Db)
+		conn = fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s", pc.Host, pc.Port, pc.User, pc.Password, pc.Db, sslMode)
 	} else {
-		conn = fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=disable", pc.Host, pc.Port, pc.User, pc.Db)
+		conn = fmt.Sprintf("host=%s port=%d user=%s dbname=%s sslmode=%s", pc.Host, pc.Port, pc.User, pc.Db, sslMode)
 	}
 
 	return conn

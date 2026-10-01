@@ -50,6 +50,13 @@ func (s *fakeStore) MarkHandled(_ context.Context, subscriber string, eventID in
 	return false, nil
 }
 
+func (s *fakeStore) UnmarkHandled(_ context.Context, subscriber string, eventID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.seen, keyOf(subscriber, eventID))
+	return nil
+}
+
 func keyOf(subscriber string, eventID int64) string {
 	// A tiny inline join keeps the fake dependency-free.
 	return subscriber + "|" + itoa(eventID)
@@ -188,4 +195,29 @@ func TestWrap_DifferentSubscribers_DedupeIsScopedToSubscriber(t *testing.T) {
 
 	is.Equal(aCalls, 1)
 	is.Equal(bCalls, 1)
+}
+
+func TestWrap_HandlerError_CanBeRetried(t *testing.T) {
+	is := is.New(t)
+	store := newFakeStore()
+	var attempts int
+	handlerErr := errors.New("transient handler failure")
+	wrapped := Wrap("sub", store, func(_ context.Context, _ int64, _ eventbus.Event) error {
+		attempts++
+		if attempts == 1 {
+			return handlerErr
+		}
+		return nil
+	})
+
+	// First attempt fails at handler level
+	err := wrapped(context.Background(), 42, testEvent{})
+	is.True(err != nil)
+	is.Equal(err, handlerErr)
+	is.Equal(attempts, 1)
+
+	// Second attempt (retry from outbox dispatcher) MUST run the handler again
+	err = wrapped(context.Background(), 42, testEvent{})
+	is.NoErr(err)
+	is.Equal(attempts, 2)
 }

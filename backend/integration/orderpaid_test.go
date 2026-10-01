@@ -147,6 +147,14 @@ func (s *inMemoryInbox) MarkHandled(_ context.Context, subscriber string, eventI
 	return false, nil
 }
 
+func (s *inMemoryInbox) UnmarkHandled(_ context.Context, subscriber string, eventID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := fmt.Sprintf("%s|%d", subscriber, eventID)
+	delete(s.seen, key)
+	return nil
+}
+
 // inMemoryOrderStorage is the in-test checkout/app.OrderStorage. On Save it:
 //   - folds the pending events into an in-memory state for query.Find
 //   - stages an OrderPaid outbox row whenever the order ends StatusPaid
