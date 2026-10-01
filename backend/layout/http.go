@@ -206,6 +206,13 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	// Admin panel. Later phases register the /admin/products, /admin/categories,
 	// /admin/attributes and /admin/orders handlers here, all behind requireAdmin.
 	r.HandleFunc("/admin", observability.HTTPWrap(m.handler.AdminDashboard, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/", func(w http.ResponseWriter, r *http.Request) {
+		target := "/admin"
+		if q := r.URL.RawQuery; q != "" {
+			target += "?" + q
+		}
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	}).Methods("GET")
 
 	r.HandleFunc("/admin/products", observability.HTTPWrap(m.handler.AdminProducts, m.logger)).Methods("GET")
 	r.HandleFunc("/admin/products", observability.HTTPWrap(m.handler.AdminCreateProduct, m.logger)).Methods("POST")
