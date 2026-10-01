@@ -759,23 +759,55 @@ func (s CheckoutService) shipping() ShippingStorage {
 
 // ListShippingMethods returns all configured shipping methods.
 func (s CheckoutService) ListShippingMethods(ctx context.Context) ([]domain.ShippingMethod, error) {
-	return s.shipping().ListShippingMethods(ctx)
+	ctx, span := tracer.Start(ctx, "Checkout.ListShippingMethods")
+	defer span.End()
+
+	methods, err := s.shipping().ListShippingMethods(ctx)
+	if err != nil {
+		recordSpanError(span, err)
+		return nil, err
+	}
+	span.SetAttributes(attribute.Int("checkout.shipping_methods_count", len(methods)))
+	return methods, nil
 }
 
 // FindShippingMethod retrieves a shipping method by code.
 func (s CheckoutService) FindShippingMethod(ctx context.Context, code string) (domain.ShippingMethod, error) {
-	return s.shipping().FindShippingMethod(ctx, code)
+	ctx, span := tracer.Start(ctx, "Checkout.FindShippingMethod", trace.WithAttributes(
+		attribute.String("shipping.code", code),
+	))
+	defer span.End()
+
+	method, err := s.shipping().FindShippingMethod(ctx, code)
+	if err != nil {
+		recordSpanError(span, err)
+		return domain.ShippingMethod{}, err
+	}
+	return method, nil
 }
 
 // UpdateShippingMethod updates attributes of an existing shipping method.
 func (s CheckoutService) UpdateShippingMethod(ctx context.Context, code string, enabled bool, label string, cost int64, carrier string) error {
+	ctx, span := tracer.Start(ctx, "Checkout.UpdateShippingMethod", trace.WithAttributes(
+		attribute.String("shipping.code", code),
+		attribute.Bool("shipping.enabled", enabled),
+		attribute.String("shipping.carrier", carrier),
+		attribute.Int64("shipping.cost", cost),
+	))
+	defer span.End()
+
 	storage := s.shipping()
 	existing, err := storage.FindShippingMethod(ctx, code)
 	if err != nil {
+		recordSpanError(span, err)
 		return err
 	}
 	updated := domain.NewShippingMethod(code, label, cost, existing.RequiresAddress(), carrier, enabled)
-	return storage.SaveShippingMethod(ctx, updated)
+	if err := storage.SaveShippingMethod(ctx, updated); err != nil {
+		recordSpanError(span, err)
+		return err
+	}
+	return nil
 }
 
 // UpdateTracking updates the tracking details for an existing order.
