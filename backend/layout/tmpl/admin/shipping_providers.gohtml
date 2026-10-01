@@ -1,0 +1,46 @@
+{{define "main"}}
+  <h2 class="account-card__title">shipping providers</h2>
+  <p class="muted">Configure available shipping methods, pricing, and carrier settings.</p>
+
+  {{if .Providers}}
+    {{range $p := .Providers}}
+      <section class="admin-section">
+        <h3 class="admin-section__title">
+          {{$p.Label}}
+          {{if $p.IsEnabled}}<span class="badge badge--success" style="font-size:0.75rem; margin-left:8px; vertical-align:middle;">enabled</span>{{else}}<span class="badge badge--muted" style="font-size:0.75rem; margin-left:8px; vertical-align:middle;">disabled</span>{{end}}
+        </h3>
+
+        <form class="form" method="post" action="/admin/shipping-providers/{{$p.Code}}">
+          <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+
+          <div class="field field--check">
+            <label>
+              <input type="checkbox" name="enabled" value="1" {{if $p.IsEnabled}}checked{{end}}>
+              Enabled
+            </label>
+          </div>
+
+          <div class="field">
+            <label for="label-{{$p.Code}}">label</label>
+            <input id="label-{{$p.Code}}" name="label" type="text" value="{{$p.Label}}" required>
+          </div>
+
+          <div class="field">
+            <label for="cost-{{$p.Code}}">cost</label>
+            <input id="cost-{{$p.Code}}" name="cost" type="text" value="{{$p.CostFormatted}}" placeholder="0.00">
+            <span class="form__aside muted">Major currency units, e.g. 5.00</span>
+          </div>
+
+          <div class="field">
+            <label for="carrier-{{$p.Code}}">carrier</label>
+            <input id="carrier-{{$p.Code}}" name="carrier" type="text" value="{{$p.Carrier}}" placeholder="Standard Post">
+          </div>
+
+          <button type="submit" class="btn">Save changes</button>
+        </form>
+      </section>
+    {{end}}
+  {{else}}
+    <p class="muted">no shipping providers configured.</p>
+  {{end}}
+{{end}}

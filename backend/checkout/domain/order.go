@@ -320,12 +320,20 @@ func (o *Order) apply(e Event) {
 		o.status = StatusShipped
 		o.carrier = ev.Carrier
 		o.trackingCode = ev.TrackingCode
+	case OrderTrackingUpdated:
+		o.carrier = ev.Carrier
+		o.trackingCode = ev.TrackingCode
 	case OrderDelivered:
 		o.status = StatusDelivered
 	case OrderRefunded:
 		o.status = StatusRefunded
 	}
 	o.version++
+}
+
+// SetTracking updates the carrier and tracking code on the order.
+func (o *Order) SetTracking(carrier, trackingCode string, at time.Time) {
+	o.raise(OrderTrackingUpdated{OrderID: o.id, Carrier: carrier, TrackingCode: trackingCode, At: at})
 }
 
 // Cancel cancels a paid order. Only paid orders can be cancelled — pending,

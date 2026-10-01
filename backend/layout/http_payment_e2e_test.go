@@ -184,6 +184,22 @@ func (s *e2eCheckoutService) MarkPaymentFailed(ctx context.Context, orderID stri
 	return nil
 }
 
+func (s *e2eCheckoutService) ListShippingMethods(ctx context.Context) ([]checkoutDomain.ShippingMethod, error) {
+	return checkoutDomain.ShippingMethods(), nil
+}
+
+func (s *e2eCheckoutService) FindShippingMethod(ctx context.Context, code string) (checkoutDomain.ShippingMethod, error) {
+	return checkoutDomain.ShippingMethodByCode(code)
+}
+
+func (s *e2eCheckoutService) UpdateShippingMethod(ctx context.Context, code string, enabled bool, label string, cost int64, carrier string) error {
+	return nil
+}
+
+func (s *e2eCheckoutService) UpdateTracking(ctx context.Context, orderID, carrier, trackingCode string) error {
+	return nil
+}
+
 func (s *e2eCheckoutService) Find(ctx context.Context, id string) (checkoutQuery.OrderView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -71,6 +71,22 @@ func (m *mockCheckoutCmds) MarkPaymentFailed(ctx context.Context, orderID string
 	return nil
 }
 
+func (m *mockCheckoutCmds) ListShippingMethods(ctx context.Context) ([]checkoutDomain.ShippingMethod, error) {
+	return checkoutDomain.ShippingMethods(), nil
+}
+
+func (m *mockCheckoutCmds) FindShippingMethod(ctx context.Context, code string) (checkoutDomain.ShippingMethod, error) {
+	return checkoutDomain.ShippingMethodByCode(code)
+}
+
+func (m *mockCheckoutCmds) UpdateShippingMethod(ctx context.Context, code string, enabled bool, label string, cost int64, carrier string) error {
+	return nil
+}
+
+func (m *mockCheckoutCmds) UpdateTracking(ctx context.Context, orderID, carrier, trackingCode string) error {
+	return nil
+}
+
 type mockCheckoutQrys struct {
 	orders map[string]checkoutQuery.OrderView
 }

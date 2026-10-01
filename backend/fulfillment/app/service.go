@@ -421,6 +421,33 @@ func (s *Service) Refund(ctx context.Context, orderID, reason string) error {
 	return nil
 }
 
+// UpdateTracking allows administrators to update or override tracking details
+// (carrier and tracking code) on an existing fulfillment without altering its status.
+func (s *Service) UpdateTracking(ctx context.Context, orderID, carrier, trackingCode string) error {
+	return s.transition(ctx, orderID, func(f *domain.Fulfillment) error {
+		f.SetTracking(carrier, trackingCode)
+		return nil
+	})
+}
+
+// SetStatus allows administrators to force a status transition on an existing fulfillment.
+// If transitioning to Refunded, reserved stock is released.
+// If transitioning to Shipped, the ECST order shipped event is published.
+func (s *Service) SetStatus(ctx context.Context, orderID string, target domain.Status) error {
+	if err := s.transition(ctx, orderID, func(f *domain.Fulfillment) error {
+		return f.AdminOverrideStatus(target, s.now())
+	}); err != nil {
+		return err
+	}
+	if target == domain.StatusRefunded {
+		s.releaseStock(ctx, orderID)
+	}
+	if target == domain.StatusShipped {
+		s.publishOrderShippedECST(ctx, orderID)
+	}
+	return nil
+}
+
 // ByOrder returns the current fulfillment for the given order id.
 // Powers the admin / customer order pages.
 func (s *Service) ByOrder(ctx context.Context, orderID string) (domain.Fulfillment, error) {

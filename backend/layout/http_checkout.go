@@ -83,6 +83,36 @@ func (handler httpHandler) isPaymentMethodEnabled(ctx context.Context, code stri
 	return false
 }
 
+func (handler httpHandler) availableShippingMethods(ctx context.Context) []checkoutDomain.ShippingMethod {
+	var all []checkoutDomain.ShippingMethod
+	if handler.checkoutSrv != nil {
+		methods, err := handler.checkoutSrv.ListShippingMethods(ctx)
+		if err == nil && len(methods) > 0 {
+			all = methods
+		}
+	}
+	if len(all) == 0 {
+		all = checkoutDomain.ShippingMethods()
+	}
+	filtered := make([]checkoutDomain.ShippingMethod, 0, len(all))
+	for _, m := range all {
+		if m.IsEnabled() {
+			filtered = append(filtered, m)
+		}
+	}
+	return filtered
+}
+
+func (handler httpHandler) resolveShippingMethod(ctx context.Context, code string) (checkoutDomain.ShippingMethod, error) {
+	if handler.checkoutSrv != nil {
+		m, err := handler.checkoutSrv.FindShippingMethod(ctx, code)
+		if err == nil && m.Code() != "" {
+			return m, nil
+		}
+	}
+	return checkoutDomain.ShippingMethodByCode(code)
+}
+
 func (handler httpHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 	sessID := cartIDFromCookies(w, r)
 	cart, err := handler.cartSrv.Get(r.Context(), sessID)
@@ -101,7 +131,7 @@ func (handler httpHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 
 	data := map[string]any{
 		"Cart":            cart,
-		"ShippingMethods": checkoutDomain.ShippingMethods(),
+		"ShippingMethods": handler.availableShippingMethods(r.Context()),
 		"PaymentMethods":  handler.availablePaymentMethods(r.Context()),
 	}
 
@@ -133,11 +163,19 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	})
 	reqLog.Info("Checkout form submitted")
 
-	method, err := checkoutDomain.ShippingMethodByCode(r.FormValue("ship_method"))
+	method, err := handler.resolveShippingMethod(r.Context(), r.FormValue("ship_method"))
 	if err != nil {
 		reqLog.WithError(err).Warn("Invalid shipping method selected")
 		session, _ := store.Get(r, "ecommerce")
 		session.AddFlash("please choose a shipping method", "error")
+		_ = session.Save(r, w)
+		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+		return
+	}
+	if !method.IsEnabled() {
+		reqLog.Warn("Disabled shipping method selected")
+		session, _ := store.Get(r, "ecommerce")
+		session.AddFlash("The selected shipping method is currently unavailable", "error")
 		_ = session.Save(r, w)
 		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
 		return

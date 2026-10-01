@@ -129,6 +129,10 @@ type checkoutCommands interface {
 	AdminCancel(ctx context.Context, orderID string) error
 	MarkPaid(ctx context.Context, orderID string) error
 	MarkPaymentFailed(ctx context.Context, orderID string, reason string) error
+	ListShippingMethods(ctx context.Context) ([]checkoutDomain.ShippingMethod, error)
+	FindShippingMethod(ctx context.Context, code string) (checkoutDomain.ShippingMethod, error)
+	UpdateShippingMethod(ctx context.Context, code string, enabled bool, label string, cost int64, carrier string) error
+	UpdateTracking(ctx context.Context, orderID, carrier, trackingCode string) error
 }
 
 // fulfillmentService is the narrow seam onto the fulfillment Process
@@ -142,6 +146,8 @@ type fulfillmentService interface {
 	Deliver(ctx context.Context, orderID string) error
 	Refund(ctx context.Context, orderID, reason string) error
 	ByOrder(ctx context.Context, orderID string) (fulfillmentDomain.Fulfillment, error)
+	UpdateTracking(ctx context.Context, orderID, carrier, trackingCode string) error
+	SetStatus(ctx context.Context, orderID string, target fulfillmentDomain.Status) error
 }
 
 // repricingService is the narrow seam onto the repricing (bulk

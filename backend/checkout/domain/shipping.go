@@ -14,13 +14,27 @@ type ShippingMethod struct {
 	label           string
 	cost            int64
 	requiresAddress bool
+	carrier         string
+	enabled         bool
+}
+
+// NewShippingMethod constructs a new ShippingMethod with all attributes.
+func NewShippingMethod(code, label string, cost int64, requiresAddress bool, carrier string, enabled bool) ShippingMethod {
+	return ShippingMethod{
+		code:            code,
+		label:           label,
+		cost:            cost,
+		requiresAddress: requiresAddress,
+		carrier:         carrier,
+		enabled:         enabled,
+	}
 }
 
 // availableShippingMethods is the ordered catalogue offered at checkout.
 var availableShippingMethods = []ShippingMethod{
-	{code: "flat", label: "Flat rate", cost: 500, requiresAddress: true},
-	{code: "pickup", label: "Personal pickup", cost: 0, requiresAddress: false},
-	{code: "courier", label: "Courier", cost: 1500, requiresAddress: true},
+	NewShippingMethod("flat", "Flat rate", 500, true, "Standard Post", true),
+	NewShippingMethod("pickup", "Personal pickup", 0, false, "Store Pickup", true),
+	NewShippingMethod("courier", "Courier", 1500, true, "Express Courier", true),
 }
 
 // ShippingMethods returns the offered methods in display order.
@@ -49,6 +63,8 @@ func RebuildShippingMethod(code, label string, cost int64) ShippingMethod {
 		label:           label,
 		cost:            cost,
 		requiresAddress: code != "pickup",
+		carrier:         "",
+		enabled:         true,
 	}
 }
 
@@ -57,4 +73,6 @@ func (m ShippingMethod) Label() string         { return m.label }
 func (m ShippingMethod) Cost() int64           { return m.cost }
 func (m ShippingMethod) CostDisplay() string   { return money(m.cost) }
 func (m ShippingMethod) RequiresAddress() bool { return m.requiresAddress }
+func (m ShippingMethod) Carrier() string       { return m.carrier }
+func (m ShippingMethod) IsEnabled() bool       { return m.enabled }
 func (m ShippingMethod) IsZero() bool          { return m.code == "" }

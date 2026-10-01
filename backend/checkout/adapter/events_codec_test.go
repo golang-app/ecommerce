@@ -83,6 +83,7 @@ func TestEventCodecRoundTrip_Fulfillment(t *testing.T) {
 		domain.OrderShipped{OrderID: "ord-1", Carrier: "UPS", TrackingCode: "1Z-XYZ", At: at},
 		domain.OrderDelivered{OrderID: "ord-1", At: at},
 		domain.OrderRefunded{OrderID: "ord-1", Reason: "customer return", At: at},
+		domain.OrderTrackingUpdated{OrderID: "ord-1", Carrier: "FedEx", TrackingCode: "FX-12345", At: at},
 	}
 	for _, e := range cases {
 		typ, version, payload, err := marshalEvent(e)
@@ -104,12 +105,18 @@ func TestEventCodecRoundTrip_Fulfillment(t *testing.T) {
 		}
 	}
 
-	// Carrier/tracking specifically need to survive the round-trip on OrderShipped.
+	// Carrier/tracking specifically need to survive the round-trip on OrderShipped and OrderTrackingUpdated.
 	round := mustUnmarshal(t, domain.OrderShipped{OrderID: "ord-1", Carrier: "DHL", TrackingCode: "JJD", At: at})
 	if os, ok := round.(domain.OrderShipped); !ok || os.Carrier != "DHL" || os.TrackingCode != "JJD" {
 		t.Errorf("OrderShipped carrier/tracking lost: %+v", round)
 	}
+
+	roundTracking := mustUnmarshal(t, domain.OrderTrackingUpdated{OrderID: "ord-1", Carrier: "DPD", TrackingCode: "DPD-999", At: at})
+	if ot, ok := roundTracking.(domain.OrderTrackingUpdated); !ok || ot.Carrier != "DPD" || ot.TrackingCode != "DPD-999" {
+		t.Errorf("OrderTrackingUpdated carrier/tracking lost: %+v", roundTracking)
+	}
 }
+
 
 func TestEventCodecRoundTrip_Payment(t *testing.T) {
 	at := time.Date(2026, 5, 27, 11, 0, 0, 0, time.UTC)

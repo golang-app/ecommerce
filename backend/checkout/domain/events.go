@@ -111,3 +111,15 @@ type OrderRefunded struct {
 
 func (e OrderRefunded) EventType() string     { return "OrderRefunded" }
 func (e OrderRefunded) OccurredAt() time.Time { return e.At }
+
+// OrderTrackingUpdated is emitted when carrier or tracking code is updated on an order.
+type OrderTrackingUpdated struct {
+	OrderID      string
+	Carrier      string
+	TrackingCode string
+	At           time.Time
+}
+
+func (e OrderTrackingUpdated) EventType() string     { return "OrderTrackingUpdated" }
+func (e OrderTrackingUpdated) OccurredAt() time.Time { return e.At }
+
