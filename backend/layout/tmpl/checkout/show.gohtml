@@ -59,12 +59,16 @@
 
         <fieldset class="fieldset">
           <legend class="fieldset__legend">shipping method</legend>
-          {{range $i, $m := .ShippingMethods}}
-            <label class="radio">
-              <input type="radio" name="ship_method" value="{{$m.Code}}" {{if eq $i 0}}checked{{end}}>
-              <span class="radio__label">{{$m.Label}}</span>
-              <span class="radio__cost muted">{{ money $m.Cost }}</span>
-            </label>
+          {{if .ShippingMethods}}
+            {{range $i, $m := .ShippingMethods}}
+              <label class="radio">
+                <input type="radio" name="ship_method" value="{{$m.Code}}" {{if eq $i 0}}checked{{end}}>
+                <span class="radio__label">{{$m.Label}}</span>
+                <span class="radio__cost muted">{{ money $m.Cost }}</span>
+              </label>
+            {{end}}
+          {{else}}
+            <p class="flash flash--error">Shipping is currently unavailable. Orders cannot be placed at this time.</p>
           {{end}}
         </fieldset>
 
@@ -126,7 +130,11 @@
           </div>
         </fieldset>
 
-        <button type="submit" class="btn btn--block">place order</button>
+        {{if .ShippingMethods}}
+          <button type="submit" class="btn btn--block">place order</button>
+        {{else}}
+          <button type="submit" class="btn btn--block" disabled>place order (shipping unavailable)</button>
+        {{end}}
         <p class="form__aside"><a href="/cart">&larr; back to cart</a></p>
       </form>
     </section>

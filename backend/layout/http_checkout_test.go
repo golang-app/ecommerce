@@ -258,3 +258,82 @@ func TestPlaceOrder_AcceptsEnabledShippingMethod(t *testing.T) {
 		t.Fatalf("expected redirect to /order/order-123, got %s", loc)
 	}
 }
+
+func TestCheckout_ZeroShippingMethods_RendersUnavailableMessage(t *testing.T) {
+	setupTestEnvironment(t)
+
+	methods := []checkoutDomain.ShippingMethod{
+		checkoutDomain.NewShippingMethod("flat", "Flat rate", 500, true, "Standard Post", false),
+		checkoutDomain.NewShippingMethod("courier", "Express Courier", 1500, true, "DHL", false),
+	}
+	mockCmds := &mockCheckoutCommandsForCheckoutTest{methods: methods}
+
+	cart := cartDomain.NewCart(cartDomain.NewUser(""))
+	_ = cart.Add(cartDomain.NewProduct("prod-1", "Test Product", 5000, cartDomain.MustNewCurrency("USD")), 1)
+	cartSrv := &mockCheckoutCartService{cart: cart}
+
+	handler := newTestCheckoutHandler(mockCmds, cartSrv)
+
+	req := httptest.NewRequest(http.MethodGet, "/checkout", nil)
+	req.AddCookie(&http.Cookie{Name: "cart_id", Value: "cart-123"})
+	rec := httptest.NewRecorder()
+
+	handler.Checkout(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Shipping is currently unavailable") {
+		t.Errorf("expected body to contain 'Shipping is currently unavailable', got:\n%s", body)
+	}
+	if !strings.Contains(body, "disabled") {
+		t.Errorf("expected submit button to be disabled when shipping is unavailable, got:\n%s", body)
+	}
+}
+
+func TestPlaceOrder_ZeroShippingMethods_RejectsOrder(t *testing.T) {
+	setupTestEnvironment(t)
+
+	methods := []checkoutDomain.ShippingMethod{
+		checkoutDomain.NewShippingMethod("flat", "Flat rate", 500, true, "Standard Post", false),
+		checkoutDomain.NewShippingMethod("courier", "Express Courier", 1500, true, "DHL", false),
+	}
+	mockCmds := &mockCheckoutCommandsForCheckoutTest{methods: methods}
+
+	cart := cartDomain.NewCart(cartDomain.NewUser(""))
+	_ = cart.Add(cartDomain.NewProduct("prod-1", "Test Product", 5000, cartDomain.MustNewCurrency("USD")), 1)
+	cartSrv := &mockCheckoutCartService{cart: cart}
+
+	handler := newTestCheckoutHandler(mockCmds, cartSrv)
+
+	form := url.Values{
+		"ship_method":    {"flat"},
+		"payment_method": {"card"},
+		"card_number":    {"4242424242424242"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/checkout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "cart_id", Value: "cart-123"})
+	rec := httptest.NewRecorder()
+
+	handler.PlaceOrder(rec, req)
+
+	if mockCmds.placeCalled {
+		t.Fatalf("expected Place NOT to be called when all shipping methods are disabled")
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/checkout" {
+		t.Fatalf("expected redirect to /checkout, got %s", loc)
+	}
+
+	s, _ := store.Get(req, "ecommerce")
+	flashes := s.Flashes("error")
+	if len(flashes) == 0 || !strings.Contains(flashes[0].(string), "Shipping is currently unavailable") {
+		t.Errorf("expected 'Shipping is currently unavailable' error flash, got %v", flashes)
+	}
+}
+

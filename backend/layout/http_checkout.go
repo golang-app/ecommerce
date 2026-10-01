@@ -163,7 +163,18 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	})
 	reqLog.Info("Checkout form submitted")
 
+	availableMethods := handler.availableShippingMethods(r.Context())
+	if len(availableMethods) == 0 {
+		reqLog.Warn("Attempted checkout with zero available shipping methods")
+		session, _ := store.Get(r, "ecommerce")
+		session.AddFlash("Shipping is currently unavailable. Orders cannot be placed at this time.", "error")
+		_ = session.Save(r, w)
+		http.Redirect(w, r, "/checkout", http.StatusSeeOther)
+		return
+	}
+
 	method, err := handler.resolveShippingMethod(r.Context(), r.FormValue("ship_method"))
+
 	if err != nil {
 		reqLog.WithError(err).Warn("Invalid shipping method selected")
 		session, _ := store.Get(r, "ecommerce")

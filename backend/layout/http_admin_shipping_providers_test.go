@@ -325,3 +325,99 @@ func TestAdminUpdateShippingProvider_InvalidCost(t *testing.T) {
 		t.Errorf("expected error flash message for invalid cost, got none")
 	}
 }
+
+func TestAdminUpdateShippingProvider_EmptyLabel(t *testing.T) {
+	setupTestEnvironment(t)
+
+	called := false
+	mockCmds := &mockShippingCheckoutCmds{
+		updateShippingMethodFn: func(ctx context.Context, code string, enabled bool, label string, cost int64, carrier string) error {
+			called = true
+			return nil
+		},
+	}
+	handler := newTestShippingHandler(mockCmds)
+
+	form := url.Values{
+		"enabled": {"1"},
+		"label":   {"   "}, // empty after trim
+		"cost":    {"5.00"},
+		"carrier": {"Post"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/shipping-providers/flat", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"code": "flat"})
+	setAdminSession(t, req)
+	rec := httptest.NewRecorder()
+
+	handler.AdminUpdateShippingProvider(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/shipping-providers" {
+		t.Fatalf("expected redirect to /admin/shipping-providers, got %s", loc)
+	}
+	if called {
+		t.Errorf("expected UpdateShippingMethod not to be called for empty label")
+	}
+
+	s, _ := store.Get(req, "ecommerce")
+	flashes := s.Flashes("error")
+	if len(flashes) == 0 || !strings.Contains(flashes[0].(string), "Provider label cannot be empty.") {
+		t.Errorf("expected 'Provider label cannot be empty.' flash message, got %v", flashes)
+	}
+}
+
+func TestAdminUpdateShippingProvider_CannotDisableLastActive(t *testing.T) {
+	setupTestEnvironment(t)
+
+	methods := []checkoutDomain.ShippingMethod{
+		checkoutDomain.NewShippingMethod("flat", "Flat rate", 500, true, "Standard Post", true),    // only enabled one
+		checkoutDomain.NewShippingMethod("pickup", "Pickup", 0, false, "Store", false),             // disabled
+		checkoutDomain.NewShippingMethod("courier", "Courier", 1500, true, "DHL", false),           // disabled
+	}
+
+	called := false
+	mockCmds := &mockShippingCheckoutCmds{
+		methods: methods,
+		updateShippingMethodFn: func(ctx context.Context, code string, enabled bool, label string, cost int64, carrier string) error {
+			called = true
+			return nil
+		},
+	}
+	handler := newTestShippingHandler(mockCmds)
+
+	form := url.Values{
+		"enabled": {"0"}, // attempting to disable "flat"
+		"label":   {"Flat rate"},
+		"cost":    {"5.00"},
+		"carrier": {"Standard Post"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/shipping-providers/flat", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"code": "flat"})
+	setAdminSession(t, req)
+	rec := httptest.NewRecorder()
+
+	handler.AdminUpdateShippingProvider(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/admin/shipping-providers" {
+		t.Fatalf("expected redirect to /admin/shipping-providers, got %s", loc)
+	}
+	if called {
+		t.Errorf("expected UpdateShippingMethod NOT to be called when attempting to disable last active provider")
+	}
+
+	s, _ := store.Get(req, "ecommerce")
+	flashes := s.Flashes("error")
+	if len(flashes) == 0 || !strings.Contains(flashes[0].(string), "Cannot disable the last active shipping provider.") {
+		t.Errorf("expected 'Cannot disable the last active shipping provider.' flash message, got %v", flashes)
+	}
+}
+
