@@ -412,9 +412,11 @@ func main() {
 
 	// Reservation TTL sweeper: releases stock held by pending orders whose
 	// confirmation never arrived (process crash, abandoned cart after stock
-	// reserve, hung async payment). Bound to the application's lifecycle
-	// context; cancel triggers a clean exit.
-	reservationSweeper := sweeper.New(checkoutQry, checkoutSrv, cfg.ReservationTTL, cfg.ReservationSweepInterval, logger)
+	// reserve, hung async payment). Uses a PostgreSQL advisory lock so only
+	// one replica sweeps at a time across multi-pod deployments. Bound to
+	// the application's lifecycle context; cancel triggers a clean exit.
+	sweeperLocker := sweeper.NewPostgresLocker(db, sweeper.DefaultSweeperLockID)
+	reservationSweeper := sweeper.New(checkoutQry, checkoutSrv, cfg.ReservationTTL, cfg.ReservationSweepInterval, logger, sweeperLocker)
 	go reservationSweeper.Run(ctx)
 
 	// Transactional Outbox dispatcher. The decode closure is the

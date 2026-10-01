@@ -16,6 +16,22 @@ type Store interface {
 	MarkSent(ctx context.Context, id int64) error
 }
 
+// TxStore is an optional extension to Store for transactional databases.
+// When implemented, Dispatcher leases unsent rows inside a transaction
+// (e.g. using FOR UPDATE SKIP LOCKED) to prevent multi-replica race conditions.
+type TxStore interface {
+	Store
+	BeginTx(ctx context.Context) (TxSession, error)
+}
+
+// TxSession represents an open transaction during a dispatch batch.
+type TxSession interface {
+	Unsent(ctx context.Context, limit int) ([]Row, error)
+	MarkSent(ctx context.Context, id int64) error
+	Commit() error
+	Rollback() error
+}
+
 // Publisher is the subset of *eventbus.Bus the dispatcher uses. The
 // concrete bus satisfies it; tests pass a fake to assert what was
 // published.
@@ -120,6 +136,58 @@ func (d *Dispatcher) Run(ctx context.Context) {
 //     again. Subscribers MUST tolerate the duplicate publish that
 //     produces.
 func (d *Dispatcher) dispatchOnce(ctx context.Context) {
+	if txStore, ok := d.store.(TxStore); ok {
+		sess, err := txStore.BeginTx(ctx)
+		if err != nil {
+			if d.logger != nil {
+				d.logger.WithError(err).Warn("outbox dispatcher: begin tx failed")
+			}
+			return
+		}
+		defer func() { _ = sess.Rollback() }()
+
+		rows, err := sess.Unsent(ctx, d.limit)
+		if err != nil {
+			if d.logger != nil {
+				d.logger.WithError(err).Warn("outbox dispatcher: list unsent failed")
+			}
+			return
+		}
+
+		for _, r := range rows {
+			if err := ctx.Err(); err != nil {
+				return
+			}
+			event, err := d.decode(r.Kind, r.Payload)
+			if err != nil {
+				if d.logger != nil {
+					d.logger.WithError(err).WithFields(logrus.Fields{
+						"outbox.id":   r.ID,
+						"outbox.kind": r.Kind,
+					}).Warn("outbox dispatcher: decode failed")
+				}
+				continue
+			}
+			d.bus.PublishWithID(ctx, r.ID, event)
+			if err := sess.MarkSent(ctx, r.ID); err != nil {
+				if d.logger != nil {
+					d.logger.WithError(err).WithFields(logrus.Fields{
+						"outbox.id":   r.ID,
+						"outbox.kind": r.Kind,
+					}).Warn("outbox dispatcher: mark sent failed; will retry next tick")
+				}
+				continue
+			}
+		}
+
+		if err := sess.Commit(); err != nil {
+			if d.logger != nil {
+				d.logger.WithError(err).Warn("outbox dispatcher: commit tx failed")
+			}
+		}
+		return
+	}
+
 	rows, err := d.store.Unsent(ctx, d.limit)
 	if err != nil {
 		if d.logger != nil {

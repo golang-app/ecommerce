@@ -70,19 +70,37 @@ func (p Postgres) AppendTx(ctx context.Context, tx *sql.Tx, kind string, payload
 	return nil
 }
 
-// Unsent returns up to limit unsent rows, oldest first. The partial
-// index outbox_event_unsent_idx keeps this query cheap regardless of
-// how many already-sent rows have accumulated.
-func (p Postgres) Unsent(ctx context.Context, limit int) ([]Row, error) {
+// PostgresSession represents an active transaction holding row locks on
+// outbox_event rows for the duration of a dispatch batch.
+type PostgresSession struct {
+	tx *sql.Tx
+}
+
+var _ TxStore = Postgres{}
+var _ TxSession = (*PostgresSession)(nil)
+
+// BeginTx begins a transaction and returns a TxSession for batch dispatching.
+func (p Postgres) BeginTx(ctx context.Context) (TxSession, error) {
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("outbox: begin tx: %w", err)
+	}
+	return &PostgresSession{tx: tx}, nil
+}
+
+// Unsent returns up to limit unsent rows, oldest first, locked with FOR UPDATE SKIP LOCKED
+// so concurrent dispatcher workers on other replicas skip already-claimed rows.
+func (s *PostgresSession) Unsent(ctx context.Context, limit int) ([]Row, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
-	rows, err := p.db.QueryContext(ctx, `
+	rows, err := s.tx.QueryContext(ctx, `
 		SELECT id, kind, payload, created_at
 		FROM outbox_event
 		WHERE sent_at IS NULL
 		ORDER BY created_at
 		LIMIT $1
+		FOR UPDATE SKIP LOCKED
 	`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("outbox: query unsent: %w", err)
@@ -101,6 +119,49 @@ func (p Postgres) Unsent(ctx context.Context, limit int) ([]Row, error) {
 		return nil, fmt.Errorf("outbox: rows unsent: %w", err)
 	}
 	return out, nil
+}
+
+// MarkSent records that the row with the given id has been published within the session transaction.
+func (s *PostgresSession) MarkSent(ctx context.Context, id int64) error {
+	_, err := s.tx.ExecContext(ctx, `
+		UPDATE outbox_event SET sent_at = now() WHERE id = $1
+	`, id)
+	if err != nil {
+		return fmt.Errorf("outbox: mark sent %d: %w", id, err)
+	}
+	return nil
+}
+
+// Commit commits the session transaction.
+func (s *PostgresSession) Commit() error {
+	return s.tx.Commit()
+}
+
+// Rollback rolls back the session transaction.
+func (s *PostgresSession) Rollback() error {
+	return s.tx.Rollback()
+}
+
+// Unsent returns up to limit unsent rows, oldest first. It begins a transaction
+// with FOR UPDATE SKIP LOCKED so concurrent replicas skip leased rows.
+func (p Postgres) Unsent(ctx context.Context, limit int) ([]Row, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	sess, err := p.BeginTx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = sess.Rollback() }()
+
+	rows, err := sess.Unsent(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	if err := sess.Commit(); err != nil {
+		return nil, fmt.Errorf("outbox: commit tx: %w", err)
+	}
+	return rows, nil
 }
 
 // MarkSent records that the row with the given id has been published.
