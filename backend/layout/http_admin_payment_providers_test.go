@@ -109,6 +109,7 @@ func setupTestEnvironment(t *testing.T) {
 	}
 	store = newCookieStore([]byte("test-secret-12345678901234567890"), false)
 	setCSRFEnabled(false)
+	ResetRateLimiters()
 }
 
 func setAdminSession(t *testing.T, req *http.Request) {
