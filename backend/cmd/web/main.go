@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ardanlabs/conf"
@@ -380,7 +381,25 @@ func main() {
 
 	app.AddBoundedContext(cartBD)
 
-	imgStore := imagestore.NewDisk(cfg.UploadsDir, "/uploads")
+	var imgStore imagestore.Store
+	switch strings.ToLower(cfg.StorageBackend) {
+	case "s3":
+		imgStore = imagestore.NewS3(imagestore.S3Config{
+			Bucket:         cfg.S3Bucket,
+			Region:         cfg.S3Region,
+			Endpoint:       cfg.S3Endpoint,
+			AccessKey:      cfg.S3AccessKey,
+			SecretKey:      cfg.S3SecretKey,
+			CDNURL:         cfg.S3CDNURL,
+			ForcePathStyle: cfg.S3ForcePathStyle,
+		})
+		logger.WithFields(logrus.Fields{
+			"bucket": cfg.S3Bucket,
+			"region": cfg.S3Region,
+		}).Info("using cloud object storage (S3) for media uploads")
+	default:
+		imgStore = imagestore.NewDisk(cfg.UploadsDir, "/uploads")
+	}
 
 	// fxRates are static, operator-configured. They are NOT a live feed —
 	// upgrading to a real provider only requires a different implementation

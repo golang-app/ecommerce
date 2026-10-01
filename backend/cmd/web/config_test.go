@@ -46,3 +46,16 @@ func TestPostgresConfig_Defaults(t *testing.T) {
 	is.Equal(cfg.Postgres.ConnMaxLifetime, 15*time.Minute)
 	is.Equal(cfg.Postgres.ConnMaxIdleTime, 5*time.Minute)
 }
+
+func TestStorageConfig_Defaults(t *testing.T) {
+	is := is.New(t)
+
+	var cfg config
+	err := conf.Parse([]string{}, "", &cfg)
+	is.NoErr(err)
+
+	is.Equal(cfg.StorageBackend, "disk")
+	is.Equal(cfg.S3Region, "us-east-1")
+	is.Equal(cfg.S3ForcePathStyle, false)
+}
+

@@ -13,6 +13,22 @@ type config struct {
 	// It is also the directory the /uploads/* HTTP route serves from. The
 	// container default lines up with the docker-compose bind mount.
 	UploadsDir string `conf:"default:/uploads"`
+	// StorageBackend selects the image storage provider: "disk" (default) or "s3".
+	StorageBackend string `conf:"default:disk,STORAGE_BACKEND"`
+	// S3Bucket is the target cloud object storage bucket for uploaded images.
+	S3Bucket string `conf:"STORAGE_S3_BUCKET"`
+	// S3Region is the cloud region for the object storage bucket (e.g. us-east-1).
+	S3Region string `conf:"default:us-east-1,STORAGE_S3_REGION"`
+	// S3Endpoint is an optional custom endpoint (for MinIO, Cloudflare R2, LocalStack).
+	S3Endpoint string `conf:"STORAGE_S3_ENDPOINT"`
+	// S3AccessKey is the access key ID for object storage authentication.
+	S3AccessKey string `conf:"STORAGE_S3_ACCESS_KEY"`
+	// S3SecretKey is the secret access key for object storage authentication.
+	S3SecretKey string `conf:"mask,STORAGE_S3_SECRET_KEY"`
+	// S3CDNURL is the public CDN base URL used to serve images (e.g. https://cdn.example.com).
+	S3CDNURL string `conf:"STORAGE_S3_CDN_URL"`
+	// S3ForcePathStyle enables path-style S3 URLs (e.g. http://endpoint/bucket/key).
+	S3ForcePathStyle bool `conf:"default:false,STORAGE_S3_FORCE_PATH_STYLE"`
 	// SessionSecret is the symmetric key gorilla/sessions uses to authenticate
 	// cookies. It MUST be set to a strong random value (32+ bytes from a CSPRNG)
 	// in production via the SESSION_SECRET env var. The default below is a
