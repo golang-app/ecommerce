@@ -36,6 +36,7 @@ func (h *DependencyManager) Healthy(w http.ResponseWriter, r *http.Request) {
 	for _, s := range h.dependencies {
 		if !s.Healthy(r.Context()) {
 			http.Error(w, "Unhealthy", http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -46,6 +47,7 @@ func (h *DependencyManager) Ready(w http.ResponseWriter, r *http.Request) {
 	for _, s := range h.dependencies {
 		if !s.Ready(r.Context()) {
 			http.Error(w, "Not ready", http.StatusInternalServerError)
+			return
 		}
 	}
 	w.WriteHeader(http.StatusOK)
