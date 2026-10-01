@@ -14,6 +14,7 @@ import (
 // lets dedupe_test.go drop in a tiny in-memory fake without a real DB.
 type MarkHandler interface {
 	MarkHandled(ctx context.Context, subscriber string, eventID int64) (alreadyHandled bool, err error)
+	UnmarkHandled(ctx context.Context, subscriber string, eventID int64) error
 }
 
 // discardLogger is the package-level fallback used when no context
@@ -43,7 +44,8 @@ var discardLogger logrus.FieldLogger = func() logrus.FieldLogger {
 //     a storage error MarkHandled's err is returned and h is NOT
 //     called; the Outbox dispatcher will retry the same row next
 //     tick. On a fresh insert the wrapper invokes h and returns its
-//     error verbatim.
+//     error verbatim. If h returns an error, the handled record is
+//     unmarked so the dispatcher can retry on subsequent ticks.
 //
 // Logging routes through observability.Logger(ctx), which the HTTP
 // middleware binds. The Outbox dispatcher runs in a background
@@ -70,7 +72,18 @@ func Wrap(subscriber string, store MarkHandler, h eventbus.HandlerWithID) eventb
 			}).Info("inbox: skip duplicate delivery")
 			return nil
 		}
-		return h(ctx, eventID, e)
+		if err := h(ctx, eventID, e); err != nil {
+			if unmarkErr := store.UnmarkHandled(ctx, subscriber, eventID); unmarkErr != nil {
+				logger(ctx).WithFields(logrus.Fields{
+					"inbox.subscriber": subscriber,
+					"event":            e.EventName(),
+					"event.id":         eventID,
+					"error":            unmarkErr.Error(),
+				}).Error("inbox: failed to unmark handled on handler error")
+			}
+			return err
+		}
+		return nil
 	}
 }
 
