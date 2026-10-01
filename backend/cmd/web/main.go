@@ -133,8 +133,13 @@ func main() {
 	connString := cfg.Postgres.connectionString()
 	db, err := otelsql.Open("postgres", connString)
 	if err != nil {
-		logrus.Fatalf("cannot open connection to the DB: %s", err)
+		logger.WithError(err).Fatal("cannot connect to the database")
 	}
+
+	db.SetMaxOpenConns(cfg.Postgres.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.Postgres.MaxIdleConns)
+	db.SetConnMaxLifetime(cfg.Postgres.ConnMaxLifetime)
+	db.SetConnMaxIdleTime(cfg.Postgres.ConnMaxIdleTime)
 
 	app.AddDependency(dependency.NewSQL(db))
 	bus := eventbus.New(logger)
