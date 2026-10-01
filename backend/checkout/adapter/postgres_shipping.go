@@ -29,7 +29,7 @@ func (s *PostgresShippingStorage) ListShippingMethods(ctx context.Context) ([]do
 	if err != nil {
 		return nil, fmt.Errorf("list shipping methods: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var methods []domain.ShippingMethod
 	for rows.Next() {
