@@ -129,7 +129,10 @@ func main() {
 		}
 	}()
 
-	app := application.New(ctx, cfg.ServerPort)
+	app := application.New(ctx, cfg.ServerPort, application.WithPProf(cfg.PProfEnabled))
+	if cfg.PProfEnabled {
+		logger.Warn("pprof debugging server enabled on localhost:6060")
+	}
 
 	connString := cfg.Postgres.connectionString()
 	db, err := otelsql.Open("postgres", connString)
