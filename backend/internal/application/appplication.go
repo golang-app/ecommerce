@@ -6,6 +6,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"sync"
+	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/dependency"
 	"github.com/gorilla/mux"
@@ -53,8 +54,12 @@ func New(ctx context.Context, port int) *App {
 	handler := otelhttp.NewHandler(r, "http.server")
 
 	httpServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: handler,
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	return &App{
@@ -63,6 +68,12 @@ func New(ctx context.Context, port int) *App {
 		deps:       deps,
 	}
 }
+
+// HTTPServer returns the underlying configured *http.Server.
+func (app *App) HTTPServer() *http.Server {
+	return app.httpServer
+}
+
 
 // For debugging purpose, it exports
 func (app *App) Run() error {
