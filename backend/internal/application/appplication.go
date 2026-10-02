@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,18 +16,38 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
+// Option configures an App instance.
+type Option func(*App)
+
+// WithPProf explicitly enables or disables the pprof debug profiling HTTP server.
+func WithPProf(enabled bool) Option {
+	return func(a *App) {
+		a.pprofEnabled = enabled
+	}
+}
+
+// WithPProfAddr configures the listening address for the pprof debug server.
+func WithPProfAddr(addr string) Option {
+	return func(a *App) {
+		a.pprofAddr = addr
+	}
+}
+
 // App is an instance of the whole application.
 // It holds the basic information about all dependencies it has
 // and application-wide configuration.
 // Any Module can be registered using the app.AddModule() function
 type App struct {
-	httpServer *http.Server
-	router     *mux.Router
-	deps       *dependency.DependencyManager
+	httpServer   *http.Server
+	router       *mux.Router
+	deps         *dependency.DependencyManager
+	pprofEnabled bool
+	pprofAddr    string
+	pprofServer  *http.Server
 }
 
 // New creates a new instance of the application.
-func New(ctx context.Context, port int) *App {
+func New(ctx context.Context, port int, opts ...Option) *App {
 	r := mux.NewRouter()
 	deps := dependency.New()
 
@@ -62,11 +84,21 @@ func New(ctx context.Context, port int) *App {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	return &App{
-		httpServer: httpServer,
-		router:     r,
-		deps:       deps,
+	pprofEnabled := strings.EqualFold(os.Getenv("PPROF_ENABLED"), "true") || os.Getenv("PPROF_ENABLED") == "1"
+
+	app := &App{
+		httpServer:   httpServer,
+		router:       r,
+		deps:         deps,
+		pprofEnabled: pprofEnabled,
+		pprofAddr:    "localhost:6060",
 	}
+
+	for _, opt := range opts {
+		opt(app)
+	}
+
+	return app
 }
 
 // HTTPServer returns the underlying configured *http.Server.
@@ -74,12 +106,30 @@ func (app *App) HTTPServer() *http.Server {
 	return app.httpServer
 }
 
-// For debugging purpose, it exports
+// PProfEnabled reports whether the pprof debug server is enabled.
+func (app *App) PProfEnabled() bool {
+	return app.pprofEnabled
+}
+
+// PProfServer returns the running pprof *http.Server instance, if active.
+func (app *App) PProfServer() *http.Server {
+	return app.pprofServer
+}
+
+// Run starts the HTTP server (and the pprof server if enabled).
 func (app *App) Run() error {
-	go func() {
-		// it is used only for pprof debugging
-		_ = http.ListenAndServe("localhost:6060", nil)
-	}()
+	if app.pprofEnabled {
+		addr := app.pprofAddr
+		if addr == "" {
+			addr = "localhost:6060"
+		}
+		app.pprofServer = &http.Server{
+			Addr: addr,
+		}
+		go func() {
+			_ = app.pprofServer.ListenAndServe()
+		}()
+	}
 
 	err := app.httpServer.ListenAndServe()
 	if err != http.ErrServerClosed {
@@ -96,6 +146,14 @@ func (app *App) Close(ctx context.Context) error {
 		defer wg.Done()
 		_ = app.httpServer.Shutdown(ctx)
 	}()
+
+	if app.pprofServer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = app.pprofServer.Shutdown(ctx)
+		}()
+	}
 
 	for _, dep := range app.deps.All() {
 		wg.Add(1)

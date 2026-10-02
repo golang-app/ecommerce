@@ -47,6 +47,11 @@ type config struct {
 	// want to curl/wget unsafe endpoints without minting a token first; do
 	// NOT ship a deployment with this disabled.
 	CSRFEnabled bool `conf:"default:true"`
+	// PProfEnabled controls whether the pprof debugging HTTP server is started.
+	// It defaults to false — production never wants this on because pprof endpoints
+	// allow unauthenticated heap/CPU profiling and data leakage. Set PPROF_ENABLED=true
+	// only during local debugging or internal diagnostics.
+	PProfEnabled bool `conf:"default:false,PPROF_ENABLED"`
 	// SMTPHost is the host:port of the outbound SMTP relay (e.g. mailhog:1025
 	// in dev, an SES/SendGrid SMTP endpoint in production). Leave blank to
 	// disable real delivery — the app then falls back to a LogMailer that
