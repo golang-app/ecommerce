@@ -77,6 +77,33 @@ func (handler httpHandler) AdminUpdateShippingProvider(w http.ResponseWriter, r 
 	label := strings.TrimSpace(r.FormValue("label"))
 	carrier := strings.TrimSpace(r.FormValue("carrier"))
 
+	if label == "" {
+		handler.flash(w, r, "Provider label cannot be empty.", "error")
+		http.Redirect(w, r, "/admin/shipping-providers", http.StatusSeeOther)
+		return
+	}
+
+	if !enabled {
+		methods, err := handler.checkoutSrv.ListShippingMethods(r.Context())
+		if err == nil {
+			enabledCount := 0
+			var isCurrentEnabled bool
+			for _, m := range methods {
+				if m.IsEnabled() {
+					enabledCount++
+				}
+				if m.Code() == code && m.IsEnabled() {
+					isCurrentEnabled = true
+				}
+			}
+			if isCurrentEnabled && enabledCount <= 1 {
+				handler.flash(w, r, "Cannot disable the last active shipping provider.", "error")
+				http.Redirect(w, r, "/admin/shipping-providers", http.StatusSeeOther)
+				return
+			}
+		}
+	}
+
 	var costMinor int64
 	costStr := strings.TrimSpace(r.FormValue("cost"))
 	if code == "pickup" && costStr == "" {
