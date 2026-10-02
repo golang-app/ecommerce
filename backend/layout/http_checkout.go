@@ -12,6 +12,7 @@ import (
 	fulfillmentDomain "github.com/bkielbasa/go-ecommerce/backend/fulfillment/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 	paymentsDomain "github.com/bkielbasa/go-ecommerce/backend/payments/domain"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	promoapp "github.com/bkielbasa/go-ecommerce/backend/promo/app"
@@ -147,7 +148,7 @@ func (handler httpHandler) Checkout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
-	if !checkoutLimiter.Allow(clientIP(r)) {
+	if !handler.allowRate(r.Context(), ratelimit.ActionCheckout, r) {
 		session, _ := store.Get(r, "ecommerce")
 		session.AddFlash("Too many checkout attempts. Please try again in a moment.", "error")
 		_ = session.Save(r, w)

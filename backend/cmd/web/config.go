@@ -123,6 +123,9 @@ type config struct {
 	// the fake provider sees succeeds. Dev/test only — production
 	// payment failures come from the real provider's logic.
 	StripeFailCardEndingIn string `conf:"default:0000,STRIPE_FAIL_CARD_ENDING_IN"`
+	// TrustedProxies is a comma-separated list of CIDR ranges or IP addresses
+	// of trusted reverse proxies. When empty, defaults to loopback and private networks.
+	TrustedProxies string `conf:"TRUSTED_PROXIES"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep

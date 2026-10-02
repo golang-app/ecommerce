@@ -396,6 +396,8 @@ func setupShippingE2EEnvironment(t *testing.T) (*mux.Router, *shippingE2ECheckou
 		rates,
 		"",
 		nil, // paymentsSrv
+		nil,
+		"",
 	)
 
 	router := mux.NewRouter()

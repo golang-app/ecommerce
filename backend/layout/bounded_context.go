@@ -263,9 +263,10 @@ type paymentsService interface {
 // POST /webhooks/payments endpoint and the payment provider admin UI.
 // Pass an empty secret OR a nil service to skip the webhook registration entirely —
 // tests that don't care about webhooks then don't need to provide either.
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService, limiter rateLimiter, trustedProxiesConfig string) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
+	parsedProxies := parseTrustedProxies(trustedProxiesConfig)
 	return &boundedContext{
 		handler: httpHandler{
 			cartSrv:        cartSrv,
@@ -288,6 +289,8 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			baseURL:        baseURL,
 			rates:          rates,
 			logger:         logger,
+			limiter:        limiter,
+			trustedProxies: parsedProxies,
 		},
 		uploadsDir:            uploadsDir,
 		paymentsWebhookSecret: paymentsWebhookSecret,

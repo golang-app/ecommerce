@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/bkielbasa/go-ecommerce/backend/auth/adapter"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 )
 
 // passwordResetTTLMinutes mirrors the auth-app TTL (30 minutes) so the email
@@ -35,7 +36,7 @@ func (handler httpHandler) ForgotPasswordPage(w http.ResponseWriter, r *http.Req
 func (handler httpHandler) HandleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "ecommerce")
 
-	if !forgotPasswordLimiter.Allow(clientIP(r)) {
+	if !handler.allowRate(r.Context(), ratelimit.ActionForgotPassword, r) {
 		session.AddFlash("Too many reset requests, please try again later.", "error")
 		_ = session.Save(r, w)
 		http.Redirect(w, r, "/auth/forgot", http.StatusSeeOther)

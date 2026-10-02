@@ -13,6 +13,7 @@ import (
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	"github.com/sirupsen/logrus"
 )
@@ -339,9 +340,6 @@ func TestPlaceOrder_ZeroShippingMethods_RejectsOrder(t *testing.T) {
 
 func TestPlaceOrder_RateLimiting(t *testing.T) {
 	setupTestEnvironment(t)
-	ResetTrustedProxies()
-	defer ResetTrustedProxies()
-	defer ResetRateLimiters()
 
 	methods := []checkoutDomain.ShippingMethod{
 		checkoutDomain.NewShippingMethod("flat", "Flat rate", 500, true, "Standard Post", true),
@@ -366,6 +364,7 @@ func TestPlaceOrder_RateLimiting(t *testing.T) {
 	cartSrv := &mockCheckoutCartService{cart: cart}
 
 	handler := newTestCheckoutHandler(mockCmds, cartSrv)
+	handler.limiter = ratelimit.NewInMemory(ratelimit.DefaultRules())
 
 	// Use a unique client IP to not interfere with other tests
 	remoteIP := "198.51.100.99:50000"

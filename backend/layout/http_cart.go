@@ -10,6 +10,7 @@ import (
 
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 	"github.com/gorilla/mux"
 )
 
@@ -19,7 +20,7 @@ func (handler httpHandler) AddToCart(w http.ResponseWriter, r *http.Request) {
 	// anything beyond that smells like a scraper or a stuck retry loop and
 	// gets a clean 429 (HTMX surfaces it as a failed request without
 	// disturbing the rest of the page).
-	if !addToCartLimiter.Allow(clientIP(r)) {
+	if !handler.allowRate(r.Context(), ratelimit.ActionAddToCart, r) {
 		http.Error(w, "too many requests, please slow down", http.StatusTooManyRequests)
 		return
 	}

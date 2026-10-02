@@ -1,66 +1,136 @@
-package ratelimit
+package ratelimit_test
 
 import (
+	"context"
+	"database/sql"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
+	_ "github.com/lib/pq"
 	"github.com/matryer/is"
+	"github.com/sirupsen/logrus"
 )
 
-// TestAllowBurstThenDeny exercises the documented contract: a fresh key is
-// allowed up to `burst` times in a tight loop with no refill, then refused.
-func TestAllowBurstThenDeny(t *testing.T) {
+func TestInMemoryLimiter_BurstThenDeny(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
-	// 1 token per second, burst of 3 — using a frozen clock so refill is
-	// strictly opt-in via the helper below.
-	l := New(1, 3)
-	frozen := time.Unix(1_700_000_000, 0)
-	l.now = func() time.Time { return frozen }
+	rules := map[string]ratelimit.Rule{
+		"test_action": {Rate: 1, Burst: 3},
+	}
+	limiter := ratelimit.NewInMemory(rules)
 
-	is.True(l.Allow("ip-a"))  // 1/3
-	is.True(l.Allow("ip-a"))  // 2/3
-	is.True(l.Allow("ip-a"))  // 3/3
-	is.True(!l.Allow("ip-a")) // bucket drained, must refuse
+	is.True(limiter.Allow(ctx, "test_action", "ip-a"))  // 1/3
+	is.True(limiter.Allow(ctx, "test_action", "ip-a"))  // 2/3
+	is.True(limiter.Allow(ctx, "test_action", "ip-a"))  // 3/3
+	is.True(!limiter.Allow(ctx, "test_action", "ip-a")) // bucket drained
 }
 
-// TestAllowRefillsAfterTime confirms that after enough wall-clock has elapsed
-// the bucket refills and Allow returns true again.
-func TestAllowRefillsAfterTime(t *testing.T) {
+func TestInMemoryLimiter_Isolation(t *testing.T) {
 	is := is.New(t)
+	ctx := context.Background()
 
-	// 5 tokens per second, burst of 2 — drain, then advance 1 s which
-	// must add 5 tokens (capped to burst=2).
-	l := New(5, 2)
-	frozen := time.Unix(1_700_000_000, 0)
-	l.now = func() time.Time { return frozen }
+	rules := map[string]ratelimit.Rule{
+		"action_a": {Rate: 1, Burst: 1},
+		"action_b": {Rate: 1, Burst: 1},
+	}
+	limiter := ratelimit.NewInMemory(rules)
 
-	is.True(l.Allow("ip-b"))  // 1/2
-	is.True(l.Allow("ip-b"))  // 2/2
-	is.True(!l.Allow("ip-b")) // drained
+	// ip-1 uses action_a
+	is.True(limiter.Allow(ctx, "action_a", "ip-1"))
+	is.True(!limiter.Allow(ctx, "action_a", "ip-1"))
 
-	// Advance one second; bucket should be back to full.
-	frozen = frozen.Add(time.Second)
-	is.True(l.Allow("ip-b"))
-	is.True(l.Allow("ip-b"))
-	is.True(!l.Allow("ip-b"))
+	// ip-2 uses action_a (isolated key)
+	is.True(limiter.Allow(ctx, "action_a", "ip-2"))
+
+	// ip-1 uses action_b (isolated action)
+	is.True(limiter.Allow(ctx, "action_b", "ip-1"))
 }
 
-// TestPerKeyIsolation makes sure one noisy key does not poison another's
-// bucket.
-func TestPerKeyIsolation(t *testing.T) {
+func TestPostgresLimiter_BurstThenDenyAndRefill(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/ecommerce?sslmode=disable"
+	}
+	db, err := sql.Open("postgres", dsn)
+	if err != nil || db.Ping() != nil {
+		t.Skip("PostgreSQL not available for integration test")
+	}
+	defer func() { _ = db.Close() }()
+
+	ctx := context.Background()
+	_, _ = db.ExecContext(ctx, "DELETE FROM rate_limits WHERE key LIKE 'pg-test-%'")
+
 	is := is.New(t)
+	logger := logrus.New()
+	logger.SetLevel(logrus.WarnLevel)
 
-	l := New(1, 2)
-	frozen := time.Unix(1_700_000_000, 0)
-	l.now = func() time.Time { return frozen }
+	testAction := "test_pg_action"
+	rules := map[string]ratelimit.Rule{
+		testAction: {Rate: 10, Burst: 2}, // 10 tokens/sec, burst 2
+	}
+	limiter := ratelimit.NewPostgres(db, rules, logger)
 
-	is.True(l.Allow("noisy"))
-	is.True(l.Allow("noisy"))
-	is.True(!l.Allow("noisy"))
+	key := "pg-test-client-1"
 
-	// A different key has its own untouched bucket.
-	is.True(l.Allow("quiet"))
-	is.True(l.Allow("quiet"))
-	is.True(!l.Allow("quiet"))
+	// Initial burst
+	is.True(limiter.Allow(ctx, testAction, key))  // 1/2
+	is.True(limiter.Allow(ctx, testAction, key))  // 2/2
+	is.True(!limiter.Allow(ctx, testAction, key)) // drained
+
+	// Wait 250ms for refill (10 tokens/sec * 0.25s = 2.5 tokens -> refills back to burst 2)
+	time.Sleep(250 * time.Millisecond)
+
+	is.True(limiter.Allow(ctx, testAction, key))
+}
+
+func TestPostgresLimiter_ConcurrentAccess(t *testing.T) {
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/ecommerce?sslmode=disable"
+	}
+	db, err := sql.Open("postgres", dsn)
+	if err != nil || db.Ping() != nil {
+		t.Skip("PostgreSQL not available for integration test")
+	}
+	defer func() { _ = db.Close() }()
+
+	ctx := context.Background()
+	key := "pg-test-concurrent"
+	_, _ = db.ExecContext(ctx, "DELETE FROM rate_limits WHERE key = $1", key)
+
+	logger := logrus.New()
+	logger.SetLevel(logrus.WarnLevel)
+
+	burst := 5
+	rules := map[string]ratelimit.Rule{
+		"concurrent_action": {Rate: 0.001, Burst: burst}, // essentially no refill during test
+	}
+	limiter := ratelimit.NewPostgres(db, rules, logger)
+
+	var wg sync.WaitGroup
+	allowedCount := 0
+	var mu sync.Mutex
+
+	// Fire 20 concurrent goroutines representing multiple pods/requests hitting the limiter
+	totalWorkers := 20
+	wg.Add(totalWorkers)
+	for i := 0; i < totalWorkers; i++ {
+		go func() {
+			defer wg.Done()
+			if limiter.Allow(ctx, "concurrent_action", key) {
+				mu.Lock()
+				allowedCount++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	if allowedCount != burst {
+		t.Fatalf("expected exactly %d concurrent requests allowed, got %d", burst, allowedCount)
+	}
 }
