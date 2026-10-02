@@ -14,6 +14,8 @@ package sweeper
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/checkout/query"
@@ -23,6 +25,58 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// DefaultSweeperLockID is a unique PostgreSQL advisory lock identifier
+// for the checkout reservation sweeper. ("goecom_s" in hex)
+const DefaultSweeperLockID = int64(7453303666270428531)
+
+// Locker is an optional distributed lock seam used to ensure only one
+// replica executes the sweep pass at a time.
+type Locker interface {
+	// TryLock attempts to acquire the lock without blocking.
+	// Returns acquired=true and an unlock func if successful, or acquired=false if already held.
+	TryLock(ctx context.Context) (acquired bool, unlock func(), err error)
+}
+
+// PostgresLocker implements Locker using PostgreSQL session-level advisory locks.
+type PostgresLocker struct {
+	db     *sql.DB
+	lockID int64
+}
+
+// NewPostgresLocker builds a Locker backed by pg_try_advisory_lock on the given DB.
+func NewPostgresLocker(db *sql.DB, lockID int64) *PostgresLocker {
+	return &PostgresLocker{db: db, lockID: lockID}
+}
+
+// TryLock attempts to obtain a session-level advisory lock using a dedicated database connection.
+func (l *PostgresLocker) TryLock(ctx context.Context) (bool, func(), error) {
+	conn, err := l.db.Conn(ctx)
+	if err != nil {
+		return false, nil, fmt.Errorf("sweeper: acquire db connection: %w", err)
+	}
+
+	var acquired bool
+	err = conn.QueryRowContext(ctx, "SELECT pg_try_advisory_lock($1)", l.lockID).Scan(&acquired)
+	if err != nil {
+		_ = conn.Close()
+		return false, nil, fmt.Errorf("sweeper: query pg_try_advisory_lock: %w", err)
+	}
+
+	if !acquired {
+		_ = conn.Close()
+		return false, nil, nil
+	}
+
+	unlock := func() {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		defer func() { _ = conn.Close() }()
+		_, _ = conn.ExecContext(unlockCtx, "SELECT pg_advisory_unlock($1)", l.lockID)
+	}
+
+	return true, unlock, nil
+}
 
 // tracer for the reservation sweeper; each periodic tick gets its own span so
 // it's easy to graph sweep frequency and outcome in Jaeger.
@@ -45,6 +99,7 @@ type expiredPendingLister interface {
 type Sweeper struct {
 	queries  expiredPendingLister
 	commands ExpireCommand
+	locker   Locker
 	ttl      time.Duration
 	interval time.Duration
 	logger   logrus.FieldLogger
@@ -54,18 +109,27 @@ type Sweeper struct {
 // New builds a Sweeper. ttl is how old a pending order must be before it is
 // expired; interval is how often the sweep runs. Both should be positive —
 // non-positive values disable the sweeper at Run time so a misconfigured
-// deployment can't crash or spin.
-func New(queries query.Service, commands ExpireCommand, ttl, interval time.Duration, logger logrus.FieldLogger) *Sweeper {
-	return newSweeper(queries, commands, ttl, interval, logger)
+// deployment can't crash or spin. An optional Locker may be provided to
+// coordinate sweeps across multiple running replicas.
+func New(queries query.Service, commands ExpireCommand, ttl, interval time.Duration, logger logrus.FieldLogger, locker ...Locker) *Sweeper {
+	var l Locker
+	if len(locker) > 0 {
+		l = locker[0]
+	}
+	return newSweeperWithLocker(queries, commands, ttl, interval, logger, l)
 }
 
-// newSweeper builds a Sweeper from the narrow read-side seam. The exported
-// New pins the dependency to the concrete query.Service to keep the
-// composition root explicit; tests use this constructor with a fake.
+// newSweeper builds a Sweeper from the narrow read-side seam without a locker.
 func newSweeper(queries expiredPendingLister, commands ExpireCommand, ttl, interval time.Duration, logger logrus.FieldLogger) *Sweeper {
+	return newSweeperWithLocker(queries, commands, ttl, interval, logger, nil)
+}
+
+// newSweeperWithLocker builds a Sweeper with an optional distributed locker.
+func newSweeperWithLocker(queries expiredPendingLister, commands ExpireCommand, ttl, interval time.Duration, logger logrus.FieldLogger, locker Locker) *Sweeper {
 	return &Sweeper{
 		queries:  queries,
 		commands: commands,
+		locker:   locker,
 		ttl:      ttl,
 		interval: interval,
 		logger:   logger,
@@ -108,6 +172,19 @@ func (s *Sweeper) Run(ctx context.Context) {
 // sweep performs a single sweep pass against the given "now". Split out so
 // tests can drive it deterministically without a ticker.
 func (s *Sweeper) sweep(ctx context.Context, now time.Time) {
+	if s.locker != nil {
+		acquired, unlock, err := s.locker.TryLock(ctx)
+		if err != nil {
+			s.logger.WithError(err).Warn("reservation sweeper: failed to acquire advisory lock")
+			return
+		}
+		if !acquired {
+			s.logger.Debug("reservation sweeper: sweep pass skipped, another replica holds the advisory lock")
+			return
+		}
+		defer unlock()
+	}
+
 	cutoff := now.Add(-s.ttl)
 	ctx, span := tracer.Start(ctx, "Sweeper.sweep", trace.WithAttributes(
 		attribute.String("sweeper.cutoff", cutoff.Format(time.RFC3339)),

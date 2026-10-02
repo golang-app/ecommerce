@@ -192,3 +192,78 @@ func TestRun_DisabledOnNonPositiveInterval(t *testing.T) {
 	is.Equal(len(bus.published), 0)
 	is.Equal(len(store.sent), 0)
 }
+
+type fakeTxSession struct {
+	fakeStore
+	committed  bool
+	rolledBack bool
+}
+
+func (s *fakeTxSession) Commit() error {
+	s.committed = true
+	return nil
+}
+
+func (s *fakeTxSession) Rollback() error {
+	s.rolledBack = true
+	return nil
+}
+
+type fakeTxStore struct {
+	fakeStore
+	beginErr  error
+	activeSess *fakeTxSession
+}
+
+func (s *fakeTxStore) BeginTx(_ context.Context) (TxSession, error) {
+	if s.beginErr != nil {
+		return nil, s.beginErr
+	}
+	sess := &fakeTxSession{
+		fakeStore: fakeStore{
+			rows: s.rows,
+		},
+	}
+	s.activeSess = sess
+	return sess, nil
+}
+
+func TestDispatchOnce_TxStore_CommitsBatchTransaction(t *testing.T) {
+	is := is.New(t)
+	txStore := &fakeTxStore{
+		fakeStore: fakeStore{
+			rows: []Row{
+				{ID: 101, Kind: "test.A", Payload: []byte("tx-one"), CreatedAt: time.Now()},
+				{ID: 102, Kind: "test.A", Payload: []byte("tx-two"), CreatedAt: time.Now()},
+			},
+		},
+	}
+	bus := &fakeBus{}
+	d := NewDispatcher(txStore, bus, decodeTest, discardLogger(), time.Second)
+
+	d.dispatchOnce(context.Background())
+
+	is.Equal(len(bus.published), 2)
+	is.True(txStore.activeSess != nil)
+	is.True(txStore.activeSess.committed)
+	is.Equal(txStore.activeSess.sent, []int64{101, 102})
+}
+
+func TestDispatchOnce_TxStore_BeginErrorDoesNotPublish(t *testing.T) {
+	is := is.New(t)
+	txStore := &fakeTxStore{
+		beginErr: errors.New("db connection pool exhausted"),
+		fakeStore: fakeStore{
+			rows: []Row{
+				{ID: 101, Kind: "test.A", Payload: []byte("tx-one"), CreatedAt: time.Now()},
+			},
+		},
+	}
+	bus := &fakeBus{}
+	d := NewDispatcher(txStore, bus, decodeTest, discardLogger(), time.Second)
+
+	d.dispatchOnce(context.Background())
+
+	is.Equal(len(bus.published), 0)
+}
+

@@ -152,3 +152,70 @@ func TestRun_StopsOnContextCancel(t *testing.T) {
 		t.Fatal("Run did not return after context cancel")
 	}
 }
+
+type fakeLocker struct {
+	acquired bool
+	unlocked bool
+	err      error
+	tryCalls int
+}
+
+func (f *fakeLocker) TryLock(_ context.Context) (bool, func(), error) {
+	f.tryCalls++
+	if f.err != nil {
+		return false, nil, f.err
+	}
+	if !f.acquired {
+		return false, nil, nil
+	}
+	unlock := func() {
+		f.unlocked = true
+	}
+	return true, unlock, nil
+}
+
+func TestSweep_WithLocker_AcquiredRunsAndUnlocks(t *testing.T) {
+	is := is.New(t)
+	q := &fakeQueries{ids: []string{"ord-1", "ord-2"}}
+	c := &fakeCommand{}
+	l := &fakeLocker{acquired: true}
+
+	s := newSweeperWithLocker(q, c, 30*time.Minute, 5*time.Minute, discardLogger(), l)
+	s.sweep(context.Background(), time.Now())
+
+	is.Equal(l.tryCalls, 1)
+	is.True(l.unlocked)
+	is.Equal(c.expired, []string{"ord-1", "ord-2"})
+	is.Equal(q.calls, 1)
+}
+
+func TestSweep_WithLocker_NotAcquiredSkipsSweep(t *testing.T) {
+	is := is.New(t)
+	q := &fakeQueries{ids: []string{"ord-1", "ord-2"}}
+	c := &fakeCommand{}
+	l := &fakeLocker{acquired: false}
+
+	s := newSweeperWithLocker(q, c, 30*time.Minute, 5*time.Minute, discardLogger(), l)
+	s.sweep(context.Background(), time.Now())
+
+	is.Equal(l.tryCalls, 1)
+	is.True(!l.unlocked)
+	is.Equal(len(c.expired), 0)
+	is.Equal(q.calls, 0) // query never executed
+}
+
+func TestSweep_WithLocker_ErrorSkipsSweep(t *testing.T) {
+	is := is.New(t)
+	q := &fakeQueries{ids: []string{"ord-1"}}
+	c := &fakeCommand{}
+	l := &fakeLocker{err: errors.New("lock connection failure")}
+
+	s := newSweeperWithLocker(q, c, 30*time.Minute, 5*time.Minute, discardLogger(), l)
+	s.sweep(context.Background(), time.Now())
+
+	is.Equal(l.tryCalls, 1)
+	is.True(!l.unlocked)
+	is.Equal(len(c.expired), 0)
+	is.Equal(q.calls, 0)
+}
+
