@@ -32,10 +32,21 @@ import (
 // Service. Returns the application.BoundedContext envelope and the
 // concrete *app.Service the layout / checkout adapter consume.
 func New(db *sql.DB, client *fakestripe.Client) (application.BoundedContext, *app.Service) {
+	return NewWithProvider(db, adapter.NewProvider(client))
+}
+
+// NewWithProvider wires the payments context with an explicit app.Provider.
+func NewWithProvider(db *sql.DB, provider app.Provider) (application.BoundedContext, *app.Service) {
 	storage := adapter.NewPostgresStorage(db)
-	provider := adapter.NewProvider(client)
 	srv := app.NewService(storage, provider, newChargeID, nil)
 	return &boundedContext{}, srv
+}
+
+// NewStripe wires the payments context using the real Stripe gateway adapter.
+func NewStripe(db *sql.DB, secretKey string) (application.BoundedContext, *app.Service) {
+	return NewWithProvider(db, adapter.NewStripeProvider(adapter.StripeConfig{
+		SecretKey: secretKey,
+	}))
 }
 
 // NewInMemory is the test-friendly variant: same wiring, but with the

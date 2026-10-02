@@ -161,7 +161,10 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		https.InternalError(w, "internal-error", err.Error())
 		return
 	}
-	cardNumber := r.FormValue("card_number")
+	paymentToken := strings.TrimSpace(r.FormValue("payment_token"))
+	if paymentToken == "" {
+		paymentToken = strings.TrimSpace(r.FormValue("card_number"))
+	}
 	customerID := handler.currentCustomerID(r) // empty for anonymous
 
 	reqLog := observability.Logger(r.Context()).WithFields(logrus.Fields{
@@ -240,8 +243,8 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Card details are only required for the card payment method.
-	if payMethod.RequiresCard() && strings.TrimSpace(cardNumber) == "" {
-		reqLog.Warn("Card number missing for card payment")
+	if payMethod.RequiresCard() && paymentToken == "" {
+		reqLog.Warn("Card number / payment token missing for card payment")
 		session, _ := store.Get(r, "ecommerce")
 		session.AddFlash("card number is required for card payments", "error")
 		_ = session.Save(r, w)
@@ -279,7 +282,7 @@ func (handler httpHandler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		discount = d
 	}
 
-	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, cardNumber, shipTo, method, payMethod, discount)
+	order, err := handler.checkoutSrv.Place(r.Context(), sessID, customerID, paymentToken, shipTo, method, payMethod, discount)
 	if errors.Is(err, checkoutDomain.ErrCartEmpty) {
 		reqLog.Warn("Checkout aborted: cart is empty")
 		http.Redirect(w, r, "/cart", http.StatusSeeOther)
