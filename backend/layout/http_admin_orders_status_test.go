@@ -498,6 +498,93 @@ func TestAdminUpdateOrderStatus_PaymentStatus_Cancelled(t *testing.T) {
 	}
 }
 
+func TestAdminUpdateOrderStatus_PaymentStatus_Cancelled_PendingOrder(t *testing.T) {
+	setupTestEnvironment(t)
+
+	orderID := "ord-cancel-pending"
+	orderView := makeTestOrderView(orderID, checkoutDomain.StatusPending, "", "")
+
+	var adminCancelCalled bool
+
+	checkoutCmds := &mockStatusCheckoutCmds{
+		adminCancelFn: func(ctx context.Context, oID string) error {
+			if oID == orderID {
+				adminCancelCalled = true
+			}
+			return nil
+		},
+	}
+
+	checkoutQry := &mockStatusCheckoutQry{
+		findFn: func(ctx context.Context, id string) (checkoutQuery.OrderView, error) {
+			if id == orderID {
+				return orderView, nil
+			}
+			return checkoutQuery.OrderView{}, checkoutDomain.ErrOrderNotFound
+		},
+	}
+
+	fulfillmentSrv := &mockStatusFulfillmentSrv{}
+
+	handler := newTestOrderStatusHandler(checkoutCmds, checkoutQry, fulfillmentSrv)
+
+	form := url.Values{
+		"payment_status": {"cancelled"},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/orders/"+orderID+"/status", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = mux.SetURLVars(req, map[string]string{"orderID": orderID})
+	setAdminSession(t, req)
+	rec := httptest.NewRecorder()
+
+	handler.AdminUpdateOrderStatus(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
+	}
+
+	if !adminCancelCalled {
+		t.Errorf("expected AdminCancel to be called for pending order %s", orderID)
+	}
+}
+
+func TestAdminCancelOrder_PendingOrder(t *testing.T) {
+	setupTestEnvironment(t)
+
+	orderID := "ord-cancel-pending-direct"
+	var adminCancelCalled bool
+
+	checkoutCmds := &mockStatusCheckoutCmds{
+		adminCancelFn: func(ctx context.Context, oID string) error {
+			if oID == orderID {
+				adminCancelCalled = true
+			}
+			return nil
+		},
+	}
+
+	checkoutQry := &mockStatusCheckoutQry{}
+	fulfillmentSrv := &mockStatusFulfillmentSrv{}
+
+	handler := newTestOrderStatusHandler(checkoutCmds, checkoutQry, fulfillmentSrv)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/orders/"+orderID+"/cancel", nil)
+	req = mux.SetURLVars(req, map[string]string{"orderID": orderID})
+	setAdminSession(t, req)
+	rec := httptest.NewRecorder()
+
+	handler.AdminCancelOrder(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
+	}
+
+	if !adminCancelCalled {
+		t.Errorf("expected AdminCancel to be called for pending order %s", orderID)
+	}
+}
+
 func TestAdminUpdateOrderStatus_DeliveryStatus_ShippedAndDelivered(t *testing.T) {
 	setupTestEnvironment(t)
 

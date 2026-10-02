@@ -336,10 +336,10 @@ func (o *Order) SetTracking(carrier, trackingCode string, at time.Time) {
 	o.raise(OrderTrackingUpdated{OrderID: o.id, Carrier: carrier, TrackingCode: trackingCode, At: at})
 }
 
-// Cancel cancels a paid order. Only paid orders can be cancelled — pending,
-// failed and already-cancelled orders are rejected with ErrOrderNotCancellable.
+// Cancel cancels an order. Paid and pending orders can be cancelled —
+// failed, shipped, delivered and already-cancelled orders are rejected with ErrOrderNotCancellable.
 func (o *Order) Cancel(reason string, at time.Time) error {
-	if o.status != StatusPaid {
+	if o.status != StatusPaid && o.status != StatusPending {
 		return ErrOrderNotCancellable
 	}
 	o.raise(OrderCancelled{OrderID: o.id, Reason: reason, At: at})

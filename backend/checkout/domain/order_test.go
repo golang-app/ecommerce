@@ -88,6 +88,40 @@ func TestCancel_FailedOrderNotCancellable(t *testing.T) {
 	}
 }
 
+func TestCancel_PendingOrderSucceeds(t *testing.T) {
+	at := time.Date(2026, 5, 27, 9, 0, 0, 0, time.UTC)
+	o := domain.RehydrateOrder([]domain.Event{
+		domain.OrderPlaced{
+			OrderID:    "ord-pending",
+			Lines:      []domain.Line{domain.NewLine("v1", "Item", 1, 1000, "USD")},
+			ShipMethod: domain.RebuildShippingMethod("pickup", "Personal pickup", 0),
+			At:         at,
+		},
+	})
+
+	if o.Status() != domain.StatusPending {
+		t.Fatalf("status = %q, want pending", o.Status())
+	}
+
+	if err := o.Cancel("customer abandoned", time.Now()); err != nil {
+		t.Fatalf("cancel of pending order failed: %v", err)
+	}
+
+	if o.Status() != domain.StatusCancelled {
+		t.Errorf("status = %q, want cancelled", o.Status())
+	}
+
+	pending := o.PendingEvents()
+	if len(pending) != 1 {
+		t.Fatalf("expected 1 pending event, got %d", len(pending))
+	}
+	if ev, ok := pending[0].(domain.OrderCancelled); !ok {
+		t.Fatalf("pending event = %T, want OrderCancelled", pending[0])
+	} else if ev.Reason != "customer abandoned" {
+		t.Errorf("reason = %q, want 'customer abandoned'", ev.Reason)
+	}
+}
+
 // TestPlaceOrder_AppliesDiscount locks in the discount-before-tax pricing
 // math: the OrderPlaced event carries the resolved discount and the
 // rehydrated order's total reflects (subtotal - discount) + tax + shipping.
