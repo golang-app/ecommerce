@@ -131,6 +131,12 @@ type config struct {
 	// TrustedProxies is a comma-separated list of CIDR ranges or IP addresses
 	// of trusted reverse proxies. When empty, defaults to loopback and private networks.
 	TrustedProxies string `conf:"TRUSTED_PROXIES"`
+	// PaymentGateway selects the payment gateway provider: "fakestripe" (default) or "stripe".
+	PaymentGateway string `conf:"default:fakestripe,PAYMENT_GATEWAY"`
+	// StripeSecretKey is the secret API key used for authenticating with Stripe's PaymentIntents API.
+	StripeSecretKey string `conf:"mask,STRIPE_SECRET_KEY"`
+	// StripePublishableKey is the publishable key rendered on checkout pages for client-side tokenization.
+	StripePublishableKey string `conf:"STRIPE_PUBLISHABLE_KEY"`
 }
 
 // defaultSessionSecret is the placeholder value SessionSecret must NOT keep

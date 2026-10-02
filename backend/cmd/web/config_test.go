@@ -68,3 +68,15 @@ func TestConfig_PProfDefaults(t *testing.T) {
 
 	is.Equal(cfg.PProfEnabled, false)
 }
+
+func TestPaymentGatewayConfig_Defaults(t *testing.T) {
+	is := is.New(t)
+
+	var cfg config
+	err := conf.Parse([]string{}, "", &cfg)
+	is.NoErr(err)
+
+	is.Equal(cfg.PaymentGateway, "fakestripe")
+	is.Equal(cfg.StripeSecretKey, "")
+	is.Equal(cfg.StripePublishableKey, "")
+}

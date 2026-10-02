@@ -35,6 +35,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 	"github.com/bkielbasa/go-ecommerce/backend/layout"
 	"github.com/bkielbasa/go-ecommerce/backend/payments"
+	paymentsapp "github.com/bkielbasa/go-ecommerce/backend/payments/app"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
@@ -175,13 +176,22 @@ func main() {
 	shippingStrategy := checkoutdomain.ThresholdShippingStrategy{FreeShippingThreshold: cfg.FreeShippingThreshold}
 	// Payments bounded context: an INTERNAL ACL in front of the
 	// fake-Stripe provider. The composition root is the only place
-	// that knows fakestripe exists; checkout asks payments to charge
+	// that knows the external provider exists; checkout asks payments to charge
 	// through its narrow PaymentProcessor port (satisfied by the
 	// thin PaymentsProcessor adapter below). Three nested layers —
-	// checkout -> payments -> fakestripe — each translating into the
+	// checkout -> payments -> provider — each translating into the
 	// next one's vocabulary.
-	fakestripeClient := fakestripe.NewClient(cfg.StripeFailCardEndingIn)
-	paymentsBD, paymentsSrv := payments.New(db, fakestripeClient)
+	var (
+		paymentsBD  application.BoundedContext
+		paymentsSrv *paymentsapp.Service
+	)
+	if strings.ToLower(cfg.PaymentGateway) == "stripe" && cfg.StripeSecretKey != "" {
+		paymentsBD, paymentsSrv = payments.NewStripe(db, cfg.StripeSecretKey)
+		logger.Info("using real Stripe payment gateway adapter")
+	} else {
+		fakestripeClient := fakestripe.NewClient(cfg.StripeFailCardEndingIn)
+		paymentsBD, paymentsSrv = payments.New(db, fakestripeClient)
+	}
 	checkoutPayments := checkoutadapter.NewPaymentsProcessor(paymentsSrv)
 	checkoutBD, checkoutSrv, checkoutQry := checkout.New(db, cartSrv, outboxStore, checkoutPayments, catalogService, catalogService, taxStrategy, shippingStrategy)
 	// Fulfillment Process Manager: subscribes to OrderPaid, spawns a

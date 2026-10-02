@@ -21,12 +21,14 @@ import (
 type mockCheckoutCommandsForCheckoutTest struct {
 	methods     []checkoutDomain.ShippingMethod
 	placeCalled bool
+	placedToken string
 	placedOrder checkoutDomain.Order
 	placeErr    error
 }
 
 func (m *mockCheckoutCommandsForCheckoutTest) Place(ctx context.Context, sessID, customerID, cardNumber string, shipTo checkoutDomain.Address, shipMethod checkoutDomain.ShippingMethod, payMethod checkoutDomain.PaymentMethod, discount promodomain.Discount) (checkoutDomain.Order, error) {
 	m.placeCalled = true
+	m.placedToken = cardNumber
 	if m.placeErr != nil {
 		return checkoutDomain.Order{}, m.placeErr
 	}
@@ -259,7 +261,6 @@ func TestPlaceOrder_AcceptsEnabledShippingMethod(t *testing.T) {
 		t.Fatalf("expected redirect to /order/order-123, got %s", loc)
 	}
 }
-
 func TestCheckout_ZeroShippingMethods_RendersUnavailableMessage(t *testing.T) {
 	setupTestEnvironment(t)
 
@@ -432,5 +433,99 @@ func TestPlaceOrder_RateLimiting(t *testing.T) {
 	}
 	if flashes[0] != "Too many checkout attempts. Please try again in a moment." {
 		t.Errorf("got flash %v, want 'Too many checkout attempts. Please try again in a moment.'", flashes[0])
+	}
+}
+
+func TestPlaceOrder_AcceptsPaymentToken(t *testing.T) {
+	setupTestEnvironment(t)
+
+	methods := []checkoutDomain.ShippingMethod{
+		checkoutDomain.NewShippingMethod("flat", "Flat rate", 500, true, "Standard Post", true),
+	}
+	mockCmds := &mockCheckoutCommandsForCheckoutTest{
+		methods: methods,
+		placedOrder: checkoutDomain.NewOrder(
+			"order-token-1",
+			"cart-123",
+			"",
+			checkoutDomain.Address{},
+			methods[0],
+			checkoutDomain.PaymentMethods()[0],
+			nil,
+			checkoutDomain.StatusPending,
+			time.Now().UTC(),
+		),
+	}
+
+	cart := cartDomain.NewCart(cartDomain.NewUser(""))
+	_ = cart.Add(cartDomain.NewProduct("prod-1", "Test Product", 5000, cartDomain.MustNewCurrency("USD")), 1)
+	cartSrv := &mockCheckoutCartService{cart: cart}
+
+	handler := newTestCheckoutHandler(mockCmds, cartSrv)
+
+	form := url.Values{
+		"ship_method":    {"flat"},
+		"payment_method": {"card"},
+		"payment_token":  {"pm_token_123456"},
+		"ship_name":      {"Jane Doe"},
+		"ship_street1":   {"123 Main St"},
+		"ship_city":      {"Portland"},
+		"ship_zip":       {"97201"},
+		"ship_country":   {"United States"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/checkout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "cart_id", Value: "cart-123"})
+	rec := httptest.NewRecorder()
+
+	handler.PlaceOrder(rec, req)
+
+	if !mockCmds.placeCalled {
+		t.Fatalf("expected Place to be called")
+	}
+	if mockCmds.placedToken != "pm_token_123456" {
+		t.Fatalf("expected token pm_token_123456 to be passed to Place, got %q", mockCmds.placedToken)
+	}
+}
+
+func TestPlaceOrder_MissingPaymentToken(t *testing.T) {
+	setupTestEnvironment(t)
+
+	methods := []checkoutDomain.ShippingMethod{
+		checkoutDomain.NewShippingMethod("flat", "Flat rate", 500, true, "Standard Post", true),
+	}
+	mockCmds := &mockCheckoutCommandsForCheckoutTest{methods: methods}
+
+	cart := cartDomain.NewCart(cartDomain.NewUser(""))
+	_ = cart.Add(cartDomain.NewProduct("prod-1", "Test Product", 5000, cartDomain.MustNewCurrency("USD")), 1)
+	cartSrv := &mockCheckoutCartService{cart: cart}
+
+	handler := newTestCheckoutHandler(mockCmds, cartSrv)
+
+	form := url.Values{
+		"ship_method":    {"flat"},
+		"payment_method": {"card"},
+		// Neither payment_token nor card_number provided
+		"ship_name":    {"Jane Doe"},
+		"ship_street1": {"123 Main St"},
+		"ship_city":    {"Portland"},
+		"ship_zip":     {"97201"},
+		"ship_country": {"United States"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/checkout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "cart_id", Value: "cart-123"})
+	rec := httptest.NewRecorder()
+
+	handler.PlaceOrder(rec, req)
+
+	if mockCmds.placeCalled {
+		t.Fatalf("expected Place NOT to be called when payment token is missing")
+	}
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected status 303, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/checkout" {
+		t.Fatalf("expected redirect to /checkout, got %s", loc)
 	}
 }
