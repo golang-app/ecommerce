@@ -13,6 +13,7 @@ import (
 	cartDomain "github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	"github.com/sirupsen/logrus"
 )
@@ -337,3 +338,99 @@ func TestPlaceOrder_ZeroShippingMethods_RejectsOrder(t *testing.T) {
 	}
 }
 
+func TestPlaceOrder_RateLimiting(t *testing.T) {
+	setupTestEnvironment(t)
+
+	methods := []checkoutDomain.ShippingMethod{
+		checkoutDomain.NewShippingMethod("flat", "Flat rate", 500, true, "Standard Post", true),
+	}
+	mockCmds := &mockCheckoutCommandsForCheckoutTest{
+		methods: methods,
+		placedOrder: checkoutDomain.NewOrder(
+			"order-rate-limit",
+			"cart-rate-limit",
+			"",
+			checkoutDomain.Address{},
+			methods[0],
+			checkoutDomain.PaymentMethods()[0],
+			nil,
+			checkoutDomain.StatusPending,
+			time.Now().UTC(),
+		),
+	}
+
+	cart := cartDomain.NewCart(cartDomain.NewUser(""))
+	_ = cart.Add(cartDomain.NewProduct("prod-1", "Test Product", 5000, cartDomain.MustNewCurrency("USD")), 1)
+	cartSrv := &mockCheckoutCartService{cart: cart}
+
+	handler := newTestCheckoutHandler(mockCmds, cartSrv)
+	handler.limiter = ratelimit.NewInMemory(ratelimit.DefaultRules())
+
+	// Use a unique client IP to not interfere with other tests
+	remoteIP := "198.51.100.99:50000"
+
+	// 5 requests from this IP should succeed (burst capacity is 5)
+	for i := 1; i <= 5; i++ {
+		form := url.Values{
+			"ship_method":    {"flat"},
+			"payment_method": {"card"},
+			"card_number":    {"4242424242424242"},
+			"ship_name":      {"Jane Doe"},
+			"ship_street1":   {"123 Main St"},
+			"ship_city":      {"Portland"},
+			"ship_zip":       {"97201"},
+			"ship_country":   {"United States"},
+		}
+		req := httptest.NewRequest(http.MethodPost, "/checkout", strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.RemoteAddr = remoteIP
+		req.AddCookie(&http.Cookie{Name: "cart_id", Value: "cart-rate-limit"})
+		rec := httptest.NewRecorder()
+
+		handler.PlaceOrder(rec, req)
+
+		if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/order/order-rate-limit" {
+			t.Fatalf("request %d: expected redirect to /order/order-rate-limit, got code %d, location %s", i, rec.Code, rec.Header().Get("Location"))
+		}
+	}
+
+	// 6th request from the same IP must be rate-limited
+	form := url.Values{
+		"ship_method":    {"flat"},
+		"payment_method": {"card"},
+		"card_number":    {"4242424242424242"},
+		"ship_name":      {"Jane Doe"},
+		"ship_street1":   {"123 Main St"},
+		"ship_city":      {"Portland"},
+		"ship_zip":       {"97201"},
+		"ship_country":   {"United States"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/checkout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.RemoteAddr = remoteIP
+	req.AddCookie(&http.Cookie{Name: "cart_id", Value: "cart-rate-limit"})
+	rec := httptest.NewRecorder()
+
+	handler.PlaceOrder(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 redirect on rate limit, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/checkout" {
+		t.Fatalf("expected redirect to /checkout on rate limit, got %s", loc)
+	}
+
+	// Check flash message
+	reqWithCookies := httptest.NewRequest(http.MethodGet, "/checkout", nil)
+	for _, c := range rec.Result().Cookies() {
+		reqWithCookies.AddCookie(c)
+	}
+	sess, _ := store.Get(reqWithCookies, "ecommerce")
+	flashes := sess.Flashes("error")
+	if len(flashes) == 0 {
+		t.Fatalf("expected flash error message on rate limit, got none")
+	}
+	if flashes[0] != "Too many checkout attempts. Please try again in a moment." {
+		t.Errorf("got flash %v, want 'Too many checkout attempts. Please try again in a moment.'", flashes[0])
+	}
+}

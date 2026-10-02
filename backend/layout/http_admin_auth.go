@@ -2,6 +2,8 @@ package layout
 
 import (
 	"net/http"
+
+	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 )
 
 // adminSessionCookie is the cookie name for the admin session. It is
@@ -73,7 +75,7 @@ func (handler httpHandler) HandleAdminLogin(w http.ResponseWriter, r *http.Reque
 	// infrequent enough that they will not exhaust the budget on
 	// their own and credential stuffing against the admin form is
 	// the same threat model.
-	if !loginLimiter.Allow(clientIP(r)) {
+	if !handler.allowRate(r.Context(), ratelimit.ActionLogin, r) {
 		csrfSession.AddFlash("Too many login attempts, please try again in a moment.", "error")
 		_ = csrfSession.Save(r, w)
 		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)

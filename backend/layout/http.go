@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -64,8 +65,10 @@ type httpHandler struct {
 	// active currency comes from the request-bound store, but the
 	// rates table itself is shared by every store (it just knows how
 	// to convert FROM USD TO each supported display currency).
-	rates  fx.Rates
-	logger logrus.FieldLogger
+	rates          fx.Rates
+	logger         logrus.FieldLogger
+	limiter        rateLimiter
+	trustedProxies []*net.IPNet
 }
 
 // HomePage renders the storefront landing page: a "new arrivals" grid of the

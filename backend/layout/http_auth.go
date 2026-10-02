@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/bkielbasa/go-ecommerce/backend/auth/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 )
 
 func (handler httpHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +101,7 @@ func (handler httpHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	// human re-typing the wrong password a handful of times still gets
 	// through, but a bot trying dozens of passwords from the same source
 	// gets bounced back to the login form with a flash.
-	if !loginLimiter.Allow(clientIP(r)) {
+	if !handler.allowRate(r.Context(), ratelimit.ActionLogin, r) {
 		session.AddFlash("Too many login attempts, please try again in a moment.", "error")
 		_ = session.Save(r, w)
 		http.Redirect(w, r, "/auth/login", http.StatusSeeOther)
@@ -143,7 +144,7 @@ func (handler httpHandler) HandleRegister(w http.ResponseWriter, r *http.Request
 	// rate is deliberately tight enough to throttle automated account
 	// creation but loose enough that a household behind one NAT can still
 	// register a couple of customers.
-	if !registerLimiter.Allow(clientIP(r)) {
+	if !handler.allowRate(r.Context(), ratelimit.ActionRegister, r) {
 		session.AddFlash("Too many registration attempts, please try again later.", "error")
 		_ = session.Save(r, w)
 		http.Redirect(w, r, "/auth/register", http.StatusSeeOther)

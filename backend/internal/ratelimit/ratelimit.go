@@ -1,107 +1,220 @@
-// Package ratelimit provides a small, dependency-free token-bucket rate
-// limiter keyed by an arbitrary string (typically a client IP). It is
-// intentionally tiny — one mutex, a map of buckets, a fractional token
-// counter per bucket — so the whole package can live entirely in-memory in
-// a single process without pulling in golang.org/x/time/rate.
-//
-// Each bucket refills at `rate` tokens/second up to `burst` tokens. A bucket
-// allows a request iff its current token count is >= 1, in which case one
-// token is consumed. Buckets are created lazily on the first call for a key
-// and capped at maxKeys; once full, a random eviction round drops a
-// stale-looking entry to keep memory bounded under abusive traffic.
+// Package ratelimit provides a rate limiting port and adapters for
+// distributed (PostgreSQL) and in-memory rate limiting.
 package ratelimit
 
 import (
+	"context"
+	"database/sql"
+	"math"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
-// maxKeys caps the bucket map size. The number is generous enough for the
-// real workloads we throttle (login/register/cart-add per source IP) and
-// small enough that the map stays well under a megabyte even fully populated.
-const maxKeys = 4096
+// Standard action names for rate limiting across the application.
+const (
+	ActionLogin          = "login"
+	ActionRegister       = "register"
+	ActionAddToCart      = "add_to_cart"
+	ActionForgotPassword = "forgot_password"
+	ActionCheckout       = "checkout"
+)
 
-// bucket is the per-key state. tokens is fractional so a sub-per-second
-// rate (e.g. 3/hour) is representable; lastRefill anchors the next refill
-// calculation.
-type bucket struct {
+// Rule defines the token refill rate and burst capacity for an action.
+type Rule struct {
+	Rate  float64 // Tokens added per second
+	Burst int     // Maximum burst capacity
+}
+
+// NewRule constructs a Rule given a maximum limit over a duration window.
+func NewRule(limit int, window time.Duration) Rule {
+	if limit < 1 {
+		limit = 1
+	}
+	if window <= 0 {
+		window = time.Second
+	}
+	return Rule{
+		Rate:  float64(limit) / window.Seconds(),
+		Burst: limit,
+	}
+}
+
+// DefaultRules returns the production rate limit rules for standard application actions.
+func DefaultRules() map[string]Rule {
+	return map[string]Rule{
+		ActionLogin:          NewRule(5, time.Minute),
+		ActionRegister:       NewRule(3, time.Hour),
+		ActionAddToCart:      NewRule(30, time.Minute),
+		ActionForgotPassword: NewRule(3, time.Hour),
+		ActionCheckout:       NewRule(5, time.Minute),
+	}
+}
+
+// Limiter determines whether an action for a given key is permitted.
+type Limiter interface {
+	Allow(ctx context.Context, action string, key string) bool
+}
+
+// inMemoryBucket stores token bucket state for a single (action, key) in-memory.
+type inMemoryBucket struct {
 	tokens     float64
 	lastRefill time.Time
 }
 
-// Limiter is a token-bucket rate limiter keyed by string. The zero value is
-// not usable; construct one with New.
-type Limiter struct {
+type inMemoryLimiter struct {
 	mu      sync.Mutex
-	buckets map[string]*bucket
-	rate    float64
-	burst   float64
+	rules   map[string]Rule
+	buckets map[string]*inMemoryBucket
 	now     func() time.Time
 }
 
-// New returns a Limiter that refills each bucket at rate tokens/second up
-// to a maximum of burst tokens. burst doubles as the bucket's starting
-// capacity so the first burst requests for a fresh key always succeed.
-func New(rate float64, burst int) *Limiter {
-	if rate < 0 {
-		rate = 0
+// NewInMemory constructs a thread-safe in-memory Limiter with the provided rules.
+func NewInMemory(rules map[string]Rule) Limiter {
+	copiedRules := make(map[string]Rule, len(rules))
+	for k, v := range rules {
+		copiedRules[k] = v
 	}
-	if burst < 1 {
-		burst = 1
-	}
-	return &Limiter{
-		buckets: make(map[string]*bucket),
-		rate:    rate,
-		burst:   float64(burst),
+	return &inMemoryLimiter{
+		rules:   copiedRules,
+		buckets: make(map[string]*inMemoryBucket),
 		now:     time.Now,
 	}
 }
 
-// Allow reports whether a request for key is permitted right now. On true,
-// one token is consumed from the bucket; on false, the bucket is untouched.
-func (l *Limiter) Allow(key string) bool {
-	now := l.now()
+func (l *inMemoryLimiter) Allow(ctx context.Context, action string, key string) bool {
+	rule, ok := l.rules[action]
+	if !ok {
+		return true
+	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	b, ok := l.buckets[key]
-	if !ok {
-		// Cap the working set. We don't track usage timestamps so a
-		// random victim is the cheapest defensible eviction; under
-		// real load the surviving buckets refill to full within
-		// seconds, so a wrongly-evicted entry is self-healing.
-		if len(l.buckets) >= maxKeys {
-			l.evictOneLocked()
-		}
-		b = &bucket{tokens: l.burst, lastRefill: now}
-		l.buckets[key] = b
-	} else {
-		elapsed := now.Sub(b.lastRefill).Seconds()
-		if elapsed > 0 {
-			b.tokens += elapsed * l.rate
-			if b.tokens > l.burst {
-				b.tokens = l.burst
-			}
-			b.lastRefill = now
-		}
-	}
+	bucketKey := action + ":" + key
+	now := l.now().UTC()
 
-	if b.tokens >= 1 {
-		b.tokens--
+	b, exists := l.buckets[bucketKey]
+	if !exists {
+		l.buckets[bucketKey] = &inMemoryBucket{
+			tokens:     float64(rule.Burst) - 1.0,
+			lastRefill: now,
+		}
 		return true
 	}
+
+	elapsed := now.Sub(b.lastRefill).Seconds()
+	if elapsed > 0 {
+		b.tokens += elapsed * rule.Rate
+		if b.tokens > float64(rule.Burst) {
+			b.tokens = float64(rule.Burst)
+		}
+		b.lastRefill = now
+	}
+
+	if b.tokens >= 1.0 {
+		b.tokens -= 1.0
+		return true
+	}
+
 	return false
 }
 
-// evictOneLocked drops a single arbitrary entry from the bucket map. The
-// caller must hold l.mu. Go's map iteration is randomized so the chosen
-// victim is effectively uniform without us tracking insertion order.
-func (l *Limiter) evictOneLocked() {
-	// We only need to drop one entry; break out of the iteration on the
-	// first key we see.
-	for k := range l.buckets {
-		delete(l.buckets, k)
-		return
+type postgresLimiter struct {
+	db     *sql.DB
+	rules  map[string]Rule
+	logger logrus.FieldLogger
+}
+
+// NewPostgres constructs a Limiter backed by a PostgreSQL database table,
+// synchronizing rate limiting state across all instances/pods.
+func NewPostgres(db *sql.DB, rules map[string]Rule, logger logrus.FieldLogger) Limiter {
+	copiedRules := make(map[string]Rule, len(rules))
+	for k, v := range rules {
+		copiedRules[k] = v
 	}
+	return &postgresLimiter{
+		db:     db,
+		rules:  copiedRules,
+		logger: logger,
+	}
+}
+
+func (p *postgresLimiter) Allow(ctx context.Context, action string, key string) bool {
+	rule, ok := p.rules[action]
+	if !ok {
+		return true
+	}
+
+	tx, err := p.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		if p.logger != nil {
+			p.logger.WithError(err).Warn("rate limiter: failed to begin transaction, failing open")
+		}
+		return true
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	now := time.Now().UTC()
+
+	// Ensure the row exists with full burst capacity on first access.
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO rate_limits (action, key, tokens, last_refill)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (action, key) DO NOTHING
+	`, action, key, float64(rule.Burst), now)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.WithError(err).Warn("rate limiter: failed to ensure bucket row, failing open")
+		}
+		return true
+	}
+
+	var tokens float64
+	var lastRefill time.Time
+	err = tx.QueryRowContext(ctx, `
+		SELECT tokens, last_refill
+		FROM rate_limits
+		WHERE action = $1 AND key = $2
+		FOR UPDATE
+	`, action, key).Scan(&tokens, &lastRefill)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.WithError(err).Warn("rate limiter: failed to lock bucket row, failing open")
+		}
+		return true
+	}
+
+	elapsed := now.Sub(lastRefill).Seconds()
+	if elapsed > 0 {
+		tokens = math.Min(float64(rule.Burst), tokens+elapsed*rule.Rate)
+	}
+
+	allowed := false
+	if tokens >= 1.0 {
+		tokens -= 1.0
+		allowed = true
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE rate_limits
+		SET tokens = $1, last_refill = $2
+		WHERE action = $3 AND key = $4
+	`, tokens, now, action, key)
+	if err != nil {
+		if p.logger != nil {
+			p.logger.WithError(err).Warn("rate limiter: failed to update bucket, failing open")
+		}
+		return true
+	}
+
+	if err := tx.Commit(); err != nil {
+		if p.logger != nil {
+			p.logger.WithError(err).Warn("rate limiter: failed to commit transaction, failing open")
+		}
+		return true
+	}
+
+	return allowed
 }

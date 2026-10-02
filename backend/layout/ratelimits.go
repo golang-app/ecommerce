@@ -1,69 +1,145 @@
 package layout
 
 import (
+	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
-
-	"github.com/bkielbasa/go-ecommerce/backend/internal/ratelimit"
 )
 
-// Package-level limiters. One process, one set of buckets — keeping them
-// here (rather than on httpHandler) avoids threading them through every
-// handler signature and matches the existing `store` package var pattern.
-//
-// Rates are tuned conservatively for the abuse surface, not for legitimate
-// repeat traffic:
-//
-//   - loginLimiter: 5 logins / minute / IP. A human typing the wrong
-//     password a handful of times still gets through; credential-stuffing
-//     bots do not.
-//   - registerLimiter: 3 registrations / hour / IP. Real signups are rare;
-//     anything above this rate is almost certainly account-creation abuse.
-//   - addToCartLimiter: 30 cart-adds / minute / IP. The storefront triggers
-//     this once per click, so legitimate browsing stays well under; rapid
-//     scraping that hammers the variant box gets a 429.
-var (
-	loginLimiter     = ratelimit.New(5.0/60.0, 5)
-	registerLimiter  = ratelimit.New(3.0/3600.0, 3)
-	addToCartLimiter = ratelimit.New(30.0/60.0, 30)
-	// forgotPasswordLimiter caps the password-reset request rate at 3/hour
-	// per IP. Reset emails are an asymmetric workload (one cheap form post
-	// triggers a full SMTP send), and they double as an enumeration vector
-	// (timing differences between "exists" and "doesn't exist" code paths
-	// can leak signal); the same per-IP throttle that protects /auth/
-	// register fits here for the same reasons.
-	forgotPasswordLimiter = ratelimit.New(3.0/3600.0, 3)
-)
+// rateLimiter is the narrow internal seam the presentation layer requires
+// to check whether a given client action is allowed under the rate limit policy.
+type rateLimiter interface {
+	Allow(ctx context.Context, action string, key string) bool
+}
 
-// clientIP returns a best-effort source IP for rate-limiting decisions.
-// The first comma-delimited entry of X-Forwarded-For is honored when
-// present (typical for deployments behind a reverse proxy); otherwise we
-// fall back to the host portion of r.RemoteAddr. The string is normalized
-// (trimmed, lower-cased) so two requests from the same source always hash
-// to the same bucket key.
-//
-// We deliberately do NOT honor X-Real-IP or other arbitrary headers — only
-// X-Forwarded-For, which is the convention every proxy in our stack emits.
-// In a setup that does not strip these headers at the edge, a malicious
-// client could spoof X-Forwarded-For; the protections here are still a
-// useful first line, but a hardened deployment should terminate XFF at the
-// reverse proxy.
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			xff = xff[:i]
-		}
-		ip := strings.TrimSpace(xff)
-		if ip != "" {
-			return strings.ToLower(ip)
+// allowRate checks if an action by the requesting client is allowed.
+// If no limiter is configured on the handler (e.g. in minimal unit test setups),
+// requests are allowed by default.
+func (h httpHandler) allowRate(ctx context.Context, action string, r *http.Request) bool {
+	if h.limiter == nil {
+		return true
+	}
+	return h.limiter.Allow(ctx, action, h.clientIP(r))
+}
+
+var defaultTrustedProxyCIDRs = []string{
+	"127.0.0.0/8",    // IPv4 loopback
+	"::1/128",        // IPv6 loopback
+	"10.0.0.0/8",     // RFC 1918 private
+	"172.16.0.0/12",  // RFC 1918 private
+	"192.168.0.0/16", // RFC 1918 private
+	"169.254.0.0/16", // RFC 3927 IPv4 link-local
+	"fc00::/7",       // RFC 4193 IPv6 unique local
+	"fe80::/10",      // RFC 4291 IPv6 link-local
+}
+
+var defaultTrustedProxies = func() []*net.IPNet {
+	var parsed []*net.IPNet
+	for _, cidr := range defaultTrustedProxyCIDRs {
+		if n, err := parseCIDROrIP(cidr); err == nil {
+			parsed = append(parsed, n)
 		}
 	}
+	return parsed
+}()
+
+func parseCIDROrIP(s string) (*net.IPNet, error) {
+	if !strings.Contains(s, "/") {
+		ip := net.ParseIP(s)
+		if ip == nil {
+			return nil, fmt.Errorf("invalid IP address: %s", s)
+		}
+		if ip.To4() != nil {
+			s += "/32"
+		} else {
+			s += "/128"
+		}
+	}
+	_, ipNet, err := net.ParseCIDR(s)
+	if err != nil {
+		return nil, fmt.Errorf("invalid CIDR %q: %w", s, err)
+	}
+	return ipNet, nil
+}
+
+func parseTrustedProxies(config string) []*net.IPNet {
+	config = strings.TrimSpace(config)
+	if config == "" {
+		return defaultTrustedProxies
+	}
+	if strings.EqualFold(config, "none") {
+		return []*net.IPNet{}
+	}
+	raw := strings.Split(config, ",")
+	var parsed []*net.IPNet
+	for _, entry := range raw {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		if n, err := parseCIDROrIP(entry); err == nil {
+			parsed = append(parsed, n)
+		}
+	}
+	return parsed
+}
+
+func (h httpHandler) isTrustedProxy(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	host = strings.TrimSpace(host)
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+
+	proxies := h.trustedProxies
+	if proxies == nil {
+		proxies = defaultTrustedProxies
+	}
+
+	for _, network := range proxies {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// clientIP returns a best-effort source IP for rate-limiting decisions.
+// The X-Forwarded-For header is ONLY trusted if the direct socket connection
+// (r.RemoteAddr) originates from a trusted reverse proxy (e.g. AWS ALB,
+// Cloudflare, private VPC, or local loopback). If the socket connection is
+// untrusted, X-Forwarded-For is ignored and the host from r.RemoteAddr is returned
+// to prevent rate limit spoofing/bypassing.
+//
+// The string is normalized (trimmed, lower-cased) so two requests from the same
+// source always hash to the same bucket key.
+func (h httpHandler) clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		// RemoteAddr without a port (rare, but documented as
-		// possible for non-TCP transports) — use the whole string.
-		return strings.ToLower(r.RemoteAddr)
+		host = r.RemoteAddr
+	}
+	host = strings.TrimSpace(host)
+
+	if h.isTrustedProxy(r.RemoteAddr) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if i := strings.IndexByte(xff, ','); i >= 0 {
+				xff = xff[:i]
+			}
+			ip := strings.TrimSpace(xff)
+			if parsed := net.ParseIP(ip); parsed != nil {
+				return strings.ToLower(parsed.String())
+			}
+		}
+	}
+
+	if host == "" {
+		return "unknown"
 	}
 	return strings.ToLower(host)
 }
