@@ -31,12 +31,17 @@ import (
 // permitted: the ECST publication path is best-effort and silently
 // disabled when no reader is wired (mirroring how StockReleaser /
 // OrderLineSource are optional). The notification-style
-// OrderShipped event is published unconditionally either way.
-func New(db *sql.DB, bus *eventbus.Bus, orderDetail app.OrderDetailReader) (application.BoundedContext, *app.Service) {
-	storage := adapter.NewPostgres(db)
+// outbox is the seam through which the adapter stages integration events
+// into outbox_event inside the fulfillment update transaction; when provided,
+// integration events are published asynchronously by the outbox dispatcher.
+// If outbox is nil, the service falls back to publishing synchronously on bus.
+func New(db *sql.DB, bus *eventbus.Bus, outbox adapter.OutboxAppender, orderDetail app.OrderDetailReader) (application.BoundedContext, *app.Service) {
+	storage := adapter.NewPostgres(db, outbox).WithOrderDetailReader(orderDetail)
 	srv := app.NewService(storage).
-		WithPublisher(busPublisher{bus: bus}).
 		WithOrderDetailReader(orderDetail)
+	if outbox == nil && bus != nil {
+		srv = srv.WithPublisher(busPublisher{bus: bus})
+	}
 	return &boundedContext{}, srv
 }
 

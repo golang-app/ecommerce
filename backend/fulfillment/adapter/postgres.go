@@ -3,12 +3,14 @@ package adapter
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/fulfillment/app"
 	"github.com/bkielbasa/go-ecommerce/backend/fulfillment/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/fulfillment/integration"
 	"github.com/lib/pq"
 )
 
@@ -18,17 +20,31 @@ import (
 // reaching for pq.Error themselves.
 const pgUniqueViolation = "23505"
 
+// OutboxAppender stages integration events into the outbox table inside
+// an active database transaction.
+type OutboxAppender interface {
+	AppendTx(ctx context.Context, tx *sql.Tx, kind string, payload []byte) error
+}
+
 // Postgres is the production Storage adapter. Parameterised SQL
 // throughout; the only interpolation into the statement strings is
 // the placeholder index, never a value.
 type Postgres struct {
-	db *sql.DB
+	db          *sql.DB
+	outbox      OutboxAppender
+	orderDetail app.OrderDetailReader
 }
 
 // NewPostgres builds the production adapter bound to the supplied DB
-// connection.
-func NewPostgres(db *sql.DB) *Postgres {
-	return &Postgres{db: db}
+// connection and optional outbox appender.
+func NewPostgres(db *sql.DB, outbox OutboxAppender) *Postgres {
+	return &Postgres{db: db, outbox: outbox}
+}
+
+// WithOrderDetailReader wires the reader used to populate ECST payloads on ship.
+func (p *Postgres) WithOrderDetailReader(r app.OrderDetailReader) *Postgres {
+	p.orderDetail = r
+	return p
 }
 
 // Create inserts a fresh fulfillment row. A unique-constraint
@@ -66,8 +82,21 @@ func (p *Postgres) Create(ctx context.Context, f domain.Fulfillment) error {
 // UPDATE matches both the id and the previous version (current
 // Version() - 1). A 0-rows-affected result is mapped to
 // app.ErrOptimisticLock so the caller can retry against a fresh load.
+// When an outbox is wired, integration events are extracted from the
+// aggregate's pending events and staged into the outbox inside the same
+// transaction.
 func (p *Postgres) Update(ctx context.Context, f domain.Fulfillment) error {
-	res, err := p.db.ExecContext(ctx, `
+	tx, err := p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	res, err := tx.ExecContext(ctx, `
 		UPDATE fulfillment
 		SET status = $2,
 		    carrier = $3,
@@ -99,6 +128,22 @@ func (p *Postgres) Update(ctx context.Context, f domain.Fulfillment) error {
 	}
 	if n == 0 {
 		return app.ErrOptimisticLock
+	}
+
+	if p.outbox != nil {
+		records, err := extractIntegrationEvents(ctx, f, p.orderDetail)
+		if err != nil {
+			return err
+		}
+		for _, rec := range records {
+			if err = p.outbox.AppendTx(ctx, tx, rec.Kind, rec.Payload); err != nil {
+				return fmt.Errorf("append outbox: %w", err)
+			}
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
 	}
 	return nil
 }
@@ -226,4 +271,104 @@ func nullTimeOrZero(n sql.NullTime) time.Time {
 		return time.Time{}
 	}
 	return n.Time
+}
+
+type outboxRecord struct {
+	Kind    string
+	Payload []byte
+}
+
+// extractIntegrationEvents maps the aggregate's pending domain events
+// into the integration events fulfillment publishes outward through the outbox.
+func extractIntegrationEvents(ctx context.Context, f domain.Fulfillment, detailReader app.OrderDetailReader) ([]outboxRecord, error) {
+	var out []outboxRecord
+	for _, e := range f.PendingEvents() {
+		switch ev := e.(type) {
+		case domain.FulfillmentDelivered:
+			payload, err := json.Marshal(integration.OrderDelivered{
+				OrderID: f.OrderID(),
+				At:      ev.At,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("encode OrderDelivered: %w", err)
+			}
+			out = append(out, outboxRecord{
+				Kind:    integration.OrderDelivered{}.EventName(),
+				Payload: payload,
+			})
+		case domain.FulfillmentRefunded:
+			payload, err := json.Marshal(integration.OrderRefunded{
+				OrderID: f.OrderID(),
+				Reason:  ev.Reason,
+				At:      ev.At,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("encode OrderRefunded: %w", err)
+			}
+			out = append(out, outboxRecord{
+				Kind:    integration.OrderRefunded{}.EventName(),
+				Payload: payload,
+			})
+		case domain.FulfillmentShipped:
+			notifPayload, err := json.Marshal(integration.OrderShipped{
+				OrderID:      f.OrderID(),
+				Carrier:      f.Carrier(),
+				TrackingCode: f.TrackingCode(),
+				At:           ev.At,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("encode OrderShipped: %w", err)
+			}
+			out = append(out, outboxRecord{
+				Kind:    integration.OrderShipped{}.EventName(),
+				Payload: notifPayload,
+			})
+
+			if detailReader != nil {
+				detail, err := detailReader.OrderDetail(ctx, f.OrderID())
+				if err == nil {
+					items := make([]integration.LineDTO, 0, len(detail.Items))
+					for _, ln := range detail.Items {
+						items = append(items, integration.LineDTO{
+							ProductID:     ln.ProductID,
+							ProductName:   ln.ProductName,
+							Quantity:      ln.Quantity,
+							PriceAmount:   ln.PriceAmount,
+							PriceCurrency: ln.PriceCurrency,
+						})
+					}
+					ecstPayload, err := json.Marshal(integration.OrderShippedECST{
+						OrderID:      f.OrderID(),
+						CustomerID:   detail.CustomerID,
+						Email:        detail.Email,
+						Carrier:      f.Carrier(),
+						TrackingCode: f.TrackingCode(),
+						ShipTo: integration.ShippingAddressDTO{
+							Name:    detail.ShipTo.Name,
+							Street1: detail.ShipTo.Street1,
+							Street2: detail.ShipTo.Street2,
+							City:    detail.ShipTo.City,
+							Zip:     detail.ShipTo.Zip,
+							Country: detail.ShipTo.Country,
+						},
+						Items:        items,
+						Subtotal:     detail.Subtotal,
+						Tax:          detail.Tax,
+						ShippingCost: detail.ShippingCost,
+						Total:        detail.Total,
+						Currency:     detail.Currency,
+						At:           ev.At,
+					})
+					if err != nil {
+						return nil, fmt.Errorf("encode OrderShippedECST: %w", err)
+					}
+					out = append(out, outboxRecord{
+						Kind:    integration.OrderShippedECST{}.EventName(),
+						Payload: ecstPayload,
+					})
+				}
+			}
+		}
+	}
+	return out, nil
 }

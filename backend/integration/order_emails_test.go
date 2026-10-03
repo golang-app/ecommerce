@@ -45,6 +45,30 @@ func decodeAllOutbox(kind string, payload []byte) (eventbus.Event, error) {
 			return nil, fmt.Errorf("decode OrderPaymentFailed: %w", err)
 		}
 		return e, nil
+	case fulfillmentintegration.OrderDelivered{}.EventName():
+		var e fulfillmentintegration.OrderDelivered
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return nil, fmt.Errorf("decode OrderDelivered: %w", err)
+		}
+		return e, nil
+	case fulfillmentintegration.OrderRefunded{}.EventName():
+		var e fulfillmentintegration.OrderRefunded
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return nil, fmt.Errorf("decode OrderRefunded: %w", err)
+		}
+		return e, nil
+	case fulfillmentintegration.OrderShipped{}.EventName():
+		var e fulfillmentintegration.OrderShipped
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return nil, fmt.Errorf("decode OrderShipped: %w", err)
+		}
+		return e, nil
+	case fulfillmentintegration.OrderShippedECST{}.EventName():
+		var e fulfillmentintegration.OrderShippedECST
+		if err := json.Unmarshal(payload, &e); err != nil {
+			return nil, fmt.Errorf("decode OrderShippedECST: %w", err)
+		}
+		return e, nil
 	}
 	return nil, fmt.Errorf("unknown outbox kind: %s", kind)
 }
@@ -126,45 +150,49 @@ func wireEmailLifecycleSubscribers(
 	)
 
 	// email.order-delivered
-	bus.Subscribe(
+	bus.SubscribeWithID(
 		fulfillmentintegration.OrderDelivered{}.EventName(),
-		func(ctx context.Context, e eventbus.Event) error {
-			delivered := e.(fulfillmentintegration.OrderDelivered)
-			view, err := query.Find(ctx, delivered.OrderID)
-			if err != nil {
-				return fmt.Errorf("order delivered: load view: %w", err)
-			}
-			if view.CustomerID() == "" {
-				return nil
-			}
-			msg, err := layout.RenderOrderDelivered(view, baseURL)
-			if err != nil {
-				return fmt.Errorf("order delivered: render: %w", err)
-			}
-			msg.To = view.CustomerID()
-			return rec.Send(ctx, msg)
-		},
+		inbox.Wrap("email.order-delivered", ib,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				delivered := e.(fulfillmentintegration.OrderDelivered)
+				view, err := query.Find(ctx, delivered.OrderID)
+				if err != nil {
+					return fmt.Errorf("order delivered: load view: %w", err)
+				}
+				if view.CustomerID() == "" {
+					return nil
+				}
+				msg, err := layout.RenderOrderDelivered(view, baseURL)
+				if err != nil {
+					return fmt.Errorf("order delivered: render: %w", err)
+				}
+				msg.To = view.CustomerID()
+				return rec.Send(ctx, msg)
+			},
+		),
 	)
 
 	// email.order-refunded
-	bus.Subscribe(
+	bus.SubscribeWithID(
 		fulfillmentintegration.OrderRefunded{}.EventName(),
-		func(ctx context.Context, e eventbus.Event) error {
-			refunded := e.(fulfillmentintegration.OrderRefunded)
-			view, err := query.Find(ctx, refunded.OrderID)
-			if err != nil {
-				return fmt.Errorf("order refunded: load view: %w", err)
-			}
-			if view.CustomerID() == "" {
-				return nil
-			}
-			msg, err := layout.RenderOrderRefunded(view, refunded.Reason, baseURL)
-			if err != nil {
-				return fmt.Errorf("order refunded: render: %w", err)
-			}
-			msg.To = view.CustomerID()
-			return rec.Send(ctx, msg)
-		},
+		inbox.Wrap("email.order-refunded", ib,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				refunded := e.(fulfillmentintegration.OrderRefunded)
+				view, err := query.Find(ctx, refunded.OrderID)
+				if err != nil {
+					return fmt.Errorf("order refunded: load view: %w", err)
+				}
+				if view.CustomerID() == "" {
+					return nil
+				}
+				msg, err := layout.RenderOrderRefunded(view, refunded.Reason, baseURL)
+				if err != nil {
+					return fmt.Errorf("order refunded: render: %w", err)
+				}
+				msg.To = view.CustomerID()
+				return rec.Send(ctx, msg)
+			},
+		),
 	)
 }
 
@@ -303,11 +331,17 @@ func TestOrderLifecycleEmails_EndToEnd(t *testing.T) {
 		}
 	})
 
-	t.Run("OrderDelivered transactional email", func(t *testing.T) {
-		bus.Publish(ctx, fulfillmentintegration.OrderDelivered{
+	t.Run("OrderDelivered transactional email with outbox and inbox idempotency", func(t *testing.T) {
+		payload, err := json.Marshal(fulfillmentintegration.OrderDelivered{
 			OrderID: testOrder.ID(),
 			At:      time.Now(),
 		})
+		if err != nil {
+			t.Fatalf("marshal OrderDelivered: %v", err)
+		}
+		out.append(fulfillmentintegration.OrderDelivered{}.EventName(), payload)
+
+		dispatchOnce(t, ctx, out, bus, decodeAllOutbox)
 
 		sends := mailerRec.sent()
 		if len(sends) != 4 {
@@ -320,14 +354,29 @@ func TestOrderLifecycleEmails_EndToEnd(t *testing.T) {
 		if !strings.Contains(msg.Subject, "delivered") {
 			t.Errorf("expected 'delivered' in subject, got %s", msg.Subject)
 		}
+
+		// Redelivery with same ID must be ignored by inbox
+		bus.PublishWithID(ctx, 4, fulfillmentintegration.OrderDelivered{
+			OrderID: testOrder.ID(),
+			At:      time.Now(),
+		})
+		if len(mailerRec.sent()) != 4 {
+			t.Errorf("inbox failed to deduplicate redelivery of OrderDelivered")
+		}
 	})
 
-	t.Run("OrderRefunded transactional email", func(t *testing.T) {
-		bus.Publish(ctx, fulfillmentintegration.OrderRefunded{
+	t.Run("OrderRefunded transactional email with outbox and inbox idempotency", func(t *testing.T) {
+		payload, err := json.Marshal(fulfillmentintegration.OrderRefunded{
 			OrderID: testOrder.ID(),
 			Reason:  "Item defective",
 			At:      time.Now(),
 		})
+		if err != nil {
+			t.Fatalf("marshal OrderRefunded: %v", err)
+		}
+		out.append(fulfillmentintegration.OrderRefunded{}.EventName(), payload)
+
+		dispatchOnce(t, ctx, out, bus, decodeAllOutbox)
 
 		sends := mailerRec.sent()
 		if len(sends) != 5 {
@@ -342,6 +391,16 @@ func TestOrderLifecycleEmails_EndToEnd(t *testing.T) {
 		}
 		if !strings.Contains(msg.HTMLBody, "Item defective") {
 			t.Errorf("expected refund reason in HTMLBody")
+		}
+
+		// Redelivery with same ID must be ignored by inbox
+		bus.PublishWithID(ctx, 5, fulfillmentintegration.OrderRefunded{
+			OrderID: testOrder.ID(),
+			Reason:  "Item defective",
+			At:      time.Now(),
+		})
+		if len(mailerRec.sent()) != 5 {
+			t.Errorf("inbox failed to deduplicate redelivery of OrderRefunded")
 		}
 	})
 }

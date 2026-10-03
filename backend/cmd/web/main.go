@@ -208,7 +208,7 @@ func main() {
 	// transfer, alongside the notification-style OrderShipped). The
 	// translation lives in this composition root so fulfillment
 	// itself stays unaware of checkout's internal types.
-	fulfillmentBD, fulfillmentSrv := fulfillment.New(db, bus, orderDetailReaderAdapter{q: checkoutQry})
+	fulfillmentBD, fulfillmentSrv := fulfillment.New(db, bus, outboxStore, orderDetailReaderAdapter{q: checkoutQry})
 	fulfillmentSrv = fulfillmentSrv.
 		WithStockReleaser(catalogService).
 		WithOrderLines(orderLinesAdapter{q: checkoutQry}).
@@ -474,51 +474,55 @@ func main() {
 	)
 
 	// 8. email.order-delivered — renders and sends order delivered email.
-	bus.Subscribe(
+	bus.SubscribeWithID(
 		fulfillmentintegration.OrderDelivered{}.EventName(),
-		func(ctx context.Context, e eventbus.Event) error {
-			delivered := e.(fulfillmentintegration.OrderDelivered)
-			view, err := checkoutQry.Find(ctx, delivered.OrderID)
-			if err != nil {
-				return fmt.Errorf("order delivered: load view: %w", err)
-			}
-			if view.CustomerID() == "" {
+		inbox.Wrap("email.order-delivered", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				delivered := e.(fulfillmentintegration.OrderDelivered)
+				view, err := checkoutQry.Find(ctx, delivered.OrderID)
+				if err != nil {
+					return fmt.Errorf("order delivered: load view: %w", err)
+				}
+				if view.CustomerID() == "" {
+					return nil
+				}
+				msg, err := layout.RenderOrderDelivered(view, cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("order delivered: render: %w", err)
+				}
+				msg.To = view.CustomerID()
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order delivered: send: %w", err)
+				}
 				return nil
-			}
-			msg, err := layout.RenderOrderDelivered(view, cfg.BaseURL)
-			if err != nil {
-				return fmt.Errorf("order delivered: render: %w", err)
-			}
-			msg.To = view.CustomerID()
-			if err := mailerSrv.Send(ctx, msg); err != nil {
-				return fmt.Errorf("order delivered: send: %w", err)
-			}
-			return nil
-		},
+			},
+		),
 	)
 
 	// 9. email.order-refunded — renders and sends order refunded email.
-	bus.Subscribe(
+	bus.SubscribeWithID(
 		fulfillmentintegration.OrderRefunded{}.EventName(),
-		func(ctx context.Context, e eventbus.Event) error {
-			refunded := e.(fulfillmentintegration.OrderRefunded)
-			view, err := checkoutQry.Find(ctx, refunded.OrderID)
-			if err != nil {
-				return fmt.Errorf("order refunded: load view: %w", err)
-			}
-			if view.CustomerID() == "" {
+		inbox.Wrap("email.order-refunded", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				refunded := e.(fulfillmentintegration.OrderRefunded)
+				view, err := checkoutQry.Find(ctx, refunded.OrderID)
+				if err != nil {
+					return fmt.Errorf("order refunded: load view: %w", err)
+				}
+				if view.CustomerID() == "" {
+					return nil
+				}
+				msg, err := layout.RenderOrderRefunded(view, refunded.Reason, cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("order refunded: render: %w", err)
+				}
+				msg.To = view.CustomerID()
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order refunded: send: %w", err)
+				}
 				return nil
-			}
-			msg, err := layout.RenderOrderRefunded(view, refunded.Reason, cfg.BaseURL)
-			if err != nil {
-				return fmt.Errorf("order refunded: render: %w", err)
-			}
-			msg.To = view.CustomerID()
-			if err := mailerSrv.Send(ctx, msg); err != nil {
-				return fmt.Errorf("order refunded: send: %w", err)
-			}
-			return nil
-		},
+			},
+		),
 	)
 
 	// 10. cart.update-item-name-on-productnamechanged — synchronize cart item
@@ -631,6 +635,30 @@ func main() {
 			var e checkoutintegration.OrderPaymentFailed
 			if err := json.Unmarshal(payload, &e); err != nil {
 				return nil, fmt.Errorf("decode OrderPaymentFailed: %w", err)
+			}
+			return e, nil
+		case fulfillmentintegration.OrderDelivered{}.EventName():
+			var e fulfillmentintegration.OrderDelivered
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderDelivered: %w", err)
+			}
+			return e, nil
+		case fulfillmentintegration.OrderRefunded{}.EventName():
+			var e fulfillmentintegration.OrderRefunded
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderRefunded: %w", err)
+			}
+			return e, nil
+		case fulfillmentintegration.OrderShipped{}.EventName():
+			var e fulfillmentintegration.OrderShipped
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderShipped: %w", err)
+			}
+			return e, nil
+		case fulfillmentintegration.OrderShippedECST{}.EventName():
+			var e fulfillmentintegration.OrderShippedECST
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderShippedECST: %w", err)
 			}
 			return e, nil
 		}
