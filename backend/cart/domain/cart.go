@@ -66,6 +66,15 @@ func (c *Cart) Add(product Product, quantity int) error {
 	return nil
 }
 
+// UpdateProduct updates the product details (e.g. price, name) for an existing line item in the cart.
+// If the product is not currently in the cart, this is a no-op.
+func (c *Cart) UpdateProduct(product Product) {
+	if item, ok := c.cartItems[product.ID()]; ok {
+		item.product = product
+		c.cartItems[product.ID()] = item
+	}
+}
+
 // currency returns the cart's working currency, derived from its items.
 // Returns the empty Currency when the cart is empty.
 func (c *Cart) currency() Currency {

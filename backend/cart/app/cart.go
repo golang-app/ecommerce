@@ -27,6 +27,8 @@ type CartStorage interface {
 	Get(ctx context.Context, user domain.User) (*domain.Cart, error)
 	Persist(ctx context.Context, cart *domain.Cart) error
 	Clear(ctx context.Context, user domain.User) error
+	UpdateItemPrice(ctx context.Context, variantID string, priceMinorUnits int64, currency string) error
+	UpdateItemName(ctx context.Context, variantID string, newName string) error
 }
 
 type ProductCatalog interface {
@@ -108,6 +110,37 @@ func (c CartService) Clear(ctx context.Context, sessID string) error {
 	if err := c.storage.Clear(ctx, user); err != nil {
 		recordSpanError(span, err)
 		return fmt.Errorf("could not clear cart: %w", err)
+	}
+	return nil
+}
+
+// UpdateItemPrice synchronizes existing cart items matching variantID to the new price and currency.
+func (c CartService) UpdateItemPrice(ctx context.Context, variantID string, priceMinorUnits int64, currency string) error {
+	ctx, span := tracer.Start(ctx, "Cart.UpdateItemPrice", trace.WithAttributes(
+		attribute.String("variant.id", variantID),
+		attribute.Int64("price.amount", priceMinorUnits),
+		attribute.String("price.currency", currency),
+	))
+	defer span.End()
+
+	if err := c.storage.UpdateItemPrice(ctx, variantID, priceMinorUnits, currency); err != nil {
+		recordSpanError(span, err)
+		return fmt.Errorf("could not update item price: %w", err)
+	}
+	return nil
+}
+
+// UpdateItemName synchronizes existing cart items matching variantID to the new product name.
+func (c CartService) UpdateItemName(ctx context.Context, variantID string, newName string) error {
+	ctx, span := tracer.Start(ctx, "Cart.UpdateItemName", trace.WithAttributes(
+		attribute.String("variant.id", variantID),
+		attribute.String("product.new_name", newName),
+	))
+	defer span.End()
+
+	if err := c.storage.UpdateItemName(ctx, variantID, newName); err != nil {
+		recordSpanError(span, err)
+		return fmt.Errorf("could not update item name: %w", err)
 	}
 	return nil
 }

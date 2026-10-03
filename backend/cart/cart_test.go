@@ -103,6 +103,72 @@ func TestCannotAddNotExistingProductToTheCart(t *testing.T) {
 	}
 }
 
+func TestUpdateItemPrice_UpdatesPriceInCart(t *testing.T) {
+	pID := "productID"
+	serv := newCartServiceBuilder().WithProduct(pID, 1000).build()
+	ctx := context.Background()
+	sessID := sessionID()
+
+	err := serv.AddToCart(ctx, sessID, pID, 2)
+	if err != nil {
+		t.Fatalf("could not add product: %s", err)
+	}
+
+	err = serv.UpdateItemPrice(ctx, pID, 1500, "PLN")
+	if err != nil {
+		t.Fatalf("could not update price: %s", err)
+	}
+
+	cart, err := serv.Get(ctx, sessID)
+	if err != nil {
+		t.Fatalf("could not get cart: %s", err)
+	}
+
+	if len(cart.Items()) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(cart.Items()))
+	}
+
+	item := cart.Items()[0]
+	if item.Product().Price().Amount() != 1500 {
+		t.Fatalf("expected item price 1500, got %d", item.Product().Price().Amount())
+	}
+
+	if cart.TotalPrice().Amount() != 3000 {
+		t.Fatalf("expected cart total price 3000, got %d", cart.TotalPrice().Amount())
+	}
+}
+
+func TestUpdateItemName_UpdatesNameInCart(t *testing.T) {
+	pID := "productID"
+	serv := newCartServiceBuilder().WithProduct(pID, 1000).build()
+	ctx := context.Background()
+	sessID := sessionID()
+
+	err := serv.AddToCart(ctx, sessID, pID, 1)
+	if err != nil {
+		t.Fatalf("could not add product: %s", err)
+	}
+
+	err = serv.UpdateItemName(ctx, pID, "Brand New Name")
+	if err != nil {
+		t.Fatalf("could not update name: %s", err)
+	}
+
+	cart, err := serv.Get(ctx, sessID)
+	if err != nil {
+		t.Fatalf("could not get cart: %s", err)
+	}
+
+	if len(cart.Items()) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(cart.Items()))
+	}
+
+	item := cart.Items()[0]
+	if item.Product().Name() != "Brand New Name" {
+		t.Fatalf("expected item name 'Brand New Name', got '%s'", item.Product().Name())
+	}
+}
+
 type cartServiceBuilder struct {
 	products map[string]domain.Product
 }

@@ -79,3 +79,24 @@ func TestCart_EmptyTotalPrice(t *testing.T) {
 	is.Equal(int64(0), total.Amount())
 	is.Equal(domain.Currency(""), total.Currency())
 }
+
+func TestCart_UpdateProduct(t *testing.T) {
+	is := is.New(t)
+	c := domain.NewCart(domain.NewUser("user-1"))
+	is.NoErr(c.Add(pID, 2))
+
+	// Update existing product with new price and name
+	updated := domain.NewProduct(pID.ID(), "updated product", 350, domain.MustNewCurrency("PLN"))
+	c.UpdateProduct(updated)
+
+	items := c.Items()
+	is.Equal(len(items), 1)
+	is.Equal(items[0].Product().Name(), "updated product")
+	is.Equal(items[0].Product().Price().Amount(), int64(350))
+	is.Equal(c.TotalPrice().Amount(), int64(700))
+
+	// Update non-existing product is a no-op
+	nonExistent := domain.NewProduct("missing", "missing", 999, domain.MustNewCurrency("PLN"))
+	c.UpdateProduct(nonExistent)
+	is.Equal(len(c.Items()), 1)
+}

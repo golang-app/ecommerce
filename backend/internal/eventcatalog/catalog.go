@@ -228,5 +228,29 @@ func Catalog() []Event {
 			Producer:    "fulfillment",
 			Description: "Published when a fulfillment is refunded; carries the operator-supplied reason. Notification-style; no external subscribers wired yet.",
 		},
+
+		// --- productcatalog / integration (published language) ---
+		{
+			Name:     "productcatalog.ProductNameChanged",
+			Kind:     KindIntegration,
+			Package:  "productcatalog/integration",
+			Version:  1,
+			Producer: "productcatalog",
+			Consumers: []string{
+				"cart (update item name)",
+			},
+			Description: "Published when a product or variant name is updated in the catalog. Carries ProductID, VariantID, and NewName.",
+		},
+		{
+			Name:     "productcatalog.ProductPriceChanged",
+			Kind:     KindIntegration,
+			Package:  "productcatalog/integration",
+			Version:  1,
+			Producer: "productcatalog",
+			Consumers: []string{
+				"cart (update item price)",
+			},
+			Description: "Published when a product or variant price is updated. Carries ProductID, VariantID, PriceAmount, and PriceCurrency.",
+		},
 	}
 }
