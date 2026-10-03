@@ -54,6 +54,46 @@ var (
 	orderShippedTextOnce sync.Once
 	orderShippedText     *texttmpl.Template
 	orderShippedTextErr  error
+
+	orderPlacedHTMLOnce sync.Once
+	orderPlacedHTML     *htmltmpl.Template
+	orderPlacedHTMLErr  error
+
+	orderPlacedTextOnce sync.Once
+	orderPlacedText     *texttmpl.Template
+	orderPlacedTextErr  error
+
+	orderCancelledHTMLOnce sync.Once
+	orderCancelledHTML     *htmltmpl.Template
+	orderCancelledHTMLErr  error
+
+	orderCancelledTextOnce sync.Once
+	orderCancelledText     *texttmpl.Template
+	orderCancelledTextErr  error
+
+	paymentFailedHTMLOnce sync.Once
+	paymentFailedHTML     *htmltmpl.Template
+	paymentFailedHTMLErr  error
+
+	paymentFailedTextOnce sync.Once
+	paymentFailedText     *texttmpl.Template
+	paymentFailedTextErr  error
+
+	orderDeliveredHTMLOnce sync.Once
+	orderDeliveredHTML     *htmltmpl.Template
+	orderDeliveredHTMLErr  error
+
+	orderDeliveredTextOnce sync.Once
+	orderDeliveredText     *texttmpl.Template
+	orderDeliveredTextErr  error
+
+	orderRefundedHTMLOnce sync.Once
+	orderRefundedHTML     *htmltmpl.Template
+	orderRefundedHTMLErr  error
+
+	orderRefundedTextOnce sync.Once
+	orderRefundedText     *texttmpl.Template
+	orderRefundedTextErr  error
 )
 
 func loadOrderConfHTML() (*htmltmpl.Template, error) {
@@ -96,6 +136,76 @@ func loadOrderShippedText() (*texttmpl.Template, error) {
 		orderShippedText, orderShippedTextErr = texttmpl.ParseFS(emailTemplates, "tmpl/emails/order_shipped.txt.tmpl")
 	})
 	return orderShippedText, orderShippedTextErr
+}
+
+func loadOrderPlacedHTML() (*htmltmpl.Template, error) {
+	orderPlacedHTMLOnce.Do(func() {
+		orderPlacedHTML, orderPlacedHTMLErr = htmltmpl.ParseFS(emailTemplates, "tmpl/emails/order_placed.html.tmpl")
+	})
+	return orderPlacedHTML, orderPlacedHTMLErr
+}
+
+func loadOrderPlacedText() (*texttmpl.Template, error) {
+	orderPlacedTextOnce.Do(func() {
+		orderPlacedText, orderPlacedTextErr = texttmpl.ParseFS(emailTemplates, "tmpl/emails/order_placed.txt.tmpl")
+	})
+	return orderPlacedText, orderPlacedTextErr
+}
+
+func loadOrderCancelledHTML() (*htmltmpl.Template, error) {
+	orderCancelledHTMLOnce.Do(func() {
+		orderCancelledHTML, orderCancelledHTMLErr = htmltmpl.ParseFS(emailTemplates, "tmpl/emails/order_cancelled.html.tmpl")
+	})
+	return orderCancelledHTML, orderCancelledHTMLErr
+}
+
+func loadOrderCancelledText() (*texttmpl.Template, error) {
+	orderCancelledTextOnce.Do(func() {
+		orderCancelledText, orderCancelledTextErr = texttmpl.ParseFS(emailTemplates, "tmpl/emails/order_cancelled.txt.tmpl")
+	})
+	return orderCancelledText, orderCancelledTextErr
+}
+
+func loadPaymentFailedHTML() (*htmltmpl.Template, error) {
+	paymentFailedHTMLOnce.Do(func() {
+		paymentFailedHTML, paymentFailedHTMLErr = htmltmpl.ParseFS(emailTemplates, "tmpl/emails/order_payment_failed.html.tmpl")
+	})
+	return paymentFailedHTML, paymentFailedHTMLErr
+}
+
+func loadPaymentFailedText() (*texttmpl.Template, error) {
+	paymentFailedTextOnce.Do(func() {
+		paymentFailedText, paymentFailedTextErr = texttmpl.ParseFS(emailTemplates, "tmpl/emails/order_payment_failed.txt.tmpl")
+	})
+	return paymentFailedText, paymentFailedTextErr
+}
+
+func loadOrderDeliveredHTML() (*htmltmpl.Template, error) {
+	orderDeliveredHTMLOnce.Do(func() {
+		orderDeliveredHTML, orderDeliveredHTMLErr = htmltmpl.ParseFS(emailTemplates, "tmpl/emails/order_delivered.html.tmpl")
+	})
+	return orderDeliveredHTML, orderDeliveredHTMLErr
+}
+
+func loadOrderDeliveredText() (*texttmpl.Template, error) {
+	orderDeliveredTextOnce.Do(func() {
+		orderDeliveredText, orderDeliveredTextErr = texttmpl.ParseFS(emailTemplates, "tmpl/emails/order_delivered.txt.tmpl")
+	})
+	return orderDeliveredText, orderDeliveredTextErr
+}
+
+func loadOrderRefundedHTML() (*htmltmpl.Template, error) {
+	orderRefundedHTMLOnce.Do(func() {
+		orderRefundedHTML, orderRefundedHTMLErr = htmltmpl.ParseFS(emailTemplates, "tmpl/emails/order_refunded.html.tmpl")
+	})
+	return orderRefundedHTML, orderRefundedHTMLErr
+}
+
+func loadOrderRefundedText() (*texttmpl.Template, error) {
+	orderRefundedTextOnce.Do(func() {
+		orderRefundedText, orderRefundedTextErr = texttmpl.ParseFS(emailTemplates, "tmpl/emails/order_refunded.txt.tmpl")
+	})
+	return orderRefundedText, orderRefundedTextErr
 }
 
 // RenderOrderConfirmation builds a Message for the order-paid email. The
@@ -213,3 +323,177 @@ func RenderPasswordReset(toEmail, rawToken, baseURL string, ttlMinutes int) (mai
 		Kind:     mailer.KindPasswordReset,
 	}, nil
 }
+
+// RenderOrderPlaced builds a Message for the order placed pending payment email.
+func RenderOrderPlaced(view checkoutQuery.OrderView, baseURL string) (mailer.Message, error) {
+	htmlT, err := loadOrderPlacedHTML()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+	textT, err := loadOrderPlacedText()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+
+	data := map[string]any{
+		"Order":    view,
+		"SiteName": emailSiteName,
+		"OrderURL": strings.TrimRight(baseURL, "/") + "/order/" + view.ID(),
+	}
+
+	var htmlBuf, textBuf bytes.Buffer
+	if err := htmlT.Execute(&htmlBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+	if err := textT.Execute(&textBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+
+	return mailer.Message{
+		To:       view.CustomerID(),
+		Subject:  "Your order " + view.ID() + " has been placed",
+		HTMLBody: htmlBuf.String(),
+		TextBody: textBuf.String(),
+		Kind:     mailer.KindOrderPlaced,
+	}, nil
+}
+
+// RenderOrderCancelled builds a Message for the order cancelled email.
+func RenderOrderCancelled(view checkoutQuery.OrderView, reason, baseURL string) (mailer.Message, error) {
+	htmlT, err := loadOrderCancelledHTML()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+	textT, err := loadOrderCancelledText()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+
+	data := map[string]any{
+		"Order":    view,
+		"Reason":   reason,
+		"SiteName": emailSiteName,
+		"OrderURL": strings.TrimRight(baseURL, "/") + "/order/" + view.ID(),
+	}
+
+	var htmlBuf, textBuf bytes.Buffer
+	if err := htmlT.Execute(&htmlBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+	if err := textT.Execute(&textBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+
+	return mailer.Message{
+		To:       view.CustomerID(),
+		Subject:  "Your order " + view.ID() + " has been cancelled",
+		HTMLBody: htmlBuf.String(),
+		TextBody: textBuf.String(),
+		Kind:     mailer.KindOrderCancelled,
+	}, nil
+}
+
+// RenderPaymentFailed builds a Message for the payment failed email.
+func RenderPaymentFailed(view checkoutQuery.OrderView, reason, baseURL string) (mailer.Message, error) {
+	htmlT, err := loadPaymentFailedHTML()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+	textT, err := loadPaymentFailedText()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+
+	data := map[string]any{
+		"Order":    view,
+		"Reason":   reason,
+		"SiteName": emailSiteName,
+		"OrderURL": strings.TrimRight(baseURL, "/") + "/order/" + view.ID(),
+	}
+
+	var htmlBuf, textBuf bytes.Buffer
+	if err := htmlT.Execute(&htmlBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+	if err := textT.Execute(&textBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+
+	return mailer.Message{
+		To:       view.CustomerID(),
+		Subject:  "Payment failed for order " + view.ID(),
+		HTMLBody: htmlBuf.String(),
+		TextBody: textBuf.String(),
+		Kind:     mailer.KindOrderPaymentFailed,
+	}, nil
+}
+
+// RenderOrderDelivered builds a Message for the order delivered email.
+func RenderOrderDelivered(view checkoutQuery.OrderView, baseURL string) (mailer.Message, error) {
+	htmlT, err := loadOrderDeliveredHTML()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+	textT, err := loadOrderDeliveredText()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+
+	data := map[string]any{
+		"Order":    view,
+		"SiteName": emailSiteName,
+		"OrderURL": strings.TrimRight(baseURL, "/") + "/order/" + view.ID(),
+	}
+
+	var htmlBuf, textBuf bytes.Buffer
+	if err := htmlT.Execute(&htmlBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+	if err := textT.Execute(&textBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+
+	return mailer.Message{
+		To:       view.CustomerID(),
+		Subject:  "Your order " + view.ID() + " has been delivered",
+		HTMLBody: htmlBuf.String(),
+		TextBody: textBuf.String(),
+		Kind:     mailer.KindOrderDelivered,
+	}, nil
+}
+
+// RenderOrderRefunded builds a Message for the order refunded email.
+func RenderOrderRefunded(view checkoutQuery.OrderView, reason, baseURL string) (mailer.Message, error) {
+	htmlT, err := loadOrderRefundedHTML()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+	textT, err := loadOrderRefundedText()
+	if err != nil {
+		return mailer.Message{}, err
+	}
+
+	data := map[string]any{
+		"Order":    view,
+		"Reason":   reason,
+		"SiteName": emailSiteName,
+		"OrderURL": strings.TrimRight(baseURL, "/") + "/order/" + view.ID(),
+	}
+
+	var htmlBuf, textBuf bytes.Buffer
+	if err := htmlT.Execute(&htmlBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+	if err := textT.Execute(&textBuf, data); err != nil {
+		return mailer.Message{}, err
+	}
+
+	return mailer.Message{
+		To:       view.CustomerID(),
+		Subject:  "Your order " + view.ID() + " has been refunded",
+		HTMLBody: htmlBuf.String(),
+		TextBody: textBuf.String(),
+		Kind:     mailer.KindOrderRefunded,
+	}, nil
+}
+

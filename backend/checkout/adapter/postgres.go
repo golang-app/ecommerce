@@ -402,29 +402,72 @@ type outboxRecord struct {
 // The aggregate's projection (apply()) has already moved Status to
 // StatusPaid by the time we run, so reading o.Status() here is the
 // final post-apply state.
+// extractIntegrationEvents maps the aggregate's pending domain events
+// into the integration events checkout publishes outward through the outbox.
 func extractIntegrationEvents(o *domain.Order, pending []domain.Event) ([]outboxRecord, error) {
-	if o.Status() != domain.StatusPaid {
-		return nil, nil
-	}
 	var out []outboxRecord
 	for _, e := range pending {
-		ps, ok := e.(domain.PaymentSucceeded)
-		if !ok {
-			continue
+		switch ev := e.(type) {
+		case domain.PaymentSucceeded:
+			if o.Status() == domain.StatusPaid {
+				payload, err := json.Marshal(integration.OrderPaid{
+					OrderID:    o.ID(),
+					SessionID:  o.UserID(),
+					CustomerID: o.CustomerID(),
+					At:         ev.At,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("encode OrderPaid: %w", err)
+				}
+				out = append(out, outboxRecord{
+					Kind:    integration.OrderPaid{}.EventName(),
+					Payload: payload,
+				})
+			}
+		case domain.OrderPlaced:
+			if o.Status() == domain.StatusPending {
+				payload, err := json.Marshal(integration.OrderPlaced{
+					OrderID:    o.ID(),
+					CustomerID: o.CustomerID(),
+					At:         ev.At,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("encode OrderPlaced: %w", err)
+				}
+				out = append(out, outboxRecord{
+					Kind:    integration.OrderPlaced{}.EventName(),
+					Payload: payload,
+				})
+			}
+		case domain.OrderCancelled:
+			payload, err := json.Marshal(integration.OrderCancelled{
+				OrderID:    o.ID(),
+				CustomerID: o.CustomerID(),
+				Reason:     ev.Reason,
+				At:         ev.At,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("encode OrderCancelled: %w", err)
+			}
+			out = append(out, outboxRecord{
+				Kind:    integration.OrderCancelled{}.EventName(),
+				Payload: payload,
+			})
+		case domain.PaymentFailed:
+			payload, err := json.Marshal(integration.OrderPaymentFailed{
+				OrderID:    o.ID(),
+				CustomerID: o.CustomerID(),
+				Reason:     ev.Reason,
+				At:         ev.At,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("encode OrderPaymentFailed: %w", err)
+			}
+			out = append(out, outboxRecord{
+				Kind:    integration.OrderPaymentFailed{}.EventName(),
+				Payload: payload,
+			})
 		}
-		payload, err := json.Marshal(integration.OrderPaid{
-			OrderID:    o.ID(),
-			SessionID:  o.UserID(),
-			CustomerID: o.CustomerID(),
-			At:         ps.At,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("encode OrderPaid: %w", err)
-		}
-		out = append(out, outboxRecord{
-			Kind:    integration.OrderPaid{}.EventName(),
-			Payload: payload,
-		})
 	}
 	return out, nil
 }

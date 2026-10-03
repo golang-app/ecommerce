@@ -56,10 +56,15 @@ var tracer = observability.Tracer("github.com/bkielbasa/go-ecommerce/backend/int
 type MessageKind = string
 
 const (
-	KindUnknown           MessageKind = "unknown"
-	KindOrderConfirmation MessageKind = "order_confirmation"
-	KindOrderShipped      MessageKind = "order_shipped"
-	KindPasswordReset     MessageKind = "password_reset"
+	KindUnknown            MessageKind = "unknown"
+	KindOrderConfirmation  MessageKind = "order_confirmation"
+	KindOrderShipped       MessageKind = "order_shipped"
+	KindPasswordReset      MessageKind = "password_reset"
+	KindOrderPlaced        MessageKind = "order_placed"
+	KindOrderCancelled     MessageKind = "order_cancelled"
+	KindOrderPaymentFailed MessageKind = "order_payment_failed"
+	KindOrderDelivered     MessageKind = "order_delivered"
+	KindOrderRefunded      MessageKind = "order_refunded"
 )
 
 // Message is one outbound email. From is optional: when blank, the Mailer

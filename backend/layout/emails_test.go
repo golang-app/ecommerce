@@ -151,3 +151,116 @@ func TestRenderPasswordReset(t *testing.T) {
 		t.Fatalf("TextBody missing TTL: %q", msg.TextBody)
 	}
 }
+
+func sampleOrderView(id string) checkoutQuery.OrderView {
+	return checkoutQuery.NewOrderView(
+		id,
+		"alice@example.com",
+		domain.Status("pending"),
+		time.Date(2026, 1, 2, 15, 4, 5, 0, time.UTC),
+		[]domain.Line{
+			domain.NewLine("p-1", "Widget", 2, 999, "USD"),
+		},
+		domain.RebuildAddress("Alice Example", "123 Elm St", "", "Springfield", "12345", "US"),
+		domain.RebuildShippingMethod("pickup", "Pickup", 0),
+		domain.RebuildPaymentMethod("card", "Card"),
+		1998,
+		0,
+		0,
+		1998,
+		"USD",
+		"",
+		"",
+		"",
+		0,
+	)
+}
+
+func TestRenderOrderPlaced(t *testing.T) {
+	view := sampleOrderView("ord-placed-1")
+	msg, err := RenderOrderPlaced(view, "http://localhost:8080")
+	if err != nil {
+		t.Fatalf("RenderOrderPlaced: %v", err)
+	}
+	if msg.To != "alice@example.com" {
+		t.Errorf("To = %q, want alice@example.com", msg.To)
+	}
+	if !strings.Contains(msg.Subject, "ord-placed-1") {
+		t.Errorf("Subject missing order ID: %q", msg.Subject)
+	}
+	if !strings.Contains(msg.HTMLBody, "ord-placed-1") || !strings.Contains(msg.TextBody, "ord-placed-1") {
+		t.Errorf("body missing order ID")
+	}
+	if !strings.Contains(msg.HTMLBody, "Widget") || !strings.Contains(msg.TextBody, "Widget") {
+		t.Errorf("body missing item Widget")
+	}
+}
+
+func TestRenderOrderCancelled(t *testing.T) {
+	view := sampleOrderView("ord-cancel-1")
+	msg, err := RenderOrderCancelled(view, "Customer requested", "http://localhost:8080")
+	if err != nil {
+		t.Fatalf("RenderOrderCancelled: %v", err)
+	}
+	if msg.To != "alice@example.com" {
+		t.Errorf("To = %q, want alice@example.com", msg.To)
+	}
+	if !strings.Contains(msg.Subject, "ord-cancel-1") || !strings.Contains(msg.Subject, "cancelled") {
+		t.Errorf("Subject unexpected: %q", msg.Subject)
+	}
+	if !strings.Contains(msg.HTMLBody, "Customer requested") || !strings.Contains(msg.TextBody, "Customer requested") {
+		t.Errorf("body missing cancellation reason")
+	}
+}
+
+func TestRenderPaymentFailed(t *testing.T) {
+	view := sampleOrderView("ord-fail-1")
+	msg, err := RenderPaymentFailed(view, "Insufficient funds", "http://localhost:8080")
+	if err != nil {
+		t.Fatalf("RenderPaymentFailed: %v", err)
+	}
+	if msg.To != "alice@example.com" {
+		t.Errorf("To = %q, want alice@example.com", msg.To)
+	}
+	if !strings.Contains(msg.Subject, "ord-fail-1") || !strings.Contains(msg.Subject, "failed") {
+		t.Errorf("Subject unexpected: %q", msg.Subject)
+	}
+	if !strings.Contains(msg.HTMLBody, "Insufficient funds") || !strings.Contains(msg.TextBody, "Insufficient funds") {
+		t.Errorf("body missing failure reason")
+	}
+}
+
+func TestRenderOrderDelivered(t *testing.T) {
+	view := sampleOrderView("ord-deliv-1")
+	msg, err := RenderOrderDelivered(view, "http://localhost:8080")
+	if err != nil {
+		t.Fatalf("RenderOrderDelivered: %v", err)
+	}
+	if msg.To != "alice@example.com" {
+		t.Errorf("To = %q, want alice@example.com", msg.To)
+	}
+	if !strings.Contains(msg.Subject, "ord-deliv-1") || !strings.Contains(msg.Subject, "delivered") {
+		t.Errorf("Subject unexpected: %q", msg.Subject)
+	}
+	if !strings.Contains(msg.HTMLBody, "ord-deliv-1") || !strings.Contains(msg.TextBody, "ord-deliv-1") {
+		t.Errorf("body missing order ID")
+	}
+}
+
+func TestRenderOrderRefunded(t *testing.T) {
+	view := sampleOrderView("ord-ref-1")
+	msg, err := RenderOrderRefunded(view, "Damaged item returned", "http://localhost:8080")
+	if err != nil {
+		t.Fatalf("RenderOrderRefunded: %v", err)
+	}
+	if msg.To != "alice@example.com" {
+		t.Errorf("To = %q, want alice@example.com", msg.To)
+	}
+	if !strings.Contains(msg.Subject, "ord-ref-1") || !strings.Contains(msg.Subject, "refunded") {
+		t.Errorf("Subject unexpected: %q", msg.Subject)
+	}
+	if !strings.Contains(msg.HTMLBody, "Damaged item returned") || !strings.Contains(msg.TextBody, "Damaged item returned") {
+		t.Errorf("body missing refund reason")
+	}
+}
+
