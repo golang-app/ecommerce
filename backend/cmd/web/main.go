@@ -39,6 +39,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	productcatalogintegration "github.com/bkielbasa/go-ecommerce/backend/productcatalog/integration"
 	"github.com/bkielbasa/go-ecommerce/backend/promo"
 	"github.com/bkielbasa/go-ecommerce/backend/repricing"
 	"github.com/bkielbasa/go-ecommerce/backend/reviews"
@@ -163,6 +164,7 @@ func main() {
 	// and layout's searchService (read side) — one struct, two roles.
 	searchBD, searchSrv := search.New(db)
 	pcBD, catalogService := productcatalog.New(db, searchSrv)
+	catalogService = catalogService.WithPublisher(bus)
 	cartBD, cartSrv := cart.New(db, logger, catalogService)
 	authBD, authService, adminAuthService := auth.New(db)
 	// Pricing policies are pluggable Strategies — the composition root
@@ -391,6 +393,26 @@ func main() {
 				return nil
 			},
 		),
+	)
+
+	// 5. cart.update-item-name-on-productnamechanged — synchronize cart item
+	//    display names when product or variant names change in the catalog.
+	bus.Subscribe(
+		productcatalogintegration.ProductNameChanged{}.EventName(),
+		func(ctx context.Context, e eventbus.Event) error {
+			evt := e.(productcatalogintegration.ProductNameChanged)
+			return cartSrv.UpdateItemName(ctx, evt.VariantID, evt.NewName)
+		},
+	)
+
+	// 6. cart.update-item-price-on-productpricechanged — synchronize cart item
+	//    prices and totals when product or variant prices change in the catalog.
+	bus.Subscribe(
+		productcatalogintegration.ProductPriceChanged{}.EventName(),
+		func(ctx context.Context, e eventbus.Event) error {
+			evt := e.(productcatalogintegration.ProductPriceChanged)
+			return cartSrv.UpdateItemPrice(ctx, evt.VariantID, evt.PriceAmount, evt.PriceCurrency)
+		},
 	)
 
 	app.AddBoundedContext(cartBD)

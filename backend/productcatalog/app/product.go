@@ -9,8 +9,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bkielbasa/go-ecommerce/backend/internal/eventbus"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/integration"
 	searchdomain "github.com/bkielbasa/go-ecommerce/backend/search/domain"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
@@ -30,10 +32,22 @@ func recordSpanError(span trace.Span, err error) {
 	span.SetStatus(codes.Error, err.Error())
 }
 
+// EventPublisher is the seam onto which the product catalog publishes integration
+// events across bounded contexts.
+type EventPublisher interface {
+	Publish(ctx context.Context, e eventbus.Event)
+}
+
 type ProductService struct {
 	storage   ProductStorage
 	searchIdx SearchIndexer
 	now       func() time.Time
+	publisher EventPublisher
+}
+
+func (ps ProductService) WithPublisher(p EventPublisher) ProductService {
+	ps.publisher = p
+	return ps
 }
 
 type ProductStorage interface {
@@ -585,10 +599,58 @@ func (ps ProductService) UpdateProduct(ctx context.Context, id, name, desc strin
 	if err != nil {
 		return err
 	}
+
+	existing, findErr := ps.storage.Find(ctx, id)
+
 	if err := ps.storage.UpdateProduct(ctx, p); err != nil {
 		return err
 	}
+
+	// For simple products (a single default variant and no option types),
+	// ensure the default variant row tracks the updated price.
+	if findErr == nil && len(existing.Variants()) == 1 && len(existing.OptionTypes()) == 0 {
+		defVar := existing.Variants()[0]
+		if defVar.Price().Amount() != priceMinorUnits || string(defVar.Price().Currency()) != currency {
+			_ = ps.storage.UpdateVariant(ctx, defVar.ID(), defVar.SKU(), thumbnail, priceMinorUnits, currency, defVar.Stock())
+		}
+	}
+
 	ps.reindexProduct(ctx, id)
+
+	if ps.publisher != nil && findErr == nil {
+		now := time.Now()
+		if ps.now != nil {
+			now = ps.now()
+		}
+
+		if existing.Name() != name {
+			for _, v := range existing.Variants() {
+				displayName := name
+				if label := v.Label(existing.OptionTypes()); label != "" {
+					displayName = displayName + " — " + label
+				}
+				ps.publisher.Publish(ctx, integration.ProductNameChanged{
+					ProductID: id,
+					VariantID: v.ID(),
+					NewName:   displayName,
+					At:        now,
+				})
+			}
+		}
+
+		if (existing.Price().Amount() != priceMinorUnits || string(existing.Price().Currency()) != currency) &&
+			len(existing.Variants()) == 1 && len(existing.OptionTypes()) == 0 {
+			defVar := existing.Variants()[0]
+			ps.publisher.Publish(ctx, integration.ProductPriceChanged{
+				ProductID:     id,
+				VariantID:     defVar.ID(),
+				PriceAmount:   priceMinorUnits,
+				PriceCurrency: currency,
+				At:            now,
+			})
+		}
+	}
+
 	return nil
 }
 
@@ -865,12 +927,25 @@ func (ps ProductService) UpdateVariant(ctx context.Context, variantID, sku, imag
 	// Resolve the owning product up front so we can reindex it after the
 	// update. We don't fail the mutation if the lookup misses (a missing
 	// variant is the storage layer's problem to report).
-	owner, _, lookupErr := ps.storage.FindVariant(ctx, variantID)
+	owner, existingVariant, lookupErr := ps.storage.FindVariant(ctx, variantID)
 	if err := ps.storage.UpdateVariant(ctx, variantID, sku, image, priceMinor, currency, stock); err != nil {
 		return err
 	}
 	if lookupErr == nil {
 		ps.reindexProduct(ctx, string(owner.ID()))
+		if ps.publisher != nil && (existingVariant.Price().Amount() != priceMinor || string(existingVariant.Price().Currency()) != currency) {
+			now := time.Now()
+			if ps.now != nil {
+				now = ps.now()
+			}
+			ps.publisher.Publish(ctx, integration.ProductPriceChanged{
+				ProductID:     string(owner.ID()),
+				VariantID:     variantID,
+				PriceAmount:   priceMinor,
+				PriceCurrency: currency,
+				At:            now,
+			})
+		}
 	}
 	return nil
 }

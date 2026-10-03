@@ -140,3 +140,21 @@ func (p postgres) Persist(ctx context.Context, cart *domain.Cart) error {
 
 	return nil
 }
+
+func (p postgres) UpdateItemPrice(ctx context.Context, variantID string, priceMinorUnits int64, currency string) error {
+	q := `UPDATE cart_cart_item SET price = $1, currency = $2 WHERE product_id = $3`
+	_, err := p.db.ExecContext(ctx, q, priceMinorUnits, currency, variantID)
+	if err != nil {
+		return fmt.Errorf("could not update cart item price: %w", err)
+	}
+	return nil
+}
+
+func (p postgres) UpdateItemName(ctx context.Context, variantID string, newName string) error {
+	q := `UPDATE cart_cart_item SET product_name = $1 WHERE product_id = $2`
+	_, err := p.db.ExecContext(ctx, q, newName, variantID)
+	if err != nil {
+		return fmt.Errorf("could not update cart item name: %w", err)
+	}
+	return nil
+}
