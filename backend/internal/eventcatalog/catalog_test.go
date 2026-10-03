@@ -44,10 +44,11 @@ func TestCatalogIsConsistent(t *testing.T) {
 			t.Errorf("events[%d] (%s): Version %d is less than 1",
 				i, e.Name, e.Version)
 		}
-		if _, dup := seen[e.Name]; dup {
-			t.Errorf("events[%d]: duplicate Name %q", i, e.Name)
+		key := e.Kind + ":" + e.Name
+		if _, dup := seen[key]; dup {
+			t.Errorf("events[%d]: duplicate %s Name %q", i, e.Kind, e.Name)
 		}
-		seen[e.Name] = struct{}{}
+		seen[key] = struct{}{}
 	}
 }
 

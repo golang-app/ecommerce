@@ -208,7 +208,7 @@ func main() {
 	// transfer, alongside the notification-style OrderShipped). The
 	// translation lives in this composition root so fulfillment
 	// itself stays unaware of checkout's internal types.
-	fulfillmentBD, fulfillmentSrv := fulfillment.New(db, bus, orderDetailReaderAdapter{q: checkoutQry})
+	fulfillmentBD, fulfillmentSrv := fulfillment.New(db, bus, outboxStore, orderDetailReaderAdapter{q: checkoutQry})
 	fulfillmentSrv = fulfillmentSrv.
 		WithStockReleaser(catalogService).
 		WithOrderLines(orderLinesAdapter{q: checkoutQry}).
@@ -395,7 +395,137 @@ func main() {
 		),
 	)
 
-	// 5. cart.update-item-name-on-productnamechanged — synchronize cart item
+	// 5. email.order-placed — renders and sends order placed (pending payment) email.
+	bus.SubscribeWithID(
+		checkoutintegration.OrderPlaced{}.EventName(),
+		inbox.Wrap("email.order-placed", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				placed := e.(checkoutintegration.OrderPlaced)
+				if placed.CustomerID == "" {
+					return nil
+				}
+				view, err := checkoutQry.Find(ctx, placed.OrderID)
+				if err != nil {
+					return fmt.Errorf("order placed: load view: %w", err)
+				}
+				msg, err := layout.RenderOrderPlaced(view, cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("order placed: render: %w", err)
+				}
+				msg.To = placed.CustomerID
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order placed: send: %w", err)
+				}
+				return nil
+			},
+		),
+	)
+
+	// 6. email.order-cancelled — renders and sends order cancelled email.
+	bus.SubscribeWithID(
+		checkoutintegration.OrderCancelled{}.EventName(),
+		inbox.Wrap("email.order-cancelled", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				cancelled := e.(checkoutintegration.OrderCancelled)
+				if cancelled.CustomerID == "" {
+					return nil
+				}
+				view, err := checkoutQry.Find(ctx, cancelled.OrderID)
+				if err != nil {
+					return fmt.Errorf("order cancelled: load view: %w", err)
+				}
+				msg, err := layout.RenderOrderCancelled(view, cancelled.Reason, cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("order cancelled: render: %w", err)
+				}
+				msg.To = cancelled.CustomerID
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order cancelled: send: %w", err)
+				}
+				return nil
+			},
+		),
+	)
+
+	// 7. email.order-payment-failed — renders and sends payment failed email.
+	bus.SubscribeWithID(
+		checkoutintegration.OrderPaymentFailed{}.EventName(),
+		inbox.Wrap("email.order-payment-failed", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				failed := e.(checkoutintegration.OrderPaymentFailed)
+				if failed.CustomerID == "" {
+					return nil
+				}
+				view, err := checkoutQry.Find(ctx, failed.OrderID)
+				if err != nil {
+					return fmt.Errorf("order payment failed: load view: %w", err)
+				}
+				msg, err := layout.RenderPaymentFailed(view, failed.Reason, cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("order payment failed: render: %w", err)
+				}
+				msg.To = failed.CustomerID
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order payment failed: send: %w", err)
+				}
+				return nil
+			},
+		),
+	)
+
+	// 8. email.order-delivered — renders and sends order delivered email.
+	bus.SubscribeWithID(
+		fulfillmentintegration.OrderDelivered{}.EventName(),
+		inbox.Wrap("email.order-delivered", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				delivered := e.(fulfillmentintegration.OrderDelivered)
+				view, err := checkoutQry.Find(ctx, delivered.OrderID)
+				if err != nil {
+					return fmt.Errorf("order delivered: load view: %w", err)
+				}
+				if view.CustomerID() == "" {
+					return nil
+				}
+				msg, err := layout.RenderOrderDelivered(view, cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("order delivered: render: %w", err)
+				}
+				msg.To = view.CustomerID()
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order delivered: send: %w", err)
+				}
+				return nil
+			},
+		),
+	)
+
+	// 9. email.order-refunded — renders and sends order refunded email.
+	bus.SubscribeWithID(
+		fulfillmentintegration.OrderRefunded{}.EventName(),
+		inbox.Wrap("email.order-refunded", inboxStore,
+			func(ctx context.Context, _ int64, e eventbus.Event) error {
+				refunded := e.(fulfillmentintegration.OrderRefunded)
+				view, err := checkoutQry.Find(ctx, refunded.OrderID)
+				if err != nil {
+					return fmt.Errorf("order refunded: load view: %w", err)
+				}
+				if view.CustomerID() == "" {
+					return nil
+				}
+				msg, err := layout.RenderOrderRefunded(view, refunded.Reason, cfg.BaseURL)
+				if err != nil {
+					return fmt.Errorf("order refunded: render: %w", err)
+				}
+				msg.To = view.CustomerID()
+				if err := mailerSrv.Send(ctx, msg); err != nil {
+					return fmt.Errorf("order refunded: send: %w", err)
+				}
+				return nil
+			},
+		),
+	)
+
+	// 10. cart.update-item-name-on-productnamechanged — synchronize cart item
 	//    display names when product or variant names change in the catalog.
 	bus.Subscribe(
 		productcatalogintegration.ProductNameChanged{}.EventName(),
@@ -405,7 +535,7 @@ func main() {
 		},
 	)
 
-	// 6. cart.update-item-price-on-productpricechanged — synchronize cart item
+	// 11. cart.update-item-price-on-productpricechanged — synchronize cart item
 	//    prices and totals when product or variant prices change in the catalog.
 	bus.Subscribe(
 		productcatalogintegration.ProductPriceChanged{}.EventName(),
@@ -487,6 +617,48 @@ func main() {
 			var e checkoutintegration.OrderPaid
 			if err := json.Unmarshal(payload, &e); err != nil {
 				return nil, fmt.Errorf("decode OrderPaid: %w", err)
+			}
+			return e, nil
+		case checkoutintegration.OrderPlaced{}.EventName():
+			var e checkoutintegration.OrderPlaced
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderPlaced: %w", err)
+			}
+			return e, nil
+		case checkoutintegration.OrderCancelled{}.EventName():
+			var e checkoutintegration.OrderCancelled
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderCancelled: %w", err)
+			}
+			return e, nil
+		case checkoutintegration.OrderPaymentFailed{}.EventName():
+			var e checkoutintegration.OrderPaymentFailed
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderPaymentFailed: %w", err)
+			}
+			return e, nil
+		case fulfillmentintegration.OrderDelivered{}.EventName():
+			var e fulfillmentintegration.OrderDelivered
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderDelivered: %w", err)
+			}
+			return e, nil
+		case fulfillmentintegration.OrderRefunded{}.EventName():
+			var e fulfillmentintegration.OrderRefunded
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderRefunded: %w", err)
+			}
+			return e, nil
+		case fulfillmentintegration.OrderShipped{}.EventName():
+			var e fulfillmentintegration.OrderShipped
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderShipped: %w", err)
+			}
+			return e, nil
+		case fulfillmentintegration.OrderShippedECST{}.EventName():
+			var e fulfillmentintegration.OrderShippedECST
+			if err := json.Unmarshal(payload, &e); err != nil {
+				return nil, fmt.Errorf("decode OrderShippedECST: %w", err)
 			}
 			return e, nil
 		}

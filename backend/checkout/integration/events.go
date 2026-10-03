@@ -17,3 +17,33 @@ type OrderPaid struct {
 }
 
 func (OrderPaid) EventName() string { return "checkout.OrderPaid" }
+
+// OrderPlaced is published when an order is created in StatusPending.
+type OrderPlaced struct {
+	OrderID    string
+	CustomerID string
+	At         time.Time
+}
+
+func (OrderPlaced) EventName() string { return "checkout.OrderPlaced" }
+
+// OrderCancelled is published when an order is cancelled.
+type OrderCancelled struct {
+	OrderID    string
+	CustomerID string
+	Reason     string
+	At         time.Time
+}
+
+func (OrderCancelled) EventName() string { return "checkout.OrderCancelled" }
+
+// OrderPaymentFailed is published when a payment fails on an order.
+type OrderPaymentFailed struct {
+	OrderID    string
+	CustomerID string
+	Reason     string
+	At         time.Time
+}
+
+func (OrderPaymentFailed) EventName() string { return "checkout.OrderPaymentFailed" }
+

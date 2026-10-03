@@ -1,0 +1,10 @@
+Your order has been delivered!
+
+Good news! Order {{.Order.ID}} has been delivered.
+
+Items:
+{{range $line := .Order.Items}}- {{$line.ProductName}} x {{$line.Quantity}}
+{{end}}
+View order details: {{.OrderURL}}
+
+We hope you enjoy your items! Thank you for shopping with {{.SiteName}}.

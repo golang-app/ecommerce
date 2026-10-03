@@ -56,12 +56,13 @@ func TestExtractIntegrationEvents_PaymentSucceededProducesOrderPaid(t *testing.T
 	is.True(decoded.At.Equal(at))
 }
 
-func TestExtractIntegrationEvents_NotPaidEmitsNothing(t *testing.T) {
+func TestExtractIntegrationEvents_PendingProducesOrderPlaced(t *testing.T) {
 	is := is.New(t)
 	at := time.Date(2026, 5, 28, 10, 0, 0, 0, time.UTC)
 	placed := domain.OrderPlaced{
 		OrderID:    "ord-43",
 		UserID:     "cart-abc",
+		CustomerID: "jane@example.com",
 		ShipMethod: domain.RebuildShippingMethod("pickup", "Pickup", 0),
 		PayMethod:  domain.RebuildPaymentMethod("card", "Card"),
 		Lines: []domain.Line{
@@ -71,13 +72,76 @@ func TestExtractIntegrationEvents_NotPaidEmitsNothing(t *testing.T) {
 	}
 	o := domain.RehydrateOrder([]domain.Event{placed})
 
-	// A pending order with just an OrderPlaced should NOT produce an
-	// OrderPaid outbox record — the integration event tracks the paid
-	// transition only.
+	// A pending order with OrderPlaced produces an OrderPlaced outbox record
 	records, err := extractIntegrationEvents(o, []domain.Event{placed})
 	is.NoErr(err)
-	is.Equal(len(records), 0)
+	is.Equal(len(records), 1)
+	is.Equal(records[0].Kind, integration.OrderPlaced{}.EventName())
+
+	var decoded integration.OrderPlaced
+	is.NoErr(json.Unmarshal(records[0].Payload, &decoded))
+	is.Equal(decoded.OrderID, "ord-43")
+	is.Equal(decoded.CustomerID, "jane@example.com")
+	is.True(decoded.At.Equal(at))
 }
+
+func TestExtractIntegrationEvents_OrderCancelledProducesOutbox(t *testing.T) {
+	is := is.New(t)
+	at := time.Date(2026, 5, 28, 12, 0, 0, 0, time.UTC)
+	o, _ := rehydratePaid(t, "ord-cancel", "cart-abc", "jane@example.com", at.Add(-time.Hour))
+	cancelled := domain.OrderCancelled{
+		OrderID: "ord-cancel",
+		Reason:  "customer requested",
+		At:      at,
+	}
+
+	records, err := extractIntegrationEvents(o, []domain.Event{cancelled})
+	is.NoErr(err)
+	is.Equal(len(records), 1)
+	is.Equal(records[0].Kind, integration.OrderCancelled{}.EventName())
+
+	var decoded integration.OrderCancelled
+	is.NoErr(json.Unmarshal(records[0].Payload, &decoded))
+	is.Equal(decoded.OrderID, "ord-cancel")
+	is.Equal(decoded.CustomerID, "jane@example.com")
+	is.Equal(decoded.Reason, "customer requested")
+	is.True(decoded.At.Equal(at))
+}
+
+func TestExtractIntegrationEvents_PaymentFailedProducesOutbox(t *testing.T) {
+	is := is.New(t)
+	at := time.Date(2026, 5, 28, 12, 0, 0, 0, time.UTC)
+	placed := domain.OrderPlaced{
+		OrderID:    "ord-fail",
+		UserID:     "cart-abc",
+		CustomerID: "bob@example.com",
+		ShipMethod: domain.RebuildShippingMethod("pickup", "Pickup", 0),
+		PayMethod:  domain.RebuildPaymentMethod("card", "Card"),
+		Lines: []domain.Line{
+			domain.NewLine("v1", "Mug", 1, 1500, "USD"),
+		},
+		At: at.Add(-time.Minute),
+	}
+	failed := domain.PaymentFailed{
+		OrderID: "ord-fail",
+		Reason:  "insufficient funds",
+		At:      at,
+	}
+	o := domain.RehydrateOrder([]domain.Event{placed, failed})
+
+	records, err := extractIntegrationEvents(o, []domain.Event{failed})
+	is.NoErr(err)
+	is.Equal(len(records), 1)
+	is.Equal(records[0].Kind, integration.OrderPaymentFailed{}.EventName())
+
+	var decoded integration.OrderPaymentFailed
+	is.NoErr(json.Unmarshal(records[0].Payload, &decoded))
+	is.Equal(decoded.OrderID, "ord-fail")
+	is.Equal(decoded.CustomerID, "bob@example.com")
+	is.Equal(decoded.Reason, "insufficient funds")
+	is.True(decoded.At.Equal(at))
+}
+
 
 func TestExtractIntegrationEvents_JSONShapeMatchesIntegrationOrderPaid(t *testing.T) {
 	// Sanity check: the JSON the adapter stages MUST round-trip back

@@ -1,0 +1,12 @@
+Your order has been cancelled.
+
+Order {{.Order.ID}} - placed {{.Order.PlacedAt.Format "Jan 2, 2006 15:04 MST"}} has been cancelled.
+
+{{if .Reason}}Reason: {{.Reason}}
+
+{{end}}Items:
+{{range $line := .Order.Items}}- {{$line.ProductName}} x {{$line.Quantity}} = {{$line.LineTotalDisplay}} {{$line.PriceCurrency}}
+{{end}}
+View order details: {{.OrderURL}}
+
+If you have any questions, please reply to this email to contact {{.SiteName}} support.

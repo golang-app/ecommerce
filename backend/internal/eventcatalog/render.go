@@ -14,7 +14,12 @@ import (
 // one sweep.
 func RenderMarkdown(w io.Writer, events []Event) error {
 	sorted := append([]Event(nil), events...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].Name == sorted[j].Name {
+			return sorted[i].Kind < sorted[j].Kind
+		}
+		return sorted[i].Name < sorted[j].Name
+	})
 
 	if _, err := fmt.Fprintln(w, "| Name | Kind | Producer | Consumers | Version | Description |"); err != nil {
 		return err

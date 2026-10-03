@@ -202,6 +202,39 @@ func Catalog() []Event {
 			},
 			Description: "Published when an order's payment succeeds. Notification-style: carries OrderID / SessionID / CustomerID / At only, subscribers re-fetch state if they need details.",
 		},
+		{
+			Name:     "checkout.OrderPlaced",
+			Kind:     KindIntegration,
+			Package:  "checkout/integration",
+			Version:  1,
+			Producer: "checkout",
+			Consumers: []string{
+				"email (order placed pending payment)",
+			},
+			Description: "Published when an order is created in StatusPending. Notification-style: carries OrderID / CustomerID / At.",
+		},
+		{
+			Name:     "checkout.OrderCancelled",
+			Kind:     KindIntegration,
+			Package:  "checkout/integration",
+			Version:  1,
+			Producer: "checkout",
+			Consumers: []string{
+				"email (order cancelled)",
+			},
+			Description: "Published when an order is cancelled by customer or admin. Carries OrderID / CustomerID / Reason / At.",
+		},
+		{
+			Name:     "checkout.OrderPaymentFailed",
+			Kind:     KindIntegration,
+			Package:  "checkout/integration",
+			Version:  1,
+			Producer: "checkout",
+			Consumers: []string{
+				"email (payment failed)",
+			},
+			Description: "Published when an order's payment fails. Carries OrderID / CustomerID / Reason / At.",
+		},
 
 		// --- fulfillment / integration (published language) ---
 		{
@@ -213,20 +246,26 @@ func Catalog() []Event {
 			Description: "Published when a fulfillment reaches the Shipped state. Notification-style with the carrier + tracking code echoed for convenience; no external subscribers wired yet.",
 		},
 		{
-			Name:        "fulfillment.OrderDelivered",
-			Kind:        KindIntegration,
-			Package:     "fulfillment/integration",
-			Version:     1,
-			Producer:    "fulfillment",
-			Description: "Published when a fulfillment reaches the Delivered terminal state. Notification-style; no external subscribers wired yet.",
+			Name:     "fulfillment.OrderDelivered",
+			Kind:     KindIntegration,
+			Package:  "fulfillment/integration",
+			Version:  1,
+			Producer: "fulfillment",
+			Consumers: []string{
+				"email (order delivered)",
+			},
+			Description: "Published when a fulfillment reaches the Delivered terminal state. Notification-style.",
 		},
 		{
-			Name:        "fulfillment.OrderRefunded",
-			Kind:        KindIntegration,
-			Package:     "fulfillment/integration",
-			Version:     1,
-			Producer:    "fulfillment",
-			Description: "Published when a fulfillment is refunded; carries the operator-supplied reason. Notification-style; no external subscribers wired yet.",
+			Name:     "fulfillment.OrderRefunded",
+			Kind:     KindIntegration,
+			Package:  "fulfillment/integration",
+			Version:  1,
+			Producer: "fulfillment",
+			Consumers: []string{
+				"email (order refunded)",
+			},
+			Description: "Published when a fulfillment is refunded; carries the operator-supplied reason. Notification-style.",
 		},
 
 		// --- productcatalog / integration (published language) ---

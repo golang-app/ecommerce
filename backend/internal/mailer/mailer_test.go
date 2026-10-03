@@ -68,3 +68,28 @@ func TestSMTPMailerRejectsEmptyMessage(t *testing.T) {
 		t.Fatalf("expected ErrEmptyMessage")
 	}
 }
+
+func TestMessageKinds(t *testing.T) {
+	kinds := []mailer.MessageKind{
+		mailer.KindUnknown,
+		mailer.KindOrderConfirmation,
+		mailer.KindOrderShipped,
+		mailer.KindPasswordReset,
+		mailer.KindOrderPlaced,
+		mailer.KindOrderCancelled,
+		mailer.KindOrderPaymentFailed,
+		mailer.KindOrderDelivered,
+		mailer.KindOrderRefunded,
+	}
+	seen := make(map[string]bool)
+	for _, k := range kinds {
+		if k == "" {
+			t.Errorf("empty MessageKind")
+		}
+		if seen[k] {
+			t.Errorf("duplicate MessageKind: %s", k)
+		}
+		seen[k] = true
+	}
+}
+
