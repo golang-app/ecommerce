@@ -245,6 +245,11 @@ func (s *inMemoryOrderStorage) TodaysSales(context.Context) (map[string]checkout
 	return nil, nil
 }
 
+func (s *inMemoryOrderStorage) ListCustomerOrderStats(context.Context) ([]checkoutquery.CustomerOrderStat, error) {
+	return nil, nil
+}
+
+
 // orderToView projects an order aggregate into the query-side OrderView
 // shape, mirroring what checkout/adapter.Postgres.Find would return.
 func orderToView(o *checkoutdomain.Order) checkoutquery.OrderView {

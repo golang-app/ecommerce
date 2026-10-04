@@ -25,6 +25,7 @@ type Repository interface {
 	// keyed by currency. The map is empty when no paid orders have been
 	// recorded today; callers should treat that as "no card to render".
 	TodaysSales(ctx context.Context) (map[string]DailySalesRow, error)
+	ListCustomerOrderStats(ctx context.Context) ([]CustomerOrderStat, error)
 }
 
 // Service is the checkout query side. It is intentionally separate from the
@@ -79,3 +80,9 @@ func (s Service) HasPurchasedProduct(ctx context.Context, customerID, productID 
 func (s Service) TodaysSales(ctx context.Context) (map[string]DailySalesRow, error) {
 	return s.repo.TodaysSales(ctx)
 }
+
+// ListCustomerOrderStats returns aggregated per-customer order statistics.
+func (s Service) ListCustomerOrderStats(ctx context.Context) ([]CustomerOrderStat, error) {
+	return s.repo.ListCustomerOrderStats(ctx)
+}
+

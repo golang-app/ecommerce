@@ -197,3 +197,32 @@ type DailySalesRow struct {
 // units of the row's currency. Templates pair it with Currency to label
 // the value.
 func (r DailySalesRow) RevenueDisplay() string { return money(r.RevenueMinor) }
+
+type CustomerOrderStat struct {
+	customerID     string
+	latestShipName string
+	orderCount     int
+	totalSpent     int64
+	currency       string
+	lastOrderAt    time.Time
+}
+
+func NewCustomerOrderStat(customerID, latestShipName string, orderCount int, totalSpent int64, currency string, lastOrderAt time.Time) CustomerOrderStat {
+	return CustomerOrderStat{
+		customerID:     customerID,
+		latestShipName: latestShipName,
+		orderCount:     orderCount,
+		totalSpent:     totalSpent,
+		currency:       currency,
+		lastOrderAt:    lastOrderAt,
+	}
+}
+
+func (s CustomerOrderStat) CustomerID() string     { return s.customerID }
+func (s CustomerOrderStat) LatestShipName() string { return s.latestShipName }
+func (s CustomerOrderStat) OrderCount() int        { return s.orderCount }
+func (s CustomerOrderStat) TotalSpent() int64      { return s.totalSpent }
+func (s CustomerOrderStat) TotalDisplay() string   { return money(s.totalSpent) }
+func (s CustomerOrderStat) Currency() string       { return s.currency }
+func (s CustomerOrderStat) LastOrderAt() time.Time { return s.lastOrderAt }
+
