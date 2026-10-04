@@ -26,6 +26,7 @@ type appService interface {
 	RequestPasswordReset(ctx context.Context, email string) (string, error)
 	ResetPassword(ctx context.Context, rawToken, newPassword string) error
 	ListCustomers(ctx context.Context) ([]string, error)
+	IsRegistered(ctx context.Context, email string) (bool, error)
 }
 
 // adminAppService is the admin-side application surface exposed by

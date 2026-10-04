@@ -26,6 +26,7 @@ import (
 type mockAdminCustomerAuthSrv struct {
 	listCustomersFn        func(ctx context.Context) ([]string, error)
 	requestPasswordResetFn func(ctx context.Context, email string) (string, error)
+	isRegisteredFn         func(ctx context.Context, email string) (bool, error)
 }
 
 func (m *mockAdminCustomerAuthSrv) Login(ctx context.Context, username string, password string) (*authDomain.Session, error) {
@@ -57,6 +58,24 @@ func (m *mockAdminCustomerAuthSrv) ListCustomers(ctx context.Context) ([]string,
 		return m.listCustomersFn(ctx)
 	}
 	return nil, nil
+}
+func (m *mockAdminCustomerAuthSrv) IsRegistered(ctx context.Context, email string) (bool, error) {
+	if m.isRegisteredFn != nil {
+		return m.isRegisteredFn(ctx, email)
+	}
+	if m.listCustomersFn != nil {
+		emails, err := m.listCustomersFn(ctx)
+		if err != nil {
+			return false, err
+		}
+		for _, e := range emails {
+			if strings.EqualFold(strings.TrimSpace(e), strings.TrimSpace(email)) {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	return false, nil
 }
 
 type mockAdminCustomerCheckoutQry struct {
@@ -463,8 +482,8 @@ func TestAdminCustomerDetail_Render(t *testing.T) {
 
 	now := time.Now()
 	authMock := &mockAdminCustomerAuthSrv{
-		listCustomersFn: func(ctx context.Context) ([]string, error) {
-			return []string{"alice@example.com"}, nil
+		isRegisteredFn: func(ctx context.Context, email string) (bool, error) {
+			return email == "alice@example.com", nil
 		},
 	}
 
@@ -586,8 +605,8 @@ func TestAdminCustomer_PasswordReset(t *testing.T) {
 
 	var requestedEmail string
 	authMock := &mockAdminCustomerAuthSrv{
-		listCustomersFn: func(ctx context.Context) ([]string, error) {
-			return []string{"alice@example.com"}, nil
+		isRegisteredFn: func(ctx context.Context, email string) (bool, error) {
+			return email == "alice@example.com", nil
 		},
 		requestPasswordResetFn: func(ctx context.Context, email string) (string, error) {
 			requestedEmail = email
@@ -750,5 +769,32 @@ func TestAdminCustomers_Routing(t *testing.T) {
 			t.Fatalf("expected redirect to /admin/customers/alice@example.com, got %s", loc)
 		}
 	})
+}
+
+func TestFormatCents(t *testing.T) {
+	cases := []struct {
+		cents int64
+		want  string
+	}{
+		{cents: 0, want: "0.00"},
+		{cents: 5, want: "0.05"},
+		{cents: 50, want: "0.50"},
+		{cents: 99, want: "0.99"},
+		{cents: 100, want: "1.00"},
+		{cents: 19999, want: "199.99"},
+		{cents: -5, want: "-0.05"},
+		{cents: -50, want: "-0.50"},
+		{cents: -99, want: "-0.99"},
+		{cents: -100, want: "-1.00"},
+		{cents: -150, want: "-1.50"},
+		{cents: -19999, want: "-199.99"},
+	}
+
+	for _, tc := range cases {
+		got := formatCents(tc.cents)
+		if got != tc.want {
+			t.Errorf("formatCents(%d) = %q, want %q", tc.cents, got, tc.want)
+		}
+	}
 }
 

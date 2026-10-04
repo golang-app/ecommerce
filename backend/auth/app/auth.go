@@ -157,6 +157,24 @@ func (a auth) ListCustomers(ctx context.Context) ([]string, error) {
 	return a.authStorage.List(ctx)
 }
 
+// IsRegistered checks whether a customer exists with the given email.
+// It returns (true, nil) if found, (false, nil) if the customer does not exist,
+// and (false, err) if storage encounters an unexpected error.
+func (a auth) IsRegistered(ctx context.Context, email string) (bool, error) {
+	ctx, span := tracer.Start(ctx, "Auth.IsRegistered")
+	defer span.End()
+
+	_, err := a.authStorage.Find(ctx, email)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, domain.ErrCustomerNotFound) {
+		return false, nil
+	}
+	recordSpanError(span, err)
+	return false, fmt.Errorf("could not check if customer is registered: %w", err)
+}
+
 func (a auth) FindByToken(ctx context.Context, sessToken string) (*domain.Session, error) {
 	sess, err := a.sessStorage.Find(ctx, sessToken)
 	if err != nil {

@@ -93,6 +93,7 @@ type authService interface {
 	RequestPasswordReset(ctx context.Context, email string) (string, error)
 	ResetPassword(ctx context.Context, rawToken, newPassword string) error
 	ListCustomers(ctx context.Context) ([]string, error)
+	IsRegistered(ctx context.Context, email string) (bool, error)
 }
 
 // adminAuthService is the operator-side seam onto the auth bounded

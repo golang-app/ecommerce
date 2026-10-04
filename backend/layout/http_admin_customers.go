@@ -24,6 +24,15 @@ type adminCustomerListItem struct {
 	LastOrderAt        time.Time
 }
 
+func formatCents(cents int64) string {
+	sign := ""
+	if cents < 0 {
+		sign = "-"
+		cents = -cents
+	}
+	return fmt.Sprintf("%s%d.%02d", sign, cents/100, cents%100)
+}
+
 // AdminCustomers handles GET /admin/customers.
 // It lists all unique customers across registered accounts (auth service)
 // and guest purchasers (checkout order stats), supporting filter and search.
@@ -64,7 +73,7 @@ func (handler httpHandler) AdminCustomers(w http.ResponseWriter, r *http.Request
 			IsRegistered:       false,
 			OrderCount:         stat.OrderCount(),
 			TotalSpent:         stat.TotalSpent(),
-			TotalSpentDisplay:  stat.TotalDisplay(),
+			TotalSpentDisplay:  formatCents(stat.TotalSpent()),
 			TotalSpentCurrency: currency,
 			LastOrderAt:        stat.LastOrderAt(),
 		}
@@ -152,17 +161,9 @@ func (handler httpHandler) AdminCustomerDetail(w http.ResponseWriter, r *http.Re
 	}
 
 	// 1. Account status: verify whether email is registered
-	var isRegistered bool
-	regEmails, err := handler.authSrv.ListCustomers(r.Context())
+	isRegistered, err := handler.authSrv.IsRegistered(r.Context(), customerEmail)
 	if err != nil {
-		handler.logger.WithError(err).Error("cannot list registered customers")
-	} else {
-		for _, reg := range regEmails {
-			if strings.EqualFold(strings.TrimSpace(reg), strings.TrimSpace(customerEmail)) {
-				isRegistered = true
-				break
-			}
-		}
+		handler.logger.WithError(err).Error("cannot check if customer is registered")
 	}
 
 	// 2. Order history
@@ -243,17 +244,17 @@ func (handler httpHandler) AdminCustomerDetail(w http.ResponseWriter, r *http.Re
 		"IsRegistered":       isRegistered,
 		"OrderCount":         len(orders),
 		"TotalSpent":         totalSpent,
-		"TotalSpentDisplay":  fmt.Sprintf("%d.%02d", totalSpent/100, totalSpent%100),
+		"TotalSpentDisplay":  formatCents(totalSpent),
 		"TotalSpentCurrency": currency,
 	}
 
 	statsView := map[string]any{
 		"TotalOrders":        len(orders),
 		"TotalSpent":         totalSpent,
-		"TotalSpentDisplay":  fmt.Sprintf("%d.%02d", totalSpent/100, totalSpent%100),
+		"TotalSpentDisplay":  formatCents(totalSpent),
 		"TotalSpentCurrency": currency,
 		"AOV":                aov,
-		"AOVDisplay":         fmt.Sprintf("%d.%02d", aov/100, aov%100),
+		"AOVDisplay":         formatCents(aov),
 		"AOVCurrency":        currency,
 	}
 
@@ -289,20 +290,12 @@ func (handler httpHandler) AdminCustomerTriggerPasswordReset(w http.ResponseWrit
 	}
 
 	// Verify customer is registered
-	regEmails, err := handler.authSrv.ListCustomers(r.Context())
+	isRegistered, err := handler.authSrv.IsRegistered(r.Context(), customerEmail)
 	if err != nil {
-		handler.logger.WithError(err).Error("cannot list registered customers for password reset")
+		handler.logger.WithError(err).Error("cannot check if customer is registered for password reset")
 		handler.flash(w, r, "Failed to verify customer", "error")
 		http.Redirect(w, r, "/admin/customers/"+customerEmail, http.StatusSeeOther)
 		return
-	}
-
-	var isRegistered bool
-	for _, reg := range regEmails {
-		if strings.EqualFold(strings.TrimSpace(reg), strings.TrimSpace(customerEmail)) {
-			isRegistered = true
-			break
-		}
 	}
 
 	if !isRegistered {
