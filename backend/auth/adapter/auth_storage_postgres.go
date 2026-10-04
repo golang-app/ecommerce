@@ -50,7 +50,7 @@ func (p authStoragePostgres) List(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list customers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var emails []string
 	for rows.Next() {

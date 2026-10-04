@@ -398,7 +398,7 @@ func (p Postgres) ListCustomerOrderStats(ctx context.Context) ([]query.CustomerO
 	if err != nil {
 		return nil, fmt.Errorf("query customer order stats: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var stats []query.CustomerOrderStat
 	for rows.Next() {
