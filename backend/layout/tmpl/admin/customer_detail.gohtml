@@ -1,0 +1,265 @@
+{{define "main"}}
+  {{$email := ""}}
+  {{if .Customer}}{{$email = .Customer.Email}}{{else if .Email}}{{$email = .Email}}{{end}}
+
+  <p class="crumbs"><a href="/admin/customers">customers</a> / {{$email}}</p>
+
+  <article class="order" style="margin-bottom: 20px;">
+    <header class="order__header">
+      <div class="admin-page-head" style="margin-bottom: 8px;">
+        <div>
+          <h2 class="account-card__title" style="margin-bottom: 4px;">
+            customer <span class="order__id">{{$email}}</span>
+          </h2>
+          <p class="order__subtitle muted">
+            {{$name := ""}}
+            {{if .Customer}}
+              {{if .Customer.Name}}{{$name = .Customer.Name}}{{else if .Customer.ShipName}}{{$name = .Customer.ShipName}}{{end}}
+            {{else}}
+              {{if .Name}}{{$name = .Name}}{{else if .ShipName}}{{$name = .ShipName}}{{end}}
+            {{end}}
+            {{if $name}}<strong>{{$name}}</strong> &middot; {{end}}
+            {{$isReg := false}}
+            {{if .Customer}}
+              {{if or .Customer.IsRegistered (eq (printf "%s" .Customer.Type) "registered")}}{{$isReg = true}}{{end}}
+            {{else}}
+              {{if or .IsRegistered (eq (printf "%s" .Type) "registered")}}{{$isReg = true}}{{end}}
+            {{end}}
+            {{if $isReg}}
+              <span class="badge badge--success">Registered Account</span>
+            {{else}}
+              <span class="badge badge--muted">Guest Purchaser</span>
+            {{end}}
+          </p>
+        </div>
+        <div>
+          {{if $isReg}}
+            <form method="post" action="/admin/customers/{{$email}}/reset-password">
+              <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+              <button type="submit" class="btn btn--ghost btn--small">Send Password Reset Email</button>
+            </form>
+          {{end}}
+        </div>
+      </div>
+    </header>
+  </article>
+
+  <div class="admin__stats" style="margin-bottom: 24px;">
+    <div class="admin-stat">
+      <span class="admin-stat__value">
+        {{if .Stats}}
+          {{.Stats.TotalOrders}}
+        {{else if .Customer}}
+          {{.Customer.OrderCount}}
+        {{else if .TotalOrders}}
+          {{.TotalOrders}}
+        {{else}}
+          {{len .Orders}}
+        {{end}}
+      </span>
+      <span class="admin-stat__label">Total Orders</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat__value">
+        {{if .Stats}}
+          {{if .Stats.TotalSpentDisplay}}
+            {{.Stats.TotalSpentDisplay}} {{with .Stats.TotalSpentCurrency}}{{.}}{{else}}USD{{end}}
+          {{else if .Stats.TotalSpentFormatted}}
+            {{.Stats.TotalSpentFormatted}}
+          {{else}}
+            {{.Stats.TotalSpent}}
+          {{end}}
+        {{else if .Customer}}
+          {{if .Customer.TotalSpentDisplay}}
+            {{.Customer.TotalSpentDisplay}} {{with .Customer.TotalSpentCurrency}}{{.}}{{else}}USD{{end}}
+          {{else if .Customer.TotalSpentFormatted}}
+            {{.Customer.TotalSpentFormatted}}
+          {{else}}
+            {{.Customer.TotalSpent}}
+          {{end}}
+        {{else if .TotalSpentDisplay}}
+          {{.TotalSpentDisplay}} {{with .TotalSpentCurrency}}{{.}}{{else}}USD{{end}}
+        {{else if .TotalSpentFormatted}}
+          {{.TotalSpentFormatted}}
+        {{else if .TotalSpent}}
+          {{.TotalSpent}}
+        {{else}}
+          $0.00 USD
+        {{end}}
+      </span>
+      <span class="admin-stat__label">Total Spent</span>
+    </div>
+    <div class="admin-stat">
+      <span class="admin-stat__value">
+        {{if .Stats}}
+          {{if .Stats.AOVDisplay}}
+            {{.Stats.AOVDisplay}} {{with .Stats.AOVCurrency}}{{.}}{{else}}USD{{end}}
+          {{else if .Stats.AOVFormatted}}
+            {{.Stats.AOVFormatted}}
+          {{else}}
+            {{.Stats.AOV}}
+          {{end}}
+        {{else if .AOVDisplay}}
+          {{.AOVDisplay}} {{with .AOVCurrency}}{{.}}{{else}}USD{{end}}
+        {{else if .AOVFormatted}}
+          {{.AOVFormatted}}
+        {{else if .AOV}}
+          {{.AOV}}
+        {{else}}
+          $0.00 USD
+        {{end}}
+      </span>
+      <span class="admin-stat__label">Average Order Value</span>
+    </div>
+  </div>
+
+  <section class="admin-section">
+    <h3 class="admin-section__title">orders</h3>
+    {{if .Orders}}
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>order</th>
+            <th>placed</th>
+            <th>status</th>
+            <th>items</th>
+            <th>total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $o := .Orders}}
+            <tr>
+              <td><a href="/admin/orders/{{$o.ID}}"><code>{{$o.ID}}</code></a></td>
+              <td>
+                {{if $o.PlacedAt}}
+                  {{if not $o.PlacedAt.IsZero}}{{$o.PlacedAt.Format "Jan 2, 2006 15:04 MST"}}{{else}}<span class="muted">&mdash;</span>{{end}}
+                {{else}}
+                  <span class="muted">&mdash;</span>
+                {{end}}
+              </td>
+              <td><span class="order-status order-status--{{$o.Status}}">{{$o.Status}}</span></td>
+              <td>
+                {{if $o.ItemCount}}
+                  {{$o.ItemCount}}
+                {{else if $o.Items}}
+                  {{len $o.Items}}
+                {{else}}
+                  0
+                {{end}}
+              </td>
+              <td>
+                {{if $o.TotalDisplay}}
+                  {{$o.TotalDisplay}} {{$o.TotalCurrency}}
+                {{else if $o.TotalFormatted}}
+                  {{$o.TotalFormatted}}
+                {{else if $o.Total}}
+                  {{$o.Total}}
+                {{else}}
+                  &mdash;
+                {{end}}
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    {{else}}
+      <p class="muted">no orders found for this customer.</p>
+    {{end}}
+  </section>
+
+  <section class="admin-section">
+    <h3 class="admin-section__title">shipping addresses</h3>
+    {{if .Addresses}}
+      <div class="admin-checks" style="grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px;">
+        {{range $a := .Addresses}}
+          <div class="admin-section" style="margin-bottom: 0; padding: 14px;">
+            {{if or $a.IsDefault $a.Default}}
+              <span class="badge badge--primary" style="margin-bottom: 6px;">default</span><br>
+            {{end}}
+            <strong>{{if $a.Name}}{{$a.Name}}{{else if $a.Recipient}}{{$a.Recipient}}{{end}}</strong><br>
+            <address class="order__address">
+              {{if $a.Street1}}{{$a.Street1}}<br>{{else if $a.Street}}{{$a.Street}}<br>{{end}}
+              {{with $a.Street2}}{{.}}<br>{{end}}
+              {{$a.City}}{{if or $a.Zip $a.PostalCode}}, {{if $a.Zip}}{{$a.Zip}}{{else}}{{$a.PostalCode}}{{end}}{{end}}<br>
+              {{$a.Country}}
+            </address>
+          </div>
+        {{end}}
+      </div>
+    {{else}}
+      <p class="muted">no saved addresses.</p>
+    {{end}}
+  </section>
+
+  <section class="admin-section">
+    <h3 class="admin-section__title">reviews</h3>
+    {{if .Reviews}}
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>product</th>
+            <th>rating</th>
+            <th>comment</th>
+            <th>status</th>
+            <th>created</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $r := .Reviews}}
+            <tr>
+              <td><a href="/product/{{$r.ProductID}}"><code>{{$r.ProductID}}</code></a></td>
+              <td>{{$r.Rating}} / 5</td>
+              <td>{{if $r.Body}}{{$r.Body}}{{else if $r.Comment}}{{$r.Comment}}{{end}}</td>
+              <td>
+                <span class="badge {{if eq (printf "%s" $r.Status) "approved"}}badge--success{{else if eq (printf "%s" $r.Status) "rejected"}}badge--muted{{else}}badge--primary{{end}}">
+                  {{$r.Status}}
+                </span>
+              </td>
+              <td>
+                {{if $r.CreatedAt}}
+                  {{if not $r.CreatedAt.IsZero}}{{$r.CreatedAt.Format "Jan 2, 2006 15:04"}}{{else}}<span class="muted">&mdash;</span>{{end}}
+                {{else}}
+                  <span class="muted">&mdash;</span>
+                {{end}}
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    {{else}}
+      <p class="muted">no reviews submitted.</p>
+    {{end}}
+  </section>
+
+  <section class="admin-section">
+    <h3 class="admin-section__title">wishlist</h3>
+    {{if .Wishlist}}
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>item / variant id</th>
+            <th>added at</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $w := .Wishlist}}
+            <tr>
+              <td><code>{{if $w.VariantID}}{{$w.VariantID}}{{else if $w.ProductID}}{{$w.ProductID}}{{else}}{{$w}}{{end}}</code></td>
+              <td>
+                {{if $w.AddedAt}}
+                  {{if not $w.AddedAt.IsZero}}{{$w.AddedAt.Format "Jan 2, 2006 15:04"}}{{else}}<span class="muted">&mdash;</span>{{end}}
+                {{else if $w.CreatedAt}}
+                  {{if not $w.CreatedAt.IsZero}}{{$w.CreatedAt.Format "Jan 2, 2006 15:04"}}{{else}}<span class="muted">&mdash;</span>{{end}}
+                {{else}}
+                  <span class="muted">&mdash;</span>
+                {{end}}
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    {{else}}
+      <p class="muted">wishlist is empty.</p>
+    {{end}}
+  </section>
+{{end}}

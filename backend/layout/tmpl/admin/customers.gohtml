@@ -1,0 +1,90 @@
+{{define "main"}}
+  <div class="admin-page-head">
+    <h2 class="account-card__title">customers</h2>
+  </div>
+
+  <form method="get" action="/admin/customers" class="admin-filter">
+    {{if .Filter}}<input type="hidden" name="filter" value="{{.Filter}}">{{end}}
+    <label class="admin-filter__label" for="q">search</label>
+    <input class="admin-filter__input" id="q" type="search" name="q" value="{{if .Query}}{{.Query}}{{else if .SearchQuery}}{{.SearchQuery}}{{else}}{{.Q}}{{end}}" placeholder="search by email or name">
+    <button type="submit" class="btn btn--ghost">search</button>
+    {{if or .Query .SearchQuery .Q}}
+      <a href="/admin/customers{{if .Filter}}?filter={{.Filter}}{{end}}" class="linkbtn">clear</a>
+    {{end}}
+  </form>
+
+  <nav class="tabs" aria-label="customer filter" style="margin-bottom: 18px;">
+    <a href="/admin/customers{{if or .Query .Q}}?q={{if .Query}}{{.Query}}{{else}}{{.Q}}{{end}}{{end}}"
+       class="tabs__link {{if or (eq .Filter "") (eq .Filter "all")}}is-active{{end}}">
+      All
+    </a>
+    <a href="/admin/customers?filter=registered{{if or .Query .Q}}&q={{if .Query}}{{.Query}}{{else}}{{.Q}}{{end}}{{end}}"
+       class="tabs__link {{if eq .Filter "registered"}}is-active{{end}}">
+      Registered
+    </a>
+    <a href="/admin/customers?filter=guest{{if or .Query .Q}}&q={{if .Query}}{{.Query}}{{else}}{{.Q}}{{end}}{{end}}"
+       class="tabs__link {{if eq .Filter "guest"}}is-active{{end}}">
+      Guest
+    </a>
+  </nav>
+
+  {{if .Customers}}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>customer</th>
+          <th>type</th>
+          <th>orders</th>
+          <th>total spent</th>
+          <th>last ordered</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $c := .Customers}}
+          <tr>
+            <td>
+              <a href="/admin/customers/{{$c.Email}}"><code>{{$c.Email}}</code></a>
+              {{if $c.Name}}
+                <br><span class="muted">{{$c.Name}}</span>
+              {{else if $c.ShipName}}
+                <br><span class="muted">{{$c.ShipName}}</span>
+              {{end}}
+            </td>
+            <td>
+              {{if or $c.IsRegistered (eq (printf "%s" $c.Type) "registered")}}
+                <span class="badge badge--success">Registered</span>
+              {{else}}
+                <span class="badge badge--muted">Guest</span>
+              {{end}}
+            </td>
+            <td>{{$c.OrderCount}}</td>
+            <td>
+              {{if $c.TotalSpentDisplay}}
+                {{$c.TotalSpentDisplay}} {{with $c.TotalSpentCurrency}}{{.}}{{else}}USD{{end}}
+              {{else if $c.TotalSpentFormatted}}
+                {{$c.TotalSpentFormatted}}
+              {{else}}
+                {{$c.TotalSpent}}
+              {{end}}
+            </td>
+            <td>
+              {{if $c.LastOrderAt}}
+                {{if not $c.LastOrderAt.IsZero}}{{$c.LastOrderAt.Format "Jan 2, 2006 15:04"}}{{else}}<span class="muted">&mdash;</span>{{end}}
+              {{else if $c.LastOrderedAt}}
+                {{if not $c.LastOrderedAt.IsZero}}{{$c.LastOrderedAt.Format "Jan 2, 2006 15:04"}}{{else}}<span class="muted">&mdash;</span>{{end}}
+              {{else}}
+                <span class="muted">&mdash;</span>
+              {{end}}
+            </td>
+            <td class="admin-table__actions">
+              <a href="/admin/customers/{{$c.Email}}">view</a>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no customers found.</p>
+  {{end}}
+{{end}}

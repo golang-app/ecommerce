@@ -10,7 +10,7 @@
         {{range $o := .Orders}}
           <tr>
             <td><a href="/admin/orders/{{$o.ID}}"><code>{{$o.ID}}</code></a></td>
-            <td>{{if $o.CustomerID}}{{$o.CustomerID}}{{else}}<span class="muted">guest</span>{{end}}</td>
+            <td>{{if $o.CustomerID}}<a href="/admin/customers/{{$o.CustomerID}}">{{$o.CustomerID}}</a>{{else}}<span class="muted">guest</span>{{end}}</td>
             <td><span class="order-status order-status--{{$o.Status}}">{{$o.Status}}</span></td>
             <td>{{$o.PlacedAt.Format "Jan 2, 2006 15:04 MST"}}</td>
             <td>{{$o.ItemCount}}</td>
