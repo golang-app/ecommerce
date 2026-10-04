@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"github.com/bkielbasa/go-ecommerce/backend/auth/domain"
 	_ "github.com/lib/pq"
@@ -42,4 +43,22 @@ func (p authStoragePostgres) Find(ctx context.Context, email string) (Customer, 
 	}
 
 	return c, nil
+}
+
+func (p authStoragePostgres) List(ctx context.Context) ([]string, error) {
+	rows, err := p.db.QueryContext(ctx, "SELECT username FROM auth_customer ORDER BY username ASC")
+	if err != nil {
+		return nil, fmt.Errorf("list customers: %w", err)
+	}
+	defer rows.Close()
+
+	var emails []string
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			return nil, fmt.Errorf("scan customer email: %w", err)
+		}
+		emails = append(emails, email)
+	}
+	return emails, rows.Err()
 }

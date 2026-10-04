@@ -41,6 +41,7 @@ type CustomerStorage interface {
 	Create(ctx context.Context, email, passwordHash string) error
 	Find(ctx context.Context, email string) (adapter.Customer, error)
 	UpdatePassword(ctx context.Context, email, passwordHash string) error
+	List(ctx context.Context) ([]string, error)
 }
 
 type SessStorage interface {
@@ -148,6 +149,12 @@ func (a auth) CreateNewCustomer(ctx context.Context, email, password string) (re
 		return err
 	}
 	return nil
+}
+
+func (a auth) ListCustomers(ctx context.Context) ([]string, error) {
+	ctx, span := tracer.Start(ctx, "Auth.ListCustomers")
+	defer span.End()
+	return a.authStorage.List(ctx)
 }
 
 func (a auth) FindByToken(ctx context.Context, sessToken string) (*domain.Session, error) {
