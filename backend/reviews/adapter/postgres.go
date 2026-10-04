@@ -213,6 +213,23 @@ func (p *Postgres) ListAll(ctx context.Context, limit int) ([]domain.Review, err
 	return scanReviewRows(rows)
 }
 
+// ListByCustomer returns all non-deleted reviews written by customerID, newest first.
+func (p *Postgres) ListByCustomer(ctx context.Context, customerID string) ([]domain.Review, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT id, product_id, customer_id, rating, body, created_at, status
+		FROM reviews_review
+		WHERE customer_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at DESC
+	`, customerID)
+	if err != nil {
+		return nil, fmt.Errorf("list reviews by customer: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	return scanReviewRows(rows)
+}
+
+
 // scanReviewRows drains a SELECT that produces the same column shape as
 // ListByStatus / ListAll. Pulled out so the two list queries stay short.
 func scanReviewRows(rows *sql.Rows) ([]domain.Review, error) {

@@ -41,6 +41,7 @@ type Storage interface {
 	HasReviewed(ctx context.Context, productID, customerID string) (bool, error)
 	ListByStatus(ctx context.Context, status domain.Status, limit int) ([]domain.Review, error)
 	ListAll(ctx context.Context, limit int) ([]domain.Review, error)
+	ListByCustomer(ctx context.Context, customerID string) ([]domain.Review, error)
 }
 
 // VerifiedBuyerChecker is the cross-context port used to gate Submit. The
@@ -202,6 +203,15 @@ func (s *Service) ListAll(ctx context.Context, limit int) ([]domain.Review, erro
 	}
 	return s.storage.ListAll(ctx, limit)
 }
+
+// ListByCustomer returns all non-deleted reviews written by customerID.
+func (s *Service) ListByCustomer(ctx context.Context, customerID string) ([]domain.Review, error) {
+	if strings.TrimSpace(customerID) == "" {
+		return nil, nil
+	}
+	return s.storage.ListByCustomer(ctx, customerID)
+}
+
 
 // newRandomID returns a 16-byte hex string — 128 bits of randomness is well
 // beyond what reviews collisions would ever need; keeping it lib-free avoids
