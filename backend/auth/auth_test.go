@@ -5,8 +5,10 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 
+	"github.com/bkielbasa/go-ecommerce/backend/auth/adapter"
 	"github.com/bkielbasa/go-ecommerce/backend/auth/app"
 	"github.com/bkielbasa/go-ecommerce/backend/auth/domain"
 	"github.com/matryer/is"
@@ -131,3 +133,21 @@ func randomPassword() (pass string) {
 
 	return
 }
+
+func TestAuth_ListCustomers(t *testing.T) {
+	ctx := context.Background()
+	storage := adapter.NewInMemoryAuthStorage()
+	_ = storage.Create(ctx, "bob@example.com", "hash")
+	_ = storage.Create(ctx, "alice@example.com", "hash")
+
+	srv := app.NewAuth(storage, nil)
+	customers, err := srv.ListCustomers(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := []string{"alice@example.com", "bob@example.com"}
+	if !reflect.DeepEqual(customers, expected) {
+		t.Fatalf("expected %v, got %v", expected, customers)
+	}
+}
+

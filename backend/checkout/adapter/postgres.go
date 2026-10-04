@@ -381,6 +381,40 @@ func (p Postgres) ListAll(ctx context.Context) ([]query.OrderSummary, error) {
 	return summaries, nil
 }
 
+func (p Postgres) ListCustomerOrderStats(ctx context.Context) ([]query.CustomerOrderStat, error) {
+	rows, err := p.db.QueryContext(ctx, `
+		SELECT 
+			customer_id,
+			COALESCE(MAX(ship_name), '') AS latest_ship_name,
+			COUNT(id) AS order_count,
+			COALESCE(SUM(total_amount), 0) AS total_spent,
+			COALESCE(MAX(total_currency), 'USD') AS currency,
+			COALESCE(MAX(placed_at), now()) AS last_order_at
+		FROM checkout_order
+		WHERE customer_id IS NOT NULL AND customer_id != ''
+		GROUP BY customer_id
+		ORDER BY last_order_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("query customer order stats: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var stats []query.CustomerOrderStat
+	for rows.Next() {
+		var customerID, shipName, currency string
+		var orderCount int
+		var totalSpent int64
+		var lastOrderAt time.Time
+		if err := rows.Scan(&customerID, &shipName, &orderCount, &totalSpent, &currency, &lastOrderAt); err != nil {
+			return nil, fmt.Errorf("scan customer order stat: %w", err)
+		}
+		stats = append(stats, query.NewCustomerOrderStat(customerID, shipName, orderCount, totalSpent, currency, lastOrderAt))
+	}
+	return stats, rows.Err()
+}
+
+
 // outboxRecord is the already-encoded integration event the adapter
 // is about to stage into the outbox table. Kind is the wire name (it
 // MUST match integration.X{}.EventName() so the dispatcher's decoder

@@ -7,7 +7,7 @@
           <p class="order__subtitle muted">
             <span class="order-status order-status--{{.Order.Status}}">{{.Order.Status}}</span> &middot;
             placed {{.Order.PlacedAt.Format "Jan 2, 2006 15:04 MST"}} &middot;
-            customer {{if .Order.CustomerID}}{{.Order.CustomerID}}{{else}}<span class="muted">guest</span>{{end}}
+            customer {{if .Order.CustomerID}}<a href="/admin/customers/{{.Order.CustomerID}}">{{.Order.CustomerID}}</a>{{else}}<span class="muted">guest</span>{{end}}
           </p>
         </header>
 

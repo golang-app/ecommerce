@@ -2,11 +2,14 @@ package adapter
 
 import (
 	"context"
+	"sort"
+	"sync"
 
 	"github.com/bkielbasa/go-ecommerce/backend/auth/domain"
 )
 
 type inMemory struct {
+	mu        sync.RWMutex
 	customers map[string]Customer
 }
 
@@ -19,6 +22,8 @@ func NewInMemoryAuthStorage() *inMemory {
 }
 
 func (i *inMemory) Create(ctx context.Context, email, hash string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	if _, ok := i.customers[email]; ok {
 		return domain.ErrCustomerExists
 	}
@@ -32,6 +37,8 @@ func (i *inMemory) Create(ctx context.Context, email, hash string) error {
 }
 
 func (i *inMemory) UpdatePassword(ctx context.Context, email, hash string) error {
+	i.mu.Lock()
+	defer i.mu.Unlock()
 	c, ok := i.customers[email]
 	if !ok {
 		return domain.ErrCustomerNotFound
@@ -42,10 +49,23 @@ func (i *inMemory) UpdatePassword(ctx context.Context, email, hash string) error
 }
 
 func (i *inMemory) Find(ctx context.Context, email string) (Customer, error) {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
 	customer, ok := i.customers[email]
 	if !ok {
 		return customer, domain.ErrCustomerNotFound
 	}
 
 	return customer, nil
+}
+
+func (i *inMemory) List(ctx context.Context) ([]string, error) {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	var emails []string
+	for email := range i.customers {
+		emails = append(emails, email)
+	}
+	sort.Strings(emails)
+	return emails, nil
 }

@@ -236,3 +236,34 @@ func TestReject_KeepsRowHidden(t *testing.T) {
 		t.Fatalf("expected one rejected row in ListAll; got %#v", all)
 	}
 }
+
+func TestReviews_ListByCustomer(t *testing.T) {
+	ctx := context.Background()
+	storage := adapter.NewInMemory()
+	srv := app.NewService(storage, stubBuyers{})
+
+	r1, err := domain.NewReview("r1", "prod-1", "alice@example.com", "Great!", 5, time.Now().Add(-time.Hour), domain.StatusApproved)
+	if err != nil {
+		t.Fatalf("NewReview r1: %v", err)
+	}
+	r2, err := domain.NewReview("r2", "prod-2", "alice@example.com", "Nice!", 4, time.Now(), domain.StatusPending)
+	if err != nil {
+		t.Fatalf("NewReview r2: %v", err)
+	}
+	r3, err := domain.NewReview("r3", "prod-1", "bob@example.com", "Ok", 3, time.Now(), domain.StatusApproved)
+	if err != nil {
+		t.Fatalf("NewReview r3: %v", err)
+	}
+	_ = storage.Insert(ctx, r1)
+	_ = storage.Insert(ctx, r2)
+	_ = storage.Insert(ctx, r3)
+
+	reviews, err := srv.ListByCustomer(ctx, "alice@example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(reviews) != 2 {
+		t.Fatalf("expected 2 reviews, got %d", len(reviews))
+	}
+}
+

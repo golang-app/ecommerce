@@ -226,6 +226,10 @@ func (s *e2eCheckoutService) TodaysSales(ctx context.Context) (map[string]checko
 	return nil, nil
 }
 
+func (s *e2eCheckoutService) ListCustomerOrderStats(ctx context.Context) ([]checkoutQuery.CustomerOrderStat, error) {
+	return nil, nil
+}
+
 // e2eCartService satisfies cartService for the test harness.
 type e2eCartService struct {
 	cart *cartDomain.Cart

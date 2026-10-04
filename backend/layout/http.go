@@ -272,6 +272,12 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 
 	r.HandleFunc("/admin/inventory", observability.HTTPWrap(m.handler.AdminInventory, m.logger)).Methods("GET")
 
+	// Customers admin: list, detail, and password reset trigger.
+	// Specific /{email}/reset-password action is registered before /{email}.
+	r.HandleFunc("/admin/customers", observability.HTTPWrap(m.handler.AdminCustomers, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/customers/{email}/reset-password", observability.HTTPWrap(m.handler.AdminCustomerTriggerPasswordReset, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/customers/{email}", observability.HTTPWrap(m.handler.AdminCustomerDetail, m.logger)).Methods(http.MethodGet)
+
 	// Reviews admin: list + moderation actions. The approve/reject paths
 	// follow the same /{id}/<verb> shape as delete so the existing
 	// "register specific sub-paths before any catch-all" convention is

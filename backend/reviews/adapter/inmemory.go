@@ -197,3 +197,20 @@ func (m *InMemory) ListAll(ctx context.Context, limit int) ([]domain.Review, err
 	}
 	return out, nil
 }
+
+// ListByCustomer returns all non-deleted reviews for a given customerID, newest first.
+func (m *InMemory) ListByCustomer(ctx context.Context, customerID string) ([]domain.Review, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.Review
+	for _, r := range m.reviews {
+		if r.CustomerID() == customerID && !r.IsDeleted() {
+			out = append(out, r)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].CreatedAt().After(out[j].CreatedAt())
+	})
+	return out, nil
+}
+

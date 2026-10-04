@@ -124,6 +124,10 @@ func (m *mockStatusCheckoutQry) TodaysSales(ctx context.Context) (map[string]che
 	return nil, nil
 }
 
+func (m *mockStatusCheckoutQry) ListCustomerOrderStats(ctx context.Context) ([]checkoutQuery.CustomerOrderStat, error) {
+	return nil, nil
+}
+
 type mockStatusFulfillmentSrv struct {
 	onOrderPaidFn    func(ctx context.Context, orderID string, at time.Time) error
 	labelFn          func(ctx context.Context, orderID, carrier, trackingCode string) error

@@ -41,6 +41,7 @@ type CustomerStorage interface {
 	Create(ctx context.Context, email, passwordHash string) error
 	Find(ctx context.Context, email string) (adapter.Customer, error)
 	UpdatePassword(ctx context.Context, email, passwordHash string) error
+	List(ctx context.Context) ([]string, error)
 }
 
 type SessStorage interface {
@@ -148,6 +149,30 @@ func (a auth) CreateNewCustomer(ctx context.Context, email, password string) (re
 		return err
 	}
 	return nil
+}
+
+func (a auth) ListCustomers(ctx context.Context) ([]string, error) {
+	ctx, span := tracer.Start(ctx, "Auth.ListCustomers")
+	defer span.End()
+	return a.authStorage.List(ctx)
+}
+
+// IsRegistered checks whether a customer exists with the given email.
+// It returns (true, nil) if found, (false, nil) if the customer does not exist,
+// and (false, err) if storage encounters an unexpected error.
+func (a auth) IsRegistered(ctx context.Context, email string) (bool, error) {
+	ctx, span := tracer.Start(ctx, "Auth.IsRegistered")
+	defer span.End()
+
+	_, err := a.authStorage.Find(ctx, email)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, domain.ErrCustomerNotFound) {
+		return false, nil
+	}
+	recordSpanError(span, err)
+	return false, fmt.Errorf("could not check if customer is registered: %w", err)
 }
 
 func (a auth) FindByToken(ctx context.Context, sessToken string) (*domain.Session, error) {
