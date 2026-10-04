@@ -92,6 +92,7 @@ type authService interface {
 	ChangePassword(ctx context.Context, email, oldPassword, newPassword string) error
 	RequestPasswordReset(ctx context.Context, email string) (string, error)
 	ResetPassword(ctx context.Context, rawToken, newPassword string) error
+	ListCustomers(ctx context.Context) ([]string, error)
 }
 
 // adminAuthService is the operator-side seam onto the auth bounded
@@ -190,6 +191,7 @@ type reviewsService interface {
 	Reject(ctx context.Context, id string) error
 	ListPending(ctx context.Context, limit int) ([]reviewsDomain.Review, error)
 	ListAll(ctx context.Context, limit int) ([]reviewsDomain.Review, error)
+	ListByCustomer(ctx context.Context, customerID string) ([]reviewsDomain.Review, error)
 }
 
 // wishlistService is the narrow seam the layout package needs from the
@@ -230,6 +232,7 @@ type checkoutQueries interface {
 	Find(ctx context.Context, id string) (checkoutQuery.OrderView, error)
 	ListByCustomer(ctx context.Context, customerID string) ([]checkoutQuery.OrderSummary, error)
 	ListAll(ctx context.Context) ([]checkoutQuery.OrderSummary, error)
+	ListCustomerOrderStats(ctx context.Context) ([]checkoutQuery.CustomerOrderStat, error)
 	// HasPurchasedProduct gates the verified-buyer rule for the reviews
 	// context; layout passes it through a tiny adapter when wiring reviews.
 	HasPurchasedProduct(ctx context.Context, customerID, productID string) (bool, error)

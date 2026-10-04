@@ -291,6 +291,10 @@ func (s *shippingE2ECheckoutService) TodaysSales(ctx context.Context) (map[strin
 	return nil, nil
 }
 
+func (s *shippingE2ECheckoutService) ListCustomerOrderStats(ctx context.Context) ([]checkoutQuery.CustomerOrderStat, error) {
+	return nil, nil
+}
+
 func (s *shippingE2ECheckoutService) seedOrder(
 	orderID string,
 	status checkoutDomain.Status,

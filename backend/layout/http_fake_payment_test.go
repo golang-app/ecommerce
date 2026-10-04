@@ -114,6 +114,10 @@ func (m *mockCheckoutQrys) TodaysSales(ctx context.Context) (map[string]checkout
 	return nil, nil
 }
 
+func (m *mockCheckoutQrys) ListCustomerOrderStats(ctx context.Context) ([]checkoutQuery.CustomerOrderStat, error) {
+	return nil, nil
+}
+
 type mockCartSrv struct {
 	cart *cartDomain.Cart
 }
