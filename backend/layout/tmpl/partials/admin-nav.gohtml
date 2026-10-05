@@ -1,20 +1,83 @@
 {{define "admin-nav"}}
 <nav class="admin-nav">
-  <a href="/admin" class="admin-nav__link {{if eq .Active "dashboard"}}is-active{{end}}">dashboard</a>
-  <a href="/admin/products" class="admin-nav__link {{if eq .Active "products"}}is-active{{end}}">products</a>
-  <a href="/admin/categories" class="admin-nav__link {{if eq .Active "categories"}}is-active{{end}}">categories</a>
-  <a href="/admin/attributes" class="admin-nav__link {{if eq .Active "attributes"}}is-active{{end}}">attributes</a>
-  <a href="/admin/attribute-sets" class="admin-nav__link {{if eq .Active "attribute-sets"}}is-active{{end}}">attribute sets</a>
-  <a href="/admin/orders" class="admin-nav__link {{if eq .Active "orders"}}is-active{{end}}">orders</a>
-  <a href="/admin/customers" class="admin-nav__link {{if eq .Active "customers"}}is-active{{end}}">customers</a>
-  <a href="/admin/inventory" class="admin-nav__link {{if eq .Active "inventory"}}is-active{{end}}">inventory</a>
-  <a href="/admin/reviews" class="admin-nav__link {{if eq .Active "reviews"}}is-active{{end}}">reviews</a>
-  <a href="/admin/promo-codes" class="admin-nav__link {{if eq .Active "promo-codes"}}is-active{{end}}">promo codes</a>
-  <a href="/admin/payment-providers" class="admin-nav__link {{if eq .Active "payment-providers"}}is-active{{end}}">payment providers</a>
-  <a href="/admin/shipping-providers" class="admin-nav__link {{if eq .Active "shipping-providers"}}is-active{{end}}">shipping providers</a>
-  <a href="/admin/stores" class="admin-nav__link {{if eq .Active "stores"}}is-active{{end}}">stores</a>
-  <a href="/admin/repricing" class="admin-nav__link {{if eq .Active "repricing"}}is-active{{end}}">repricing</a>
-  <span class="admin-nav__rule"></span>
-  <a href="/" class="admin-nav__link admin-nav__link--muted">back to store</a>
+  <div class="admin-nav__section">
+    <div class="admin-nav__heading">General</div>
+    <a href="/admin" class="admin-nav__link {{if eq .Active "dashboard"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+      <span>dashboard</span>
+    </a>
+  </div>
+
+  <div class="admin-nav__section">
+    <div class="admin-nav__heading">Sales</div>
+    <a href="/admin/orders" class="admin-nav__link {{if eq .Active "orders"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+      <span>orders</span>
+    </a>
+  </div>
+
+  <div class="admin-nav__section">
+    <div class="admin-nav__heading">Catalog</div>
+    <a href="/admin/products" class="admin-nav__link {{if eq .Active "products"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      <span>products</span>
+    </a>
+    <a href="/admin/categories" class="admin-nav__link {{if eq .Active "categories"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+      <span>categories</span>
+    </a>
+    <a href="/admin/attributes" class="admin-nav__link {{if eq .Active "attributes"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+      <span>attributes</span>
+    </a>
+    <a href="/admin/attribute-sets" class="admin-nav__link {{if eq .Active "attribute-sets"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+      <span>attribute sets</span>
+    </a>
+    <a href="/admin/inventory" class="admin-nav__link {{if eq .Active "inventory"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z"/><path d="M6 18h12"/><path d="M6 14h12"/></svg>
+      <span>inventory</span>
+    </a>
+  </div>
+
+  <div class="admin-nav__section">
+    <div class="admin-nav__heading">Customers</div>
+    <a href="/admin/customers" class="admin-nav__link {{if eq .Active "customers"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>customers</span>
+    </a>
+    <a href="/admin/reviews" class="admin-nav__link {{if eq .Active "reviews"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span>reviews</span>
+    </a>
+  </div>
+
+  <div class="admin-nav__section">
+    <div class="admin-nav__heading">Marketing</div>
+    <a href="/admin/promo-codes" class="admin-nav__link {{if eq .Active "promo-codes"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+      <span>promo codes</span>
+    </a>
+    <a href="/admin/repricing" class="admin-nav__link {{if eq .Active "repricing"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+      <span>repricing</span>
+    </a>
+  </div>
+
+  <div class="admin-nav__section">
+    <div class="admin-nav__heading">Configuration</div>
+    <a href="/admin/payment-providers" class="admin-nav__link {{if eq .Active "payment-providers"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+      <span>payment providers</span>
+    </a>
+    <a href="/admin/shipping-providers" class="admin-nav__link {{if eq .Active "shipping-providers"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13" rx="1"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      <span>shipping providers</span>
+    </a>
+    <a href="/admin/stores" class="admin-nav__link {{if eq .Active "stores"}}is-active{{end}}">
+      <svg class="admin-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/><path d="M22 7v3a2 2 0 0 1-2 2v0a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12v0a2 2 0 0 1-2-2V7"/></svg>
+      <span>stores</span>
+    </a>
+  </div>
 </nav>
 {{end}}

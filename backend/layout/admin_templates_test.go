@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -189,4 +190,64 @@ func TestAdminCustomerTemplatesParsing(t *testing.T) {
 		is.Equal(rec.Code, http.StatusOK)
 		is.True(len(rec.Body.String()) > 0)
 	})
+}
+
+func TestAdminNavSections(t *testing.T) {
+	is := is.New(t)
+
+	origWd, err := os.Getwd()
+	if err == nil && filepath.Base(origWd) == "layout" {
+		if err := os.Chdir(".."); err == nil {
+			t.Cleanup(func() { _ = os.Chdir(origWd) })
+		}
+	}
+
+	if store == nil {
+		store = newCookieStore([]byte("test-secret-32-bytes-long-123456"), false)
+	}
+
+	handler := httpHandler{
+		logger: logrus.New(),
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	session, _ := store.Get(req, "ecommerce")
+	session.Values["admin_email"] = "admin@example.com"
+	_ = session.Save(req, rec)
+
+	handler.renderAdminTemplate(rec, req, "admin/dashboard", map[string]any{
+		"Active": "dashboard",
+	})
+	is.Equal(rec.Code, http.StatusOK)
+	body := rec.Body.String()
+
+	// Verify all section headings (case-insensitive check via lowercase HTML text)
+	lowerBody := strings.ToLower(body)
+	is.True(strings.Contains(lowerBody, "sales"))
+	is.True(strings.Contains(lowerBody, "catalog"))
+	is.True(strings.Contains(lowerBody, "customers"))
+	is.True(strings.Contains(lowerBody, "marketing"))
+	is.True(strings.Contains(lowerBody, "configuration"))
+
+	// Verify all 14 routes are present in navigation
+	routes := []string{
+		"/admin",
+		"/admin/orders",
+		"/admin/products",
+		"/admin/categories",
+		"/admin/attributes",
+		"/admin/attribute-sets",
+		"/admin/inventory",
+		"/admin/customers",
+		"/admin/reviews",
+		"/admin/promo-codes",
+		"/admin/repricing",
+		"/admin/payment-providers",
+		"/admin/shipping-providers",
+		"/admin/stores",
+	}
+	for _, route := range routes {
+		is.True(strings.Contains(body, `href="`+route+`"`))
+	}
 }
