@@ -55,9 +55,10 @@ code {
   position: sticky;
   top: 0;
   align-self: flex-start;
-  flex: 0 0 220px;
-  width: 220px;
+  flex: 0 0 230px;
+  width: 230px;
   height: 100vh;
+  overflow-y: auto;
   background: var(--a-sidebar);
   color: #c8cdd8;
   display: flex;
@@ -78,14 +79,36 @@ code {
 }
 .admin-sidebar__brand-mark { color: var(--a-accent); font-size: 0.9rem; }
 
-.admin-nav { display: flex; flex-direction: column; gap: 2px; }
+.admin-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.admin-nav__section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.admin-nav__heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #838a9d;
+  padding: 6px 10px 4px;
+  user-select: none;
+}
 .admin-nav__link {
-  display: block;
-  padding: 9px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
   border-radius: var(--a-radius);
   color: #c8cdd8;
-  font-size: 0.93rem;
+  font-size: 0.9rem;
   text-transform: capitalize;
+  text-decoration: none;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 .admin-nav__link:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -95,6 +118,19 @@ code {
 .admin-nav__link.is-active {
   background: var(--a-accent);
   color: #fff;
+  font-weight: 500;
+}
+.admin-nav__icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  stroke: currentColor;
+  opacity: 0.75;
+  transition: opacity 0.12s ease;
+}
+.admin-nav__link:hover .admin-nav__icon,
+.admin-nav__link.is-active .admin-nav__icon {
+  opacity: 1;
 }
 .admin-nav__link--muted { color: #8a90a0; }
 .admin-nav__rule {
@@ -429,6 +465,19 @@ input:focus, select:focus, textarea:focus {
   .admin-nav {
     flex-direction: row;
     flex-wrap: wrap;
+    gap: 12px;
+  }
+  .admin-nav__section {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    width: 100%;
+  }
+  .admin-nav__heading {
+    width: 100%;
+    padding: 6px 4px 2px;
   }
   .admin-sidebar__foot { flex-direction: row; }
   .admin-topbar { position: static; }
