@@ -144,3 +144,18 @@ docker-compose up
 ```
 
 You'll have to wait some time to download all dependencies and build everything but after it, everything should be up and running.
+
+### Demo Mode
+
+You can run GoCommerce in interactive **Demo Mode** by setting the environment variable:
+
+```sh
+APP_DEMO=true
+```
+
+When Demo Mode is active:
+* A visible demo banner is displayed across the storefront and admin panel indicating demo status.
+* Quick credentials hint badges are shown on customer login (`customer@example.com` / `Customer123!`) and admin login (`admin@example.com` / `Admin123!`) pages.
+* Destructive administrative actions (deleting categories, products, or modifying the demo admin password) are safely restricted with informative notices.
+* Order placement and customer notifications are simulated without charging real credit cards or dispatching real external SMTP emails.
+
