@@ -82,6 +82,9 @@ type ProductStorage interface {
 	CreateCategory(ctx context.Context, c domain.Category) error
 	UpdateCategory(ctx context.Context, c domain.Category) error
 	DeleteCategory(ctx context.Context, id string) error
+	HasChildCategories(ctx context.Context, id string) (bool, error)
+	DescendantCategoryIDs(ctx context.Context, rootCategoryID string) ([]string, error)
+	CategoryByPath(ctx context.Context, path string) (domain.Category, []domain.Category, error)
 
 	AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error)
 	CreateAttributeType(ctx context.Context, t domain.AttributeType) error

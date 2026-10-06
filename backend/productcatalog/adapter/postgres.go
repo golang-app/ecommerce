@@ -615,6 +615,18 @@ func (db postgres) DeleteCategory(ctx context.Context, id string) error {
 	return nil
 }
 
+func (db postgres) HasChildCategories(ctx context.Context, id string) (bool, error) {
+	return false, fmt.Errorf("not implemented")
+}
+
+func (db postgres) DescendantCategoryIDs(ctx context.Context, rootCategoryID string) ([]string, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (db postgres) CategoryByPath(ctx context.Context, path string) (domain.Category, []domain.Category, error) {
+	return domain.Category{}, nil, fmt.Errorf("not implemented")
+}
+
 // AllAttributeTypes returns every attribute type in display order.
 func (db postgres) AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
 	rows, err := db.db.QueryContext(ctx, `
