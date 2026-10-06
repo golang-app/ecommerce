@@ -7,6 +7,24 @@
     <p class="muted">Enter your credentials to access the admin panel</p>
   </div>
 
+  {{if .DemoMode}}
+  <div class="admin-demo-credentials-box">
+    <div class="admin-demo-credentials-box__header">
+      <span class="admin-demo-credentials-box__badge">DEMO ADMIN ACCOUNT</span>
+    </div>
+    <div class="admin-demo-credentials-box__content">
+      <div class="admin-demo-credentials-box__row">
+        <span class="admin-demo-credentials-box__label">Email:</span>
+        <code>admin@example.com</code>
+      </div>
+      <div class="admin-demo-credentials-box__row">
+        <span class="admin-demo-credentials-box__label">Password:</span>
+        <code>Admin123!</code>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
   <form class="form admin-auth-form" method="post" action="/admin/login">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div class="field">

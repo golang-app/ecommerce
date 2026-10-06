@@ -1020,3 +1020,46 @@ textarea:focus-visible,
 .demo-banner__text {
   color: #78350f;
 }
+
+/* ---------- demo credentials box ---------- */
+.demo-credentials-box {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  font-size: 0.88rem;
+}
+.demo-credentials-box__header {
+  margin-bottom: 8px;
+}
+.demo-credentials-box__badge {
+  background: #3b82f6;
+  color: #ffffff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.demo-credentials-box__content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.demo-credentials-box__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.demo-credentials-box__label {
+  color: var(--fg-muted);
+  min-width: 70px;
+}
+.demo-credentials-box__row code {
+  background: #e2e8f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}

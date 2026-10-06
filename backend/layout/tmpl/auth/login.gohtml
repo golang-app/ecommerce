@@ -4,6 +4,24 @@
 {{define "main"}}
   <h1 class="page-title">sign in</h1>
 
+  {{if .DemoMode}}
+  <div class="demo-credentials-box">
+    <div class="demo-credentials-box__header">
+      <span class="demo-credentials-box__badge">DEMO ACCOUNT</span>
+    </div>
+    <div class="demo-credentials-box__content">
+      <div class="demo-credentials-box__row">
+        <span class="demo-credentials-box__label">Email:</span>
+        <code>customer@example.com</code>
+      </div>
+      <div class="demo-credentials-box__row">
+        <span class="demo-credentials-box__label">Password:</span>
+        <code>Customer123!</code>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
   <form class="form" method="post" action="/auth/login">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div class="field">
