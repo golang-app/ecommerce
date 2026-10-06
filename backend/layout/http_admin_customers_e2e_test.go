@@ -379,6 +379,7 @@ func setupAdminCustomersE2E(t *testing.T) (*mux.Router, *adminCustomersE2EMailer
 		nil, // paymentsSrv
 		nil, // limiter
 		"",  // trustedProxies
+		false,
 	)
 
 	router := mux.NewRouter()

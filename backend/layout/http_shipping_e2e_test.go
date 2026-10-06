@@ -402,6 +402,7 @@ func setupShippingE2EEnvironment(t *testing.T) (*mux.Router, *shippingE2ECheckou
 		nil, // paymentsSrv
 		nil,
 		"",
+		false,
 	)
 
 	router := mux.NewRouter()

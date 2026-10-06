@@ -70,6 +70,7 @@ type httpHandler struct {
 	logger         logrus.FieldLogger
 	limiter        rateLimiter
 	trustedProxies []*net.IPNet
+	demoMode       bool
 }
 
 // HomePage renders the storefront landing page: a "new arrivals" grid of the
@@ -451,6 +452,7 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	data["AuthMenuItem"] = renderPartial(w, r, http.HandlerFunc(handler.AuthMenuItem))
 	data["LoggedIn"] = handler.currentCustomerID(r) != ""
 	data["IsAdmin"] = handler.isAdmin(r)
+	data["DemoMode"] = handler.demoMode
 	// SEO helpers consumed by the base template's title/og/canonical blocks.
 	// SiteName is the brand suffix in <title> ("Foo · GoCommerce"); CanonicalURL
 	// is the absolute URL for the current request (scheme + host + path), used
@@ -555,6 +557,7 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["AdminEmail"] = handler.currentAdminEmail(r)
+	data["DemoMode"] = handler.demoMode
 	err = session.Save(r, w)
 	if err != nil {
 		handler.logger.WithError(err).Error("cannot save session")
@@ -606,6 +609,7 @@ func (handler httpHandler) renderAdminAuthTemplate(w http.ResponseWriter, r *htt
 	data["FlashInfo"] = session.Flashes()
 	data["FlashError"] = session.Flashes("error")
 	data["SiteName"] = "GoCommerce"
+	data["DemoMode"] = handler.demoMode
 
 	err = session.Save(r, w)
 	if err != nil {

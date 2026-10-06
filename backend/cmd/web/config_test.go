@@ -80,3 +80,20 @@ func TestPaymentGatewayConfig_Defaults(t *testing.T) {
 	is.Equal(cfg.StripeSecretKey, "")
 	is.Equal(cfg.StripePublishableKey, "")
 }
+
+func TestConfig_AppDemo(t *testing.T) {
+	is := is.New(t)
+
+	// Default: false
+	var cfg config
+	err := conf.Parse([]string{}, "", &cfg)
+	is.NoErr(err)
+	is.Equal(cfg.AppDemo, false)
+
+	// Environment variable APP_DEMO=true
+	t.Setenv("APP_DEMO", "true")
+	var cfgEnv config
+	err = conf.Parse([]string{}, "", &cfgEnv)
+	is.NoErr(err)
+	is.Equal(cfgEnv.AppDemo, true)
+}

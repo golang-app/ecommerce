@@ -45,6 +45,7 @@ func newTestApp(t *testing.T) *testApp {
 		logger,
 		nil, catalogSrv, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		"", []byte("secret-key-32-bytes-long-12345"), false, false, nil, "", fx.Rates{}, "", nil, nil, "",
+		false,
 	)
 
 	router := mux.NewRouter()
