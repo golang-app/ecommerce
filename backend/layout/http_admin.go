@@ -28,8 +28,10 @@ func (handler httpHandler) requireAdmin(w http.ResponseWriter, r *http.Request) 
 	// error here is treated as "not flagged" so a transient DB
 	// hiccup doesn't lock the admin out of the panel.
 	if must, mcpErr := handler.adminAuthSrv.MustChangePassword(r.Context(), email); mcpErr == nil && must {
-		http.Redirect(w, r, "/admin/change-password", http.StatusSeeOther)
-		return "", false
+		if !handler.demoMode || email != "admin@example.com" {
+			http.Redirect(w, r, "/admin/change-password", http.StatusSeeOther)
+			return "", false
+		}
 	}
 
 	return email, true

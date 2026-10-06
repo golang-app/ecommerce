@@ -215,6 +215,11 @@ func (handler httpHandler) AdminDeleteCategory(w http.ResponseWriter, r *http.Re
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
 	}
+	if handler.demoMode {
+		handler.flash(w, r, "Category deletion is disabled in Demo Mode.", "error")
+		http.Redirect(w, r, "/admin/categories", http.StatusSeeOther)
+		return
+	}
 	id := mux.Vars(r)["id"]
 	if err := handler.catalogSrv.DeleteCategory(r.Context(), id); err != nil {
 		if errors.Is(err, pcdomain.ErrCategoryHasChildren) {

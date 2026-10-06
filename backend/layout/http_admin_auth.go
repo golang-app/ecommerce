@@ -104,10 +104,12 @@ func (handler httpHandler) HandleAdminLogin(w http.ResponseWriter, r *http.Reque
 	// error is treated as "not flagged" so a transient DB hiccup
 	// does not lock the operator out of the panel entirely.
 	if must, mcpErr := handler.adminAuthSrv.MustChangePassword(r.Context(), email); mcpErr == nil && must {
-		csrfSession.AddFlash("Please choose a new password to continue.")
-		_ = csrfSession.Save(r, w)
-		http.Redirect(w, r, "/admin/change-password", http.StatusSeeOther)
-		return
+		if !handler.demoMode || email != "admin@example.com" {
+			csrfSession.AddFlash("Please choose a new password to continue.")
+			_ = csrfSession.Save(r, w)
+			http.Redirect(w, r, "/admin/change-password", http.StatusSeeOther)
+			return
+		}
 	}
 
 	csrfSession.AddFlash("You are logged in")
@@ -167,6 +169,11 @@ func (handler httpHandler) HandleAdminChangePassword(w http.ResponseWriter, r *h
 	email := handler.currentAdminEmail(r)
 	if email == "" {
 		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
+		return
+	}
+	if handler.demoMode && email == "admin@example.com" {
+		handler.flash(w, r, "Password modification for demo admin is disabled in Demo Mode.", "error")
+		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		return
 	}
 	must, err := handler.adminAuthSrv.MustChangePassword(r.Context(), email)

@@ -762,6 +762,11 @@ func (handler httpHandler) AdminDeleteProduct(w http.ResponseWriter, r *http.Req
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
 	}
+	if handler.demoMode {
+		handler.flash(w, r, "Product deletion is disabled in Demo Mode.", "error")
+		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
+		return
+	}
 	id := mux.Vars(r)["id"]
 	if err := handler.catalogSrv.DeleteProduct(r.Context(), id); err != nil {
 		handler.flash(w, r, err.Error(), "error")
