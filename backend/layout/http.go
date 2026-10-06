@@ -568,6 +568,59 @@ func (handler httpHandler) renderAdminTemplate(w http.ResponseWriter, r *http.Re
 	}
 }
 
+// renderAdminAuthTemplate renders unauthenticated or gating admin views (such as
+// admin login and forced password change) inside the dedicated admin authentication
+// shell (tmpl/admin/auth_layout.gohtml, which defines "adminauthbase"). It loads
+// admin.css rather than the storefront theme and omits operator sidebar and storefront elements.
+func (handler httpHandler) renderAdminAuthTemplate(w http.ResponseWriter, r *http.Request, templateName string, data map[string]any) {
+	if data == nil {
+		data = make(map[string]any)
+	}
+
+	files := []string{
+		"./layout/tmpl/admin/auth_layout.gohtml",
+		"./layout/tmpl/" + templateName + ".gohtml",
+	}
+	partials, _ := filepath.Glob("./layout/tmpl/partials/*.gohtml")
+	files = append(files, partials...)
+
+	adminMoney := moneyFunc(handler.rates, handler.rates.Default())
+	var ts = template.Must(template.New("").Funcs(template.FuncMap{
+		"html": func(value interface{}) template.HTML {
+			return template.HTML(fmt.Sprint(value))
+		},
+		"add":   func(a, b int) int { return a + b },
+		"join":  func(sep string, items []string) string { return strings.Join(items, sep) },
+		"dict":  templateDict,
+		"money": adminMoney,
+	}).ParseFiles(files...))
+
+	session, _ := store.Get(r, "ecommerce")
+	csrfToken, err := issueCSRFToken(r, w)
+	if err != nil {
+		handler.logger.WithError(err).Error("cannot issue CSRF token")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	data["CSRFToken"] = csrfToken
+	data["FlashInfo"] = session.Flashes()
+	data["FlashError"] = session.Flashes("error")
+	data["SiteName"] = "GoCommerce"
+
+	err = session.Save(r, w)
+	if err != nil {
+		handler.logger.WithError(err).Error("cannot save session")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	err = ts.ExecuteTemplate(w, "adminauthbase", data)
+	if err != nil {
+		handler.logger.WithError(err).Error("cannot execute admin auth template")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 // templateDict builds a map[string]any from alternating key/value
 // arguments inside a template (`dict "VariantID" .Variant.ID ...`). This
 // lets a partial be invoked with a synthesised dot, which is how the

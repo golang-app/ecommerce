@@ -336,6 +336,8 @@ code {
 }
 
 input[type="text"],
+input[type="email"],
+input[type="password"],
 input[type="number"],
 input:not([type]),
 select,
@@ -385,6 +387,7 @@ input:focus, select:focus, textarea:focus {
   border-radius: var(--a-radius);
 }
 .btn:hover { background: var(--a-accent-dark); border-color: var(--a-accent-dark); text-decoration: none; }
+.btn--block { width: 100%; text-align: center; }
 
 .btn--ghost {
   background: transparent;
@@ -630,5 +633,87 @@ input:focus, select:focus, textarea:focus {
 .btn--danger:hover {
   background: #a52f2f;
   color: #ffffff;
+}
+
+/* --- Admin Auth (Login & Force Password Change) -------------------------- */
+.admin-auth-body {
+  margin: 0;
+  display: flex;
+  min-height: 100vh;
+  background: var(--a-bg);
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-auth-wrapper {
+  width: 100%;
+  max-width: 440px;
+  padding: 32px 16px;
+  margin: auto;
+}
+
+.admin-auth-card {
+  background: var(--a-surface);
+  border: 1px solid var(--a-border);
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.admin-auth-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--a-text);
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--a-border);
+}
+
+.admin-auth-brand__mark {
+  color: var(--a-accent);
+  font-size: 1.15rem;
+}
+
+.admin-auth-heading {
+  text-align: center;
+}
+
+.admin-auth-heading h2 {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--a-text);
+}
+
+.admin-auth-heading p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.admin-auth-form {
+  max-width: 100%;
+}
+
+.admin-auth-foot {
+  text-align: center;
+  padding-top: 14px;
+  border-top: 1px solid var(--a-border);
+  font-size: 0.88rem;
+}
+
+.admin-auth-foot__link {
+  color: var(--a-muted);
+}
+
+.admin-auth-foot__link:hover {
+  color: var(--a-text);
+  text-decoration: underline;
 }
 

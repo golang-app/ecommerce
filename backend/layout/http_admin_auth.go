@@ -60,7 +60,7 @@ func (handler httpHandler) currentAdminEmail(r *http.Request) string {
 // language (and we never want to leak "are you an admin?" via the
 // storefront login UX).
 func (handler httpHandler) AdminLoginPage(w http.ResponseWriter, r *http.Request) {
-	handler.renderTemplate(w, r, "admin/login", nil)
+	handler.renderAdminAuthTemplate(w, r, "admin/login", nil)
 }
 
 // HandleAdminLogin processes the admin login form. On success it mints
@@ -155,7 +155,7 @@ func (handler httpHandler) AdminChangePasswordPage(w http.ResponseWriter, r *htt
 		http.Redirect(w, r, "/admin", http.StatusSeeOther)
 		return
 	}
-	handler.renderTemplate(w, r, "admin/change_password", map[string]any{
+	handler.renderAdminAuthTemplate(w, r, "admin/change_password", map[string]any{
 		"Email": email,
 	})
 }
