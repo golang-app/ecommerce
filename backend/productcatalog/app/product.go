@@ -370,7 +370,7 @@ func (ps ProductService) CreateCategory(ctx context.Context, name, slug string) 
 	if err != nil {
 		return err
 	}
-	c, err := domain.NewCategory(slug, name, slug, len(existing)+1)
+	c, err := domain.NewCategory(slug, name, slug, len(existing)+1, "")
 	if err != nil {
 		return err
 	}
@@ -379,7 +379,7 @@ func (ps ProductService) CreateCategory(ctx context.Context, name, slug string) 
 
 // UpdateCategory validates and persists changes to an existing category.
 func (ps ProductService) UpdateCategory(ctx context.Context, id, name, slug string, position int) error {
-	c, err := domain.NewCategory(id, name, slug, position)
+	c, err := domain.NewCategory(id, name, slug, position, "")
 	if err != nil {
 		return err
 	}

@@ -298,7 +298,7 @@ func (db postgres) productCategories(ctx context.Context, productID string) ([]d
 		if err := rows.Scan(&id, &name, &slug, &position); err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
 		}
-		out = append(out, domain.RebuildCategory(id, name, slug, position))
+		out = append(out, domain.RebuildCategory(id, name, slug, position, ""))
 	}
 	return out, rows.Err()
 }
@@ -578,7 +578,7 @@ func (db postgres) Categories(ctx context.Context) ([]domain.Category, error) {
 		if err := rows.Scan(&id, &name, &slug, &position); err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
 		}
-		out = append(out, domain.RebuildCategory(id, name, slug, position))
+		out = append(out, domain.RebuildCategory(id, name, slug, position, ""))
 	}
 	return out, rows.Err()
 }

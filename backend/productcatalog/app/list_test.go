@@ -30,7 +30,7 @@ func seedListFixtures(ctx context.Context, store inMemoryClassifier) error {
 	store.AddAttributeType(weight)
 	store.AddAttributeType(material)
 
-	tools := domain.RebuildCategory("cat-tools", "Tools", "tools", 0)
+	tools := domain.RebuildCategory("cat-tools", "Tools", "tools", 0, "")
 	store.AddCategory(tools)
 
 	type fixture struct {
