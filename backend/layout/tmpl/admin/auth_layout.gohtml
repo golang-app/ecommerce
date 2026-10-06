@@ -20,6 +20,13 @@
 
     <div class="admin-auth-wrapper">
       <div class="admin-auth-card">
+        {{if .DemoMode}}
+        <div class="admin-demo-banner admin-demo-banner--auth" role="region" aria-label="Demo mode announcement">
+          <span class="admin-demo-banner__badge">DEMO MODE</span>
+          <span class="admin-demo-banner__text">Demo mode active — test credentials available.</span>
+        </div>
+        {{end}}
+
         <div class="admin-auth-brand">
           <span class="admin-auth-brand__mark">◆</span>
           <span class="admin-auth-brand__name">Store Admin</span>

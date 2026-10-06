@@ -43,6 +43,15 @@
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
 
+    {{if .DemoMode}}
+    <div class="demo-banner" role="region" aria-label="Demo mode announcement">
+      <div class="shell demo-banner__inner">
+        <span class="demo-banner__badge">DEMO MODE</span>
+        <span class="demo-banner__text">This is an interactive demo store. Orders, emails, and payments are simulated.</span>
+      </div>
+    </div>
+    {{end}}
+
     <header class="site-header">
       <div class="shell site-header__inner">
         <a href="/" class="brand">Ecommerce</a>
