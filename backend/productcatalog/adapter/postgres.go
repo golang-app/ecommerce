@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
@@ -280,7 +281,7 @@ func (db postgres) withCatalog(ctx context.Context, p domain.Product) (domain.Pr
 
 func (db postgres) productCategories(ctx context.Context, productID string) ([]domain.Category, error) {
 	rows, err := db.db.QueryContext(ctx, `
-		SELECT c.id, c.name, c.slug, c.position
+		SELECT c.id, c.name, c.slug, c.position, COALESCE(c.parent_id, '')
 		FROM productcatalog_category c
 		JOIN productcatalog_product_category pc ON pc.category_id = c.id
 		WHERE pc.product_id = $1
@@ -293,12 +294,12 @@ func (db postgres) productCategories(ctx context.Context, productID string) ([]d
 
 	var out []domain.Category
 	for rows.Next() {
-		var id, name, slug string
+		var id, name, slug, parentID string
 		var position int
-		if err := rows.Scan(&id, &name, &slug, &position); err != nil {
+		if err := rows.Scan(&id, &name, &slug, &position, &parentID); err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
 		}
-		out = append(out, domain.RebuildCategory(id, name, slug, position, ""))
+		out = append(out, domain.RebuildCategory(id, name, slug, position, parentID))
 	}
 	return out, rows.Err()
 }
@@ -564,7 +565,7 @@ func (db postgres) Release(ctx context.Context, quantities map[string]int) error
 // Categories returns every catalog category in display order.
 func (db postgres) Categories(ctx context.Context) ([]domain.Category, error) {
 	rows, err := db.db.QueryContext(ctx, `
-		SELECT id, name, slug, position FROM productcatalog_category ORDER BY position, name
+		SELECT id, name, slug, position, COALESCE(parent_id, '') FROM productcatalog_category ORDER BY position ASC, name ASC
 	`)
 	if err != nil {
 		return nil, fmt.Errorf("query categories: %w", err)
@@ -573,12 +574,12 @@ func (db postgres) Categories(ctx context.Context) ([]domain.Category, error) {
 
 	var out []domain.Category
 	for rows.Next() {
-		var id, name, slug string
+		var id, name, slug, parentID string
 		var position int
-		if err := rows.Scan(&id, &name, &slug, &position); err != nil {
+		if err := rows.Scan(&id, &name, &slug, &position, &parentID); err != nil {
 			return nil, fmt.Errorf("scan category: %w", err)
 		}
-		out = append(out, domain.RebuildCategory(id, name, slug, position, ""))
+		out = append(out, domain.RebuildCategory(id, name, slug, position, parentID))
 	}
 	return out, rows.Err()
 }
@@ -586,9 +587,9 @@ func (db postgres) Categories(ctx context.Context) ([]domain.Category, error) {
 // CreateCategory inserts a new category.
 func (db postgres) CreateCategory(ctx context.Context, c domain.Category) error {
 	_, err := db.db.ExecContext(ctx, `
-		INSERT INTO productcatalog_category (id, name, slug, position)
-		VALUES ($1, $2, $3, $4)
-	`, c.ID(), c.Name(), c.Slug(), c.Position())
+		INSERT INTO productcatalog_category (id, name, slug, position, parent_id)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''))
+	`, c.ID(), c.Name(), c.Slug(), c.Position(), c.ParentID())
 	if err != nil {
 		return fmt.Errorf("create category: %w", err)
 	}
@@ -598,8 +599,10 @@ func (db postgres) CreateCategory(ctx context.Context, c domain.Category) error 
 // UpdateCategory updates an existing category by id.
 func (db postgres) UpdateCategory(ctx context.Context, c domain.Category) error {
 	_, err := db.db.ExecContext(ctx, `
-		UPDATE productcatalog_category SET name = $2, slug = $3, position = $4 WHERE id = $1
-	`, c.ID(), c.Name(), c.Slug(), c.Position())
+		UPDATE productcatalog_category
+		SET name = $2, slug = $3, position = $4, parent_id = NULLIF($5, '')
+		WHERE id = $1
+	`, c.ID(), c.Name(), c.Slug(), c.Position(), c.ParentID())
 	if err != nil {
 		return fmt.Errorf("update category: %w", err)
 	}
@@ -616,15 +619,83 @@ func (db postgres) DeleteCategory(ctx context.Context, id string) error {
 }
 
 func (db postgres) HasChildCategories(ctx context.Context, id string) (bool, error) {
-	return false, fmt.Errorf("not implemented")
+	var exists bool
+	err := db.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM productcatalog_category WHERE parent_id = $1)`, id).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("has child categories: %w", err)
+	}
+	return exists, nil
 }
 
 func (db postgres) DescendantCategoryIDs(ctx context.Context, rootCategoryID string) ([]string, error) {
-	return nil, fmt.Errorf("not implemented")
+	q := `
+		WITH RECURSIVE category_tree AS (
+			SELECT id FROM productcatalog_category WHERE id = $1
+			UNION ALL
+			SELECT c.id FROM productcatalog_category c
+			JOIN category_tree ct ON c.parent_id = ct.id
+		)
+		SELECT id FROM category_tree
+	`
+	rows, err := db.db.QueryContext(ctx, q, rootCategoryID)
+	if err != nil {
+		return nil, fmt.Errorf("descendant category ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan category id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (db postgres) CategoryByPath(ctx context.Context, path string) (domain.Category, []domain.Category, error) {
-	return domain.Category{}, nil, fmt.Errorf("not implemented")
+	cleaned := strings.Trim(path, "/")
+	if cleaned == "" {
+		return domain.Category{}, nil, fmt.Errorf("empty category path")
+	}
+	segments := strings.Split(cleaned, "/")
+
+	var breadcrumbs []domain.Category
+	var parentID string
+
+	for i, slug := range segments {
+		var q string
+		var row *sql.Row
+		if i == 0 {
+			q = `SELECT id, name, slug, position, COALESCE(parent_id, '')
+				FROM productcatalog_category
+				WHERE slug = $1 AND parent_id IS NULL`
+			row = db.db.QueryRowContext(ctx, q, slug)
+		} else {
+			q = `SELECT id, name, slug, position, COALESCE(parent_id, '')
+				FROM productcatalog_category
+				WHERE slug = $1 AND parent_id = $2`
+			row = db.db.QueryRowContext(ctx, q, slug, parentID)
+		}
+
+		var id, name, catSlug, pID string
+		var pos int
+		err := row.Scan(&id, &name, &catSlug, &pos, &pID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Category{}, nil, fmt.Errorf("category not found for path %q at segment %q", path, slug)
+		}
+		if err != nil {
+			return domain.Category{}, nil, fmt.Errorf("query category by path segment %q: %w", slug, err)
+		}
+
+		cat := domain.RebuildCategory(id, name, catSlug, pos, pID)
+		breadcrumbs = append(breadcrumbs, cat)
+		parentID = id
+	}
+
+	target := breadcrumbs[len(breadcrumbs)-1]
+	return target, breadcrumbs, nil
 }
 
 // AllAttributeTypes returns every attribute type in display order.
@@ -974,9 +1045,14 @@ func (db postgres) ListProducts(ctx context.Context, q app.ProductQuery) ([]doma
 
 	if q.CategorySlug != "" {
 		query += fmt.Sprintf(` AND EXISTS (
+			WITH RECURSIVE category_tree AS (
+				SELECT id FROM productcatalog_category WHERE slug = %s
+				UNION ALL
+				SELECT c.id FROM productcatalog_category c
+				JOIN category_tree ct ON c.parent_id = ct.id
+			)
 			SELECT 1 FROM productcatalog_product_category pc
-			JOIN productcatalog_category c ON c.id = pc.category_id
-			WHERE pc.product_id = p.id AND c.slug = %s)`, set(q.CategorySlug))
+			WHERE pc.product_id = p.id AND pc.category_id IN (SELECT id FROM category_tree))`, set(q.CategorySlug))
 	}
 
 	for _, typeID := range sortedKeys(q.NumericRanges) {
@@ -1070,9 +1146,14 @@ func (db postgres) Facets(ctx context.Context, categorySlug string) ([]app.Facet
 	scope := ""
 	if categorySlug != "" {
 		scope = ` AND EXISTS (
+			WITH RECURSIVE category_tree AS (
+				SELECT id FROM productcatalog_category WHERE slug = $2
+				UNION ALL
+				SELECT c.id FROM productcatalog_category c
+				JOIN category_tree ct ON c.parent_id = ct.id
+			)
 			SELECT 1 FROM productcatalog_product_category pc
-			JOIN productcatalog_category c ON c.id = pc.category_id
-			WHERE pc.product_id = pa.product_id AND c.slug = $2)`
+			WHERE pc.product_id = pa.product_id AND pc.category_id IN (SELECT id FROM category_tree))`
 	}
 
 	var facets []app.Facet
