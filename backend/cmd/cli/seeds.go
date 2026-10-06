@@ -14,8 +14,10 @@ import (
 // hashed with the same bcrypt cost the auth service uses (bcrypt.DefaultCost)
 // so the seeded credentials work against the normal login flow.
 const (
-	seedAdminEmail    = "admin@example.com"
-	seedAdminPassword = "Admin123!"
+	seedAdminEmail       = "admin@example.com"
+	seedAdminPassword    = "Admin123!"
+	seedCustomerEmail    = "customer@example.com"
+	seedCustomerPassword = "Customer123!"
 )
 
 // upsertAdmin idempotently inserts (or refreshes) the demo admin account
@@ -41,6 +43,25 @@ func seedAdminUser(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err := db.ExecContext(ctx, upsertAdmin, seedAdminEmail, string(hash)); err != nil {
 		return fmt.Errorf("seed admin user: %w", err)
+	}
+	return nil
+}
+
+// upsertCustomer idempotently inserts (or refreshes) the demo customer account
+// in the auth_customer table.
+const upsertCustomer = `INSERT INTO auth_customer (username, password_hash)
+	VALUES ($1, $2)
+	ON CONFLICT (username) DO UPDATE SET
+		password_hash = EXCLUDED.password_hash`
+
+// seedCustomerUser idempotently creates (or refreshes) the demo customer account.
+func seedCustomerUser(ctx context.Context, db *sql.DB) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(seedCustomerPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash customer password: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, upsertCustomer, seedCustomerEmail, string(hash)); err != nil {
+		return fmt.Errorf("seed customer user: %w", err)
 	}
 	return nil
 }
@@ -586,13 +607,17 @@ func newSeedsCmd(pc productCatalog, db *sql.DB) *cobra.Command {
 				return err
 			}
 
+			if err := seedCustomerUser(ctx, db); err != nil {
+				return err
+			}
+
 			if err := seedStores(ctx, db); err != nil {
 				return err
 			}
 
-			fmt.Printf("seeded %d simple + %d variant products, %d product images, %d attribute types, %d categories, %d category assignments, %d attribute values, %d stores, admin user %s (password reset required on first login)\n",
+			fmt.Printf("seeded %d simple + %d variant products, %d product images, %d attribute types, %d categories, %d category assignments, %d attribute values, %d stores, admin user %s (password reset required on first login), customer user %s\n",
 				len(seedProducts), len(variantSeeds), len(productImageSeeds), len(attributeTypeSeeds), len(categorySeeds),
-				countCategoryAssignments(), len(productAttributeSeeds), len(storeSeeds), seedAdminEmail)
+				countCategoryAssignments(), len(productAttributeSeeds), len(storeSeeds), seedAdminEmail, seedCustomerEmail)
 			return nil
 		},
 	}
