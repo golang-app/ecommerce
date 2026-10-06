@@ -61,7 +61,9 @@
           <ul class="nav">
             <li><a href="/products">shop</a></li>
             {{range .NavCategories}}
-              <li><a href="/category/{{.Slug}}">{{.Name}}</a></li>
+              {{if .IsRoot}}
+                <li><a href="/category/{{.Slug}}">{{.Name}}</a></li>
+              {{end}}
             {{end}}
             <li>
               <a href="/cart" class="cart-link" aria-label="Cart">cart

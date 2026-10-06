@@ -13,6 +13,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/sirupsen/logrus"
@@ -90,34 +91,107 @@ func (handler httpHandler) ShopPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // CategoryPage renders the full products page scoped to a single category
-// (by slug). An unknown slug still renders (with an empty grid) rather than
-// erroring.
+type Breadcrumb struct {
+	Name   string
+	URL    string
+	Active bool
+}
+
+type Subcategory struct {
+	Name string
+	URL  string
+}
+
+// CategoryPage renders the full products page scoped to a single category
+// (by hierarchical path or slug). An unknown path still renders (with an empty grid)
+// rather than erroring.
 func (handler httpHandler) CategoryPage(w http.ResponseWriter, r *http.Request) {
-	slug := mux.Vars(r)["slug"]
-	handler.renderProductsPage(w, r, slug)
+	path := mux.Vars(r)["path"]
+	if path == "" {
+		path = mux.Vars(r)["slug"]
+	}
+	handler.renderProductsPage(w, r, path)
 }
 
 // renderProductsPage renders the full products page (left filter rail + grid
 // container) for the given category scope ("" means "all"). The grid itself is
 // lazy-loaded over HTMX from /api/v1/products.
-func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Request, activeCategory string) {
+func (handler httpHandler) renderProductsPage(w http.ResponseWriter, r *http.Request, activeCategoryPath string) {
 	categories, err := handler.catalogSrv.Categories(r.Context())
 	if err != nil {
 		handler.logger.WithError(err).Warn("cannot get categories")
 		categories = nil
 	}
 
-	facets, err := handler.catalogSrv.Facets(r.Context(), activeCategory)
+	activeCategoryPath = strings.Trim(activeCategoryPath, "/")
+
+	var activeCategory pcdomain.Category
+	var ancestors []pcdomain.Category
+	if activeCategoryPath != "" {
+		cat, chain, err := handler.catalogSrv.CategoryByPath(r.Context(), activeCategoryPath)
+		if err != nil {
+			handler.logger.WithError(err).WithField("path", activeCategoryPath).Warn("cannot resolve category path")
+		} else {
+			activeCategory = cat
+			ancestors = chain
+		}
+	}
+
+	activeSlug := ""
+	if activeCategory.ID() != "" {
+		activeSlug = activeCategory.Slug()
+	} else if activeCategoryPath != "" {
+		activeSlug = activeCategoryPath
+	}
+
+	facets, err := handler.catalogSrv.Facets(r.Context(), activeSlug)
 	if err != nil {
-		handler.logger.WithError(err).WithField("category", activeCategory).Warn("cannot get facets")
+		handler.logger.WithError(err).WithField("category", activeSlug).Warn("cannot get facets")
 		facets = nil
 	}
 
+	var breadcrumbs []Breadcrumb
+	if len(ancestors) > 0 {
+		var currentPath string
+		for i, c := range ancestors {
+			if currentPath == "" {
+				currentPath = c.Slug()
+			} else {
+				currentPath = currentPath + "/" + c.Slug()
+			}
+			breadcrumbs = append(breadcrumbs, Breadcrumb{
+				Name:   c.Name(),
+				URL:    "/category/" + currentPath,
+				Active: i == len(ancestors)-1,
+			})
+		}
+	}
+
+	var subcategories []Subcategory
+	if activeCategory.ID() != "" {
+		prefix := activeCategoryPath
+		if prefix == "" {
+			prefix = activeCategory.Slug()
+		}
+		for _, cat := range categories {
+			if cat.ParentID() == activeCategory.ID() {
+				subcategories = append(subcategories, Subcategory{
+					Name: cat.Name(),
+					URL:  "/category/" + prefix + "/" + cat.Slug(),
+				})
+			}
+		}
+	}
+
 	handler.renderTemplate(w, r, "productCatalog/catalog", map[string]any{
-		"Categories":     categories,
-		"Facets":         facets,
-		"ActiveCategory": activeCategory,
-		"Search":         "",
+		"Categories":         categories,
+		"Facets":             facets,
+		"ActiveCategory":     activeSlug,
+		"ActiveCategoryPath": activeCategoryPath,
+		"ActiveCat":          activeCategory,
+		"Breadcrumbs":        breadcrumbs,
+		"Subcategories":      subcategories,
+		"Search":             "",
 	})
 }
 
@@ -144,7 +218,7 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/search", observability.HTTPWrap(m.handler.SearchPage, m.logger)).Methods("GET")
 	r.HandleFunc("/", m.handler.HomePage)
 	r.HandleFunc("/products", observability.HTTPWrap(m.handler.ShopPage, m.logger)).Methods("GET")
-	r.HandleFunc("/category/{slug}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
+	r.HandleFunc("/category/{path:.+}", observability.HTTPWrap(m.handler.CategoryPage, m.logger)).Methods("GET")
 	// Footer-driven store switcher. Lists every configured store with
 	// a link that drops the visitor onto the same path on the other
 	// store's host. Replaces the previous per-customer currency picker
