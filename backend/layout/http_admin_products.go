@@ -206,7 +206,7 @@ func (handler httpHandler) AdminEditProductForm(w http.ResponseWriter, r *http.R
 		"Active":         "products",
 		"Email":          email,
 		"Product":        product,
-		"Categories":     categories,
+		"Categories":     buildCategoryTree(categories),
 		"Assigned":       assigned,
 		"AttrTypes":      attrTypes,
 		"AttrValues":     attrValues,

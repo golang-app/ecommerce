@@ -6,6 +6,15 @@
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div class="field"><label for="c-name">name</label><input id="c-name" name="name" value="{{.Category.Name}}" required></div>
     <div class="field"><label for="c-slug">slug</label><input id="c-slug" name="slug" value="{{.Category.Slug}}" required placeholder="lowercase-with-hyphens"></div>
+    <div class="field">
+      <label for="c-parent">parent category</label>
+      <select id="c-parent" name="parent_id">
+        <option value="" {{if .Category.IsRoot}}selected{{end}}>(None - Root Category)</option>
+        {{range $opt := .ParentOptions}}
+          <option value="{{$opt.ID}}" {{if eq $opt.ID $.Category.ParentID}}selected{{end}}>{{if $opt.IndentedName}}{{$opt.IndentedName}}{{else}}{{$opt.Name}}{{end}}</option>
+        {{end}}
+      </select>
+    </div>
     <div class="field"><label for="c-position">position</label><input id="c-position" name="position" type="number" value="{{.Category.Position}}"></div>
     <button type="submit" class="btn">save changes</button>
     <p class="form__aside"><a href="/admin/categories">&larr; back to categories</a></p>
