@@ -25,7 +25,7 @@ func testPostgresDB(t *testing.T) *sql.DB {
 
 func TestPostgres_CategoryHierarchyAndCTE(t *testing.T) {
 	db := testPostgresDB(t)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	ctx := context.Background()
 	storage := adapter.NewPostgres(db)
 
@@ -44,12 +44,12 @@ func TestPostgres_CategoryHierarchyAndCTE(t *testing.T) {
 	if err := storage.CreateCategory(ctx, root); err != nil {
 		t.Fatalf("failed to create root: %v", err)
 	}
-	defer storage.DeleteCategory(ctx, root.ID())
+	defer func() { _ = storage.DeleteCategory(ctx, root.ID()) }()
 
 	if err := storage.CreateCategory(ctx, sub); err != nil {
 		t.Fatalf("failed to create sub: %v", err)
 	}
-	defer storage.DeleteCategory(ctx, sub.ID())
+	defer func() { _ = storage.DeleteCategory(ctx, sub.ID()) }()
 
 	hasChildren, err := storage.HasChildCategories(ctx, root.ID())
 	if err != nil || !hasChildren {
