@@ -3,6 +3,7 @@ package layout
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/gorilla/mux"
@@ -31,7 +32,8 @@ func (handler httpHandler) AdminCreateCategory(w http.ResponseWriter, r *http.Re
 		return
 	}
 	_ = r.ParseForm()
-	err := handler.catalogSrv.CreateCategory(r.Context(), r.FormValue("name"), r.FormValue("slug"))
+	parentID := strings.TrimSpace(r.FormValue("parent_id"))
+	err := handler.catalogSrv.CreateCategory(r.Context(), r.FormValue("name"), r.FormValue("slug"), parentID)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 	} else {
@@ -79,7 +81,8 @@ func (handler httpHandler) AdminUpdateCategory(w http.ResponseWriter, r *http.Re
 	id := mux.Vars(r)["id"]
 	_ = r.ParseForm()
 	position, _ := strconv.Atoi(r.FormValue("position"))
-	err := handler.catalogSrv.UpdateCategory(r.Context(), id, r.FormValue("name"), r.FormValue("slug"), position)
+	parentID := strings.TrimSpace(r.FormValue("parent_id"))
+	err := handler.catalogSrv.UpdateCategory(r.Context(), id, r.FormValue("name"), r.FormValue("slug"), parentID, position)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 		http.Redirect(w, r, "/admin/categories/"+id+"/edit", http.StatusSeeOther)

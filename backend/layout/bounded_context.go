@@ -57,9 +57,10 @@ type catalogService interface {
 	DeleteProductImage(ctx context.Context, productID, imageID string) error
 	ProductImages(ctx context.Context, productID string) ([]pcdomain.ProductImage, error)
 
-	CreateCategory(ctx context.Context, name, slug string) error
-	UpdateCategory(ctx context.Context, id, name, slug string, position int) error
+	CreateCategory(ctx context.Context, name, slug, parentID string) error
+	UpdateCategory(ctx context.Context, id, name, slug, parentID string, position int) error
 	DeleteCategory(ctx context.Context, id string) error
+	CategoryByPath(ctx context.Context, path string) (pcdomain.Category, []pcdomain.Category, error)
 
 	AttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)
 	AllAttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)

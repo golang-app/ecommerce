@@ -562,8 +562,32 @@ func (im *inMemory) ListStockMovements(ctx context.Context, variantID string, li
 }
 
 func (im *inMemory) inCategory(productID, slug string) bool {
-	for _, c := range im.prodCats[productID] {
+	if slug == "" {
+		return true
+	}
+	var rootID string
+	for _, c := range im.categories {
 		if c.Slug() == slug {
+			rootID = c.ID()
+			break
+		}
+	}
+	var allowed map[string]bool
+	if rootID != "" {
+		descendantIDs, err := im.DescendantCategoryIDs(context.Background(), rootID)
+		if err == nil {
+			allowed = make(map[string]bool, len(descendantIDs))
+			for _, id := range descendantIDs {
+				allowed[id] = true
+			}
+		}
+	}
+	for _, c := range im.prodCats[productID] {
+		if allowed != nil {
+			if allowed[c.ID()] {
+				return true
+			}
+		} else if c.Slug() == slug {
 			return true
 		}
 	}
