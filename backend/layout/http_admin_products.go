@@ -206,7 +206,7 @@ func (handler httpHandler) AdminEditProductForm(w http.ResponseWriter, r *http.R
 		"Active":         "products",
 		"Email":          email,
 		"Product":        product,
-		"Categories":     categories,
+		"Categories":     buildCategoryTree(categories),
 		"Assigned":       assigned,
 		"AttrTypes":      attrTypes,
 		"AttrValues":     attrValues,
@@ -760,6 +760,11 @@ func (handler httpHandler) AdminDeleteOptionType(w http.ResponseWriter, r *http.
 // AdminDeleteProduct deletes a product (variants/links cascade).
 func (handler httpHandler) AdminDeleteProduct(w http.ResponseWriter, r *http.Request) {
 	if _, ok := handler.requireAdmin(w, r); !ok {
+		return
+	}
+	if handler.demoMode {
+		handler.flash(w, r, "Product deletion is disabled in Demo Mode.", "error")
+		http.Redirect(w, r, "/admin/products", http.StatusSeeOther)
 		return
 	}
 	id := mux.Vars(r)["id"]

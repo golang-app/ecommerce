@@ -52,6 +52,9 @@ type config struct {
 	// allow unauthenticated heap/CPU profiling and data leakage. Set PPROF_ENABLED=true
 	// only during local debugging or internal diagnostics.
 	PProfEnabled bool `conf:"default:false,PPROF_ENABLED"`
+	// AppDemo enables Demo Mode across the storefront and admin panel.
+	// Defaults to false. Set APP_DEMO=true to activate.
+	AppDemo bool `conf:"default:false,APP_DEMO"`
 	// SMTPHost is the host:port of the outbound SMTP relay (e.g. mailhog:1025
 	// in dev, an SES/SendGrid SMTP endpoint in production). Leave blank to
 	// disable real delivery — the app then falls back to a LogMailer that

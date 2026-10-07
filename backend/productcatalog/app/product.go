@@ -82,6 +82,9 @@ type ProductStorage interface {
 	CreateCategory(ctx context.Context, c domain.Category) error
 	UpdateCategory(ctx context.Context, c domain.Category) error
 	DeleteCategory(ctx context.Context, id string) error
+	HasChildCategories(ctx context.Context, id string) (bool, error)
+	DescendantCategoryIDs(ctx context.Context, rootCategoryID string) ([]string, error)
+	CategoryByPath(ctx context.Context, path string) (domain.Category, []domain.Category, error)
 
 	AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error)
 	CreateAttributeType(ctx context.Context, t domain.AttributeType) error
@@ -365,12 +368,24 @@ func sumQuantities(quantities map[string]int) int {
 
 // CreateCategory validates and persists a new category. The id equals the slug
 // and the position is appended after the current categories.
-func (ps ProductService) CreateCategory(ctx context.Context, name, slug string) error {
+func (ps ProductService) CreateCategory(ctx context.Context, name, slug, parentID string) error {
 	existing, err := ps.storage.Categories(ctx)
 	if err != nil {
 		return err
 	}
-	c, err := domain.NewCategory(slug, name, slug, len(existing)+1)
+	if parentID != "" {
+		found := false
+		for _, c := range existing {
+			if c.ID() == parentID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return domain.ErrInvalidCategory
+		}
+	}
+	c, err := domain.NewCategory(slug, name, slug, len(existing)+1, parentID)
 	if err != nil {
 		return err
 	}
@@ -378,8 +393,22 @@ func (ps ProductService) CreateCategory(ctx context.Context, name, slug string) 
 }
 
 // UpdateCategory validates and persists changes to an existing category.
-func (ps ProductService) UpdateCategory(ctx context.Context, id, name, slug string, position int) error {
-	c, err := domain.NewCategory(id, name, slug, position)
+func (ps ProductService) UpdateCategory(ctx context.Context, id, name, slug, parentID string, position int) error {
+	if id == parentID {
+		return domain.ErrInvalidCategory
+	}
+	if parentID != "" {
+		descendants, err := ps.storage.DescendantCategoryIDs(ctx, id)
+		if err != nil {
+			return err
+		}
+		for _, dID := range descendants {
+			if dID == parentID {
+				return domain.ErrCyclicCategoryHierarchy
+			}
+		}
+	}
+	c, err := domain.NewCategory(id, name, slug, position, parentID)
 	if err != nil {
 		return err
 	}
@@ -388,7 +417,19 @@ func (ps ProductService) UpdateCategory(ctx context.Context, id, name, slug stri
 
 // DeleteCategory removes a category (its product links cascade in storage).
 func (ps ProductService) DeleteCategory(ctx context.Context, id string) error {
+	hasChildren, err := ps.storage.HasChildCategories(ctx, id)
+	if err != nil {
+		return err
+	}
+	if hasChildren {
+		return domain.ErrCategoryHasChildren
+	}
 	return ps.storage.DeleteCategory(ctx, id)
+}
+
+// CategoryByPath looks up a category by slash-separated slug path.
+func (ps ProductService) CategoryByPath(ctx context.Context, path string) (domain.Category, []domain.Category, error) {
+	return ps.storage.CategoryByPath(ctx, path)
 }
 
 // AttributeTypes returns every attribute type in display order (admin view).

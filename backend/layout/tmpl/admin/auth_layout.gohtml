@@ -1,0 +1,54 @@
+{{define "adminauthbase"}}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{block "title" .}}Sign in · Store Admin{{end}}</title>
+    {{block "description" .}}{{end}}
+
+    <link rel="stylesheet" href="/static/admin.css">
+    <script src="https://unpkg.com/htmx.org@1.9.5"></script>
+    <script>
+      // Mirror of admin layout: every HTMX request carries the CSRF token.
+      document.addEventListener('htmx:configRequest', function (event) {
+        event.detail.headers['X-CSRF-Token'] = {{ .CSRFToken }};
+      });
+    </script>
+  </head>
+  <body class="admin-body admin-auth-body">
+
+    <div class="admin-auth-wrapper">
+      <div class="admin-auth-card">
+        {{if .DemoMode}}
+        <div class="admin-demo-banner admin-demo-banner--auth" role="region" aria-label="Demo mode announcement">
+          <span class="admin-demo-banner__badge">DEMO MODE</span>
+          <span class="admin-demo-banner__text">Demo mode active — test credentials available.</span>
+        </div>
+        {{end}}
+
+        <div class="admin-auth-brand">
+          <span class="admin-auth-brand__mark">◆</span>
+          <span class="admin-auth-brand__name">Store Admin</span>
+        </div>
+
+        <div class="admin-flash">
+          {{ range .FlashInfo }}
+            <p class="flash flash--info">{{ . }}</p>
+          {{ end }}
+          {{ range .FlashError }}
+            <p class="flash flash--error">{{ . }}</p>
+          {{ end }}
+        </div>
+
+        {{template "main" .}}
+
+        <div class="admin-auth-foot">
+          <a href="/" class="admin-auth-foot__link">&#8592; Back to store</a>
+        </div>
+      </div>
+    </div>
+
+  </body>
+</html>
+{{end}}

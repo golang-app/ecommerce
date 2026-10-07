@@ -28,6 +28,12 @@
       </p>
     </header>
 
+    {{if .DemoMode}}
+      <div class="demo-order-notice" role="note">
+        <strong>Demo mode:</strong> This order is simulated. No real payment charge was made and confirmation emails are logged to the server rather than sent via SMTP.
+      </div>
+    {{end}}
+
     {{if eq .Order.Status "failed"}}
       <div class="flash flash--error">
         Your payment was declined. The items have been released back to stock. You may retry your purchase or continue shopping.

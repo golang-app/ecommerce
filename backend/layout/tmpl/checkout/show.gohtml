@@ -120,6 +120,12 @@
           <legend class="fieldset__legend">card details</legend>
           <p class="muted checkout__note">secure client-side tokenization (PCI-DSS SAQ A compliant).</p>
 
+          {{if .DemoMode}}
+            <div class="demo-checkout-notice" role="note">
+              <strong>Demo mode notice:</strong> No real payment is processed (test cards accepted). Order confirmation emails are simulated and logged to server console.
+            </div>
+          {{end}}
+
           <input type="hidden" id="payment-token" name="payment_token">
 
           <div class="field">

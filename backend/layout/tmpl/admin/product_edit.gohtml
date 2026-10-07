@@ -35,7 +35,7 @@
           <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
           <div class="admin-checks">
             {{range $c := .Categories}}
-              <label class="admin-check"><input type="checkbox" name="category" value="{{$c.ID}}" {{if index $.Assigned $c.ID}}checked{{end}}> {{$c.Name}}</label>
+              <label class="admin-check"><input type="checkbox" name="category" value="{{$c.ID}}" {{if index $.Assigned $c.ID}}checked{{end}}> {{if $c.IndentedName}}{{$c.IndentedName}}{{else}}{{$c.Name}}{{end}}</label>
             {{end}}
           </div>
           <button type="submit" class="btn">save categories</button>

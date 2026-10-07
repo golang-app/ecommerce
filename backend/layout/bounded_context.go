@@ -57,9 +57,10 @@ type catalogService interface {
 	DeleteProductImage(ctx context.Context, productID, imageID string) error
 	ProductImages(ctx context.Context, productID string) ([]pcdomain.ProductImage, error)
 
-	CreateCategory(ctx context.Context, name, slug string) error
-	UpdateCategory(ctx context.Context, id, name, slug string, position int) error
+	CreateCategory(ctx context.Context, name, slug, parentID string) error
+	UpdateCategory(ctx context.Context, id, name, slug, parentID string, position int) error
 	DeleteCategory(ctx context.Context, id string) error
+	CategoryByPath(ctx context.Context, path string) (pcdomain.Category, []pcdomain.Category, error)
 
 	AttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)
 	AllAttributeTypes(ctx context.Context) ([]pcdomain.AttributeType, error)
@@ -267,7 +268,7 @@ type paymentsService interface {
 // POST /webhooks/payments endpoint and the payment provider admin UI.
 // Pass an empty secret OR a nil service to skip the webhook registration entirely —
 // tests that don't care about webhooks then don't need to provide either.
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService, limiter rateLimiter, trustedProxiesConfig string) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService, limiter rateLimiter, trustedProxiesConfig string, demoMode bool) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	parsedProxies := parseTrustedProxies(trustedProxiesConfig)
@@ -295,6 +296,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			logger:         logger,
 			limiter:        limiter,
 			trustedProxies: parsedProxies,
+			demoMode:       demoMode,
 		},
 		uploadsDir:            uploadsDir,
 		paymentsWebhookSecret: paymentsWebhookSecret,

@@ -1,16 +1,35 @@
-{{define "title"}}{{$name := ""}}{{range .Categories}}{{if eq .Slug $.ActiveCategory}}{{$name = .Name}}{{end}}{{end}}{{if .Search}}Search &#34;{{.Search}}&#34; · {{.SiteName}}{{else if $name}}{{$name}} · {{.SiteName}}{{else}}Shop · {{.SiteName}}{{end}}{{end}}
-{{define "description"}}{{$name := ""}}{{range .Categories}}{{if eq .Slug $.ActiveCategory}}{{$name = .Name}}{{end}}{{end}}{{if .Search}}Search results for &#34;{{.Search}}&#34; in our store.{{else if $name}}Browse {{$name}} products from our store.{{else}}Browse every product in our store.{{end}}{{end}}
+{{define "title"}}{{$name := ""}}{{if .ActiveCat}}{{$name = .ActiveCat.Name}}{{else}}{{range .Categories}}{{if eq .Slug $.ActiveCategory}}{{$name = .Name}}{{end}}{{end}}{{end}}{{if .Search}}Search &#34;{{.Search}}&#34; · {{.SiteName}}{{else if $name}}{{$name}} · {{.SiteName}}{{else}}Shop · {{.SiteName}}{{end}}{{end}}
+{{define "description"}}{{$name := ""}}{{if .ActiveCat}}{{$name = .ActiveCat.Name}}{{else}}{{range .Categories}}{{if eq .Slug $.ActiveCategory}}{{$name = .Name}}{{end}}{{end}}{{end}}{{if .Search}}Search results for &#34;{{.Search}}&#34; in our store.{{else if $name}}Browse {{$name}} products from our store.{{else}}Browse every product in our store.{{end}}{{end}}
 
 {{define "main"}}
-  <h1 class="page-title">{{if .Search}}search: {{.Search}}{{else}}shop{{end}}</h1>
+  {{if .Breadcrumbs}}
+    <nav class="breadcrumbs crumbs">
+      <a href="/">home</a>
+      {{range .Breadcrumbs}}
+        / {{if .Active}}<span>{{.Name}}</span>{{else}}<a href="{{.URL}}">{{.Name}}</a>{{end}}
+      {{end}}
+    </nav>
+  {{end}}
+
+  <h1 class="page-title">{{if .Search}}search: {{.Search}}{{else if .ActiveCat}}{{.ActiveCat.Name}}{{else}}shop{{end}}</h1>
+
+  {{if .Subcategories}}
+    <div class="subcategory-pills" style="margin-bottom: var(--space-4); display: flex; gap: 0.5rem; flex-wrap: wrap;">
+      {{range .Subcategories}}
+        <a href="{{.URL}}" class="pill" style="padding: 0.25rem 0.75rem; border: 1px solid var(--border, #ccc); border-radius: 999px; text-decoration: none; font-size: 0.875rem;">{{.Name}}</a>
+      {{end}}
+    </div>
+  {{end}}
 
   <div class="catalog">
     <aside class="filter-rail">
       <nav class="category-nav">
         <a class="category-nav__link{{if and (eq .ActiveCategory "") (not .Search)}} is-active{{end}}" href="/products">all</a>
         {{range .Categories}}
-          <a class="category-nav__link{{if eq $.ActiveCategory .Slug}} is-active{{end}}"
-             href="/category/{{.Slug}}">{{.Name}}</a>
+          {{if .IsRoot}}
+            <a class="category-nav__link{{if eq $.ActiveCategory .Slug}} is-active{{end}}"
+               href="/category/{{.Slug}}">{{.Name}}</a>
+          {{end}}
         {{end}}
       </nav>
 
@@ -52,7 +71,7 @@
 
           <div class="filter-form__actions">
             <button type="submit" class="btn btn--block">apply</button>
-            <a class="filter-form__clear" href="{{if .Search}}/search?q={{.Search}}{{else if .ActiveCategory}}/category/{{.ActiveCategory}}{{else}}/products{{end}}">clear</a>
+            <a class="filter-form__clear" href="{{if .Search}}/search?q={{.Search}}{{else if .ActiveCategoryPath}}/category/{{.ActiveCategoryPath}}{{else if .ActiveCategory}}/category/{{.ActiveCategory}}{{else}}/products{{end}}">clear</a>
           </div>
         </form>
       {{end}}

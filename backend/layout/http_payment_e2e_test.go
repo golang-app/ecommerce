@@ -295,6 +295,7 @@ func setupE2EEnvironment(t *testing.T) (*mux.Router, *paymentsApp.Service, *e2eC
 		paySrv,
 		nil,
 		"",
+		false,
 	)
 
 	router := mux.NewRouter()

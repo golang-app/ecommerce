@@ -35,6 +35,13 @@
     </aside>
 
     <div class="admin-main">
+      {{if .DemoMode}}
+      <div class="admin-demo-banner" role="region" aria-label="Demo mode announcement">
+        <span class="admin-demo-banner__badge">DEMO MODE</span>
+        <span class="admin-demo-banner__text">Demo mode active — destructive deletions and password overrides are restricted.</span>
+      </div>
+      {{end}}
+
       <header class="admin-topbar">
         <h1 class="admin-topbar__heading">{{with .Active}}{{.}}{{else}}admin{{end}}</h1>
         {{with .AdminEmail}}<span class="admin-topbar__user">{{.}}</span>{{end}}

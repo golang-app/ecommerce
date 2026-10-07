@@ -2,7 +2,9 @@ package adapter
 
 import (
 	"context"
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
@@ -386,6 +388,66 @@ func (im *inMemory) DeleteCategory(ctx context.Context, id string) error {
 	return nil
 }
 
+func (im *inMemory) HasChildCategories(ctx context.Context, id string) (bool, error) {
+	for _, c := range im.categories {
+		if c.ParentID() == id {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (im *inMemory) DescendantCategoryIDs(ctx context.Context, rootCategoryID string) ([]string, error) {
+	out := []string{rootCategoryID}
+	visited := map[string]bool{rootCategoryID: true}
+	queue := []string{rootCategoryID}
+
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+
+		for _, c := range im.categories {
+			if c.ParentID() == curr && !visited[c.ID()] {
+				visited[c.ID()] = true
+				out = append(out, c.ID())
+				queue = append(queue, c.ID())
+			}
+		}
+	}
+	return out, nil
+}
+
+func (im *inMemory) CategoryByPath(ctx context.Context, path string) (domain.Category, []domain.Category, error) {
+	cleaned := strings.Trim(path, "/")
+	if cleaned == "" {
+		return domain.Category{}, nil, fmt.Errorf("empty category path")
+	}
+	segments := strings.Split(cleaned, "/")
+
+	var breadcrumbs []domain.Category
+	var parentID string
+
+	for _, slug := range segments {
+		var found domain.Category
+		var ok bool
+		for _, c := range im.categories {
+			if c.Slug() == slug && c.ParentID() == parentID {
+				found = c
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return domain.Category{}, nil, fmt.Errorf("category not found for path segment %q in path %q", slug, path)
+		}
+		breadcrumbs = append(breadcrumbs, found)
+		parentID = found.ID()
+	}
+
+	target := breadcrumbs[len(breadcrumbs)-1]
+	return target, breadcrumbs, nil
+}
+
 func (im *inMemory) AllAttributeTypes(ctx context.Context) ([]domain.AttributeType, error) {
 	out := make([]domain.AttributeType, 0, len(im.attrTypes))
 	for _, t := range im.attrTypes {
@@ -500,8 +562,32 @@ func (im *inMemory) ListStockMovements(ctx context.Context, variantID string, li
 }
 
 func (im *inMemory) inCategory(productID, slug string) bool {
-	for _, c := range im.prodCats[productID] {
+	if slug == "" {
+		return true
+	}
+	var rootID string
+	for _, c := range im.categories {
 		if c.Slug() == slug {
+			rootID = c.ID()
+			break
+		}
+	}
+	var allowed map[string]bool
+	if rootID != "" {
+		descendantIDs, err := im.DescendantCategoryIDs(context.Background(), rootID)
+		if err == nil {
+			allowed = make(map[string]bool, len(descendantIDs))
+			for _, id := range descendantIDs {
+				allowed[id] = true
+			}
+		}
+	}
+	for _, c := range im.prodCats[productID] {
+		if allowed != nil {
+			if allowed[c.ID()] {
+				return true
+			}
+		} else if c.Slug() == slug {
 			return true
 		}
 	}

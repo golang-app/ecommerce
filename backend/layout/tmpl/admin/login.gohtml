@@ -1,21 +1,42 @@
-{{define "title"}}Admin sign in · {{.SiteName}}{{end}}
-{{define "description"}}Sign in to the {{.SiteName}} admin panel.{{end}}
+{{define "title"}}Admin sign in · Store Admin{{end}}
+{{define "description"}}Sign in to the Store Admin panel.{{end}}
 
 {{define "main"}}
-  <h1 class="page-title">admin sign in</h1>
+  <div class="admin-auth-heading">
+    <h2>Admin Sign In</h2>
+    <p class="muted">Enter your credentials to access the admin panel</p>
+  </div>
 
-  <form class="form" method="post" action="/admin/login">
+  {{if .DemoMode}}
+  <div class="admin-demo-credentials-box">
+    <div class="admin-demo-credentials-box__header">
+      <span class="admin-demo-credentials-box__badge">DEMO ADMIN ACCOUNT</span>
+    </div>
+    <div class="admin-demo-credentials-box__content">
+      <div class="admin-demo-credentials-box__row">
+        <span class="admin-demo-credentials-box__label">Email:</span>
+        <code>admin@example.com</code>
+      </div>
+      <div class="admin-demo-credentials-box__row">
+        <span class="admin-demo-credentials-box__label">Password:</span>
+        <code>Admin123!</code>
+      </div>
+    </div>
+  </div>
+  {{end}}
+
+  <form class="form admin-auth-form" method="post" action="/admin/login">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <div class="field">
-      <label for="admin-login-email">email</label>
-      <input id="admin-login-email" type="email" name="email" autocomplete="email" required>
+      <label for="admin-login-email">Email</label>
+      <input id="admin-login-email" type="email" name="email" autocomplete="email" required placeholder="admin@example.com">
     </div>
 
     <div class="field">
-      <label for="admin-login-password">password</label>
-      <input id="admin-login-password" type="password" name="password" autocomplete="current-password" required>
+      <label for="admin-login-password">Password</label>
+      <input id="admin-login-password" type="password" name="password" autocomplete="current-password" required placeholder="••••••••">
     </div>
 
-    <button type="submit" class="btn btn--block">sign in</button>
+    <button type="submit" class="btn btn--block">Sign In</button>
   </form>
 {{end}}

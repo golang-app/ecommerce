@@ -1,12 +1,122 @@
 package layout
 
 import (
+	"errors"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
 	"github.com/gorilla/mux"
 )
+
+// AdminCategoryItem decorates a domain Category with depth and visual tree indentation
+// for admin views and selection dropdowns.
+type AdminCategoryItem struct {
+	pcdomain.Category
+	Depth        int
+	IndentedName string
+}
+
+// buildCategoryTree sorts domain categories depth-first and assigns visual indentation.
+func buildCategoryTree(categories []pcdomain.Category) []AdminCategoryItem {
+	if len(categories) == 0 {
+		return nil
+	}
+
+	childrenMap := make(map[string][]pcdomain.Category)
+	for _, c := range categories {
+		pID := c.ParentID()
+		childrenMap[pID] = append(childrenMap[pID], c)
+	}
+
+	for pID := range childrenMap {
+		sort.Slice(childrenMap[pID], func(i, j int) bool {
+			if childrenMap[pID][i].Position() != childrenMap[pID][j].Position() {
+				return childrenMap[pID][i].Position() < childrenMap[pID][j].Position()
+			}
+			if childrenMap[pID][i].Name() != childrenMap[pID][j].Name() {
+				return childrenMap[pID][i].Name() < childrenMap[pID][j].Name()
+			}
+			return childrenMap[pID][i].ID() < childrenMap[pID][j].ID()
+		})
+	}
+
+	var result []AdminCategoryItem
+	var walk func(parentID string, depth int)
+	walk = func(parentID string, depth int) {
+		children := childrenMap[parentID]
+		for _, child := range children {
+			var indentedName string
+			if depth == 0 {
+				indentedName = child.Name()
+			} else {
+				indentedName = strings.Repeat("  ", depth-1) + "└── " + child.Name()
+			}
+			result = append(result, AdminCategoryItem{
+				Category:     child,
+				Depth:        depth,
+				IndentedName: indentedName,
+			})
+			walk(child.ID(), depth+1)
+		}
+	}
+
+	walk("", 0)
+
+	// Ensure any orphan categories not reached from root are included
+	if len(result) < len(categories) {
+		visited := make(map[string]bool, len(result))
+		for _, item := range result {
+			visited[item.ID()] = true
+		}
+		for _, c := range categories {
+			if !visited[c.ID()] {
+				result = append(result, AdminCategoryItem{
+					Category:     c,
+					Depth:        0,
+					IndentedName: c.Name(),
+				})
+			}
+		}
+	}
+
+	return result
+}
+
+// filterValidParentOptions excludes the target category and all of its descendants
+// to prevent assigning cyclic parent references.
+func filterValidParentOptions(items []AdminCategoryItem, editCategoryID string) []AdminCategoryItem {
+	if editCategoryID == "" {
+		return items
+	}
+
+	excluded := make(map[string]bool)
+	excluded[editCategoryID] = true
+
+	childrenMap := make(map[string][]pcdomain.Category)
+	for _, item := range items {
+		childrenMap[item.ParentID()] = append(childrenMap[item.ParentID()], item.Category)
+	}
+
+	var collectDescendants func(id string)
+	collectDescendants = func(id string) {
+		for _, child := range childrenMap[id] {
+			excluded[child.ID()] = true
+			collectDescendants(child.ID())
+		}
+	}
+	collectDescendants(editCategoryID)
+
+	var valid []AdminCategoryItem
+	for _, item := range items {
+		if !excluded[item.ID()] {
+			valid = append(valid, item)
+		}
+	}
+	return valid
+}
 
 // AdminCategories renders the categories list page with the inline "new" form.
 func (handler httpHandler) AdminCategories(w http.ResponseWriter, r *http.Request) {
@@ -18,10 +128,11 @@ func (handler httpHandler) AdminCategories(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		categories = nil
 	}
+	treeItems := buildCategoryTree(categories)
 	handler.renderAdminTemplate(w, r, "admin/categories", map[string]any{
 		"Active":     "categories",
 		"Email":      email,
-		"Categories": categories,
+		"Categories": treeItems,
 	})
 }
 
@@ -31,7 +142,8 @@ func (handler httpHandler) AdminCreateCategory(w http.ResponseWriter, r *http.Re
 		return
 	}
 	_ = r.ParseForm()
-	err := handler.catalogSrv.CreateCategory(r.Context(), r.FormValue("name"), r.FormValue("slug"))
+	parentID := strings.TrimSpace(r.FormValue("parent_id"))
+	err := handler.catalogSrv.CreateCategory(r.Context(), r.FormValue("name"), r.FormValue("slug"), parentID)
 	if err != nil {
 		handler.flash(w, r, err.Error(), "error")
 	} else {
@@ -64,10 +176,14 @@ func (handler httpHandler) AdminEditCategoryForm(w http.ResponseWriter, r *http.
 		http.Redirect(w, r, "/admin/categories", http.StatusSeeOther)
 		return
 	}
+	treeItems := buildCategoryTree(categories)
+	parentOptions := filterValidParentOptions(treeItems, id)
+
 	handler.renderAdminTemplate(w, r, "admin/category_edit", map[string]any{
-		"Active":   "categories",
-		"Email":    email,
-		"Category": *found,
+		"Active":        "categories",
+		"Email":         email,
+		"Category":      *found,
+		"ParentOptions": parentOptions,
 	})
 }
 
@@ -79,9 +195,14 @@ func (handler httpHandler) AdminUpdateCategory(w http.ResponseWriter, r *http.Re
 	id := mux.Vars(r)["id"]
 	_ = r.ParseForm()
 	position, _ := strconv.Atoi(r.FormValue("position"))
-	err := handler.catalogSrv.UpdateCategory(r.Context(), id, r.FormValue("name"), r.FormValue("slug"), position)
+	parentID := strings.TrimSpace(r.FormValue("parent_id"))
+	err := handler.catalogSrv.UpdateCategory(r.Context(), id, r.FormValue("name"), r.FormValue("slug"), parentID, position)
 	if err != nil {
-		handler.flash(w, r, err.Error(), "error")
+		if errors.Is(err, pcdomain.ErrCyclicCategoryHierarchy) {
+			handler.flash(w, r, "Cannot assign parent: cyclic category hierarchy detected", "error")
+		} else {
+			handler.flash(w, r, err.Error(), "error")
+		}
 		http.Redirect(w, r, "/admin/categories/"+id+"/edit", http.StatusSeeOther)
 		return
 	}
@@ -94,9 +215,18 @@ func (handler httpHandler) AdminDeleteCategory(w http.ResponseWriter, r *http.Re
 	if _, ok := handler.requireAdmin(w, r); !ok {
 		return
 	}
+	if handler.demoMode {
+		handler.flash(w, r, "Category deletion is disabled in Demo Mode.", "error")
+		http.Redirect(w, r, "/admin/categories", http.StatusSeeOther)
+		return
+	}
 	id := mux.Vars(r)["id"]
 	if err := handler.catalogSrv.DeleteCategory(r.Context(), id); err != nil {
-		handler.flash(w, r, err.Error(), "error")
+		if errors.Is(err, pcdomain.ErrCategoryHasChildren) {
+			handler.flash(w, r, "Cannot delete category because it has subcategories. Move or delete them first.", "error")
+		} else {
+			handler.flash(w, r, err.Error(), "error")
+		}
 	} else {
 		handler.flash(w, r, "Category deleted", "info")
 	}

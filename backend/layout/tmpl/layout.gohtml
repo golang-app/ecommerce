@@ -43,6 +43,15 @@
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
 
+    {{if .DemoMode}}
+    <div class="demo-banner" role="region" aria-label="Demo mode announcement">
+      <div class="shell demo-banner__inner">
+        <span class="demo-banner__badge">DEMO MODE</span>
+        <span class="demo-banner__text">This is an interactive demo store. Orders, emails, and payments are simulated.</span>
+      </div>
+    </div>
+    {{end}}
+
     <header class="site-header">
       <div class="shell site-header__inner">
         <a href="/" class="brand">Ecommerce</a>
@@ -61,7 +70,9 @@
           <ul class="nav">
             <li><a href="/products">shop</a></li>
             {{range .NavCategories}}
-              <li><a href="/category/{{.Slug}}">{{.Name}}</a></li>
+              {{if .IsRoot}}
+                <li><a href="/category/{{.Slug}}">{{.Name}}</a></li>
+              {{end}}
             {{end}}
             <li>
               <a href="/cart" class="cart-link" aria-label="Cart">cart
