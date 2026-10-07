@@ -63,7 +63,7 @@ func newAdminAuthTestApp(t *testing.T, auth adminAuthTestService) *adminAuthTest
 
 	bc := layout.New(
 		logger,
-		nil, catalogSrv, nil, auth, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, catalogSrv, nil, auth, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		"", []byte("secret-key-32-bytes-long-12345"), false, false, nil, "", fx.Rates{}, "", nil, nil, "",
 		false,
 	)

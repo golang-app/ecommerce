@@ -283,6 +283,7 @@ func setupE2EEnvironment(t *testing.T) (*mux.Router, *paymentsApp.Service, *e2eC
 		nil, // promoSrv
 		nil, // searchSrv
 		nil, // storeSrv
+		nil, // bannerSrv
 		nil, // imageStore
 		"",  // uploadsDir
 		[]byte("test-secret-12345678901234567890"),

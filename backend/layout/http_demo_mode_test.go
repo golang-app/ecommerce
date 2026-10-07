@@ -57,7 +57,7 @@ func newDemoModeTestApp(t *testing.T, demoMode bool) *mux.Router {
 
 	bc := layout.New(
 		logger,
-		nil, catalogSrv, nil, adminAuth, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		nil, catalogSrv, nil, adminAuth, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		"", []byte("secret-key-32-bytes-long-12345"), false, false, nil, "", fx.Rates{}, "", nil, nil, "",
 		demoMode,
 	)

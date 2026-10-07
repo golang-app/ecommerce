@@ -7,6 +7,7 @@ import (
 
 	authAdapter "github.com/bkielbasa/go-ecommerce/backend/auth/adapter"
 	authDomain "github.com/bkielbasa/go-ecommerce/backend/auth/domain"
+	bannerdomain "github.com/bkielbasa/go-ecommerce/backend/banner/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	checkoutDomain "github.com/bkielbasa/go-ecommerce/backend/checkout/domain"
 	checkoutQuery "github.com/bkielbasa/go-ecommerce/backend/checkout/query"
@@ -228,6 +229,18 @@ type storeService interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// bannerService is the narrow seam the layout package needs from the
+// banner bounded context.
+type bannerService interface {
+	Get(ctx context.Context, id string) (bannerdomain.Banner, error)
+	ListAll(ctx context.Context) ([]bannerdomain.Banner, error)
+	ListActiveBySlot(ctx context.Context, slot bannerdomain.Slot) ([]bannerdomain.Banner, error)
+	Create(ctx context.Context, b bannerdomain.Banner) error
+	Update(ctx context.Context, b bannerdomain.Banner) error
+	Delete(ctx context.Context, id string) error
+	ToggleActive(ctx context.Context, id string) error
+}
+
 // checkoutQueries is the read side of the checkout context (CQRS); it returns
 // dedicated read models, not the write aggregate.
 type checkoutQueries interface {
@@ -268,7 +281,7 @@ type paymentsService interface {
 // POST /webhooks/payments endpoint and the payment provider admin UI.
 // Pass an empty secret OR a nil service to skip the webhook registration entirely —
 // tests that don't care about webhooks then don't need to provide either.
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService, limiter rateLimiter, trustedProxiesConfig string, demoMode bool) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, bannerSrv bannerService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService, limiter rateLimiter, trustedProxiesConfig string, demoMode bool) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	parsedProxies := parseTrustedProxies(trustedProxiesConfig)
@@ -288,6 +301,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			promoSrv:       promoSrv,
 			searchSrv:      searchSrv,
 			storeSrv:       storeSrv,
+			bannerSrv:      bannerSrv,
 			imageStore:     imageStore,
 			paymentsSrv:    paymentsSrv,
 			mailer:         mailerSrv,

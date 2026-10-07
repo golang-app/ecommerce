@@ -57,6 +57,7 @@ type httpHandler struct {
 	promoSrv       promoService
 	searchSrv      searchService
 	storeSrv       storeService
+	bannerSrv      bannerService
 	imageStore     imagestore.Store
 	paymentsSrv    paymentsService
 	mailer         mailer.Mailer
