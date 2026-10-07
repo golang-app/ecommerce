@@ -7,6 +7,8 @@
     <a class="btn home-hero__shop" href="/products">shop all</a>
   </div>
 
+  {{template "trust_badges" .}}
+
   {{if .Newest}}
     <div class="product-grid">
       {{range .Newest}}

@@ -1,0 +1,79 @@
+{{define "announcement_bar"}}
+<aside class="announcement-bar" id="announcement-bar" role="region" aria-label="Announcement">
+  <script>
+    (function() {
+      try {
+        if (sessionStorage.getItem('dismissed_announcement_v1') === '1') {
+          var bar = document.getElementById('announcement-bar');
+          if (bar) bar.style.display = 'none';
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <div class="shell announcement-bar__inner">
+    <div class="announcement-bar__content">
+      <span class="announcement-bar__item announcement-bar__item--shipping">
+        <span class="announcement-bar__icon" aria-hidden="true">🚚</span>
+        <span>Free shipping on orders over $50</span>
+      </span>
+      <span class="announcement-bar__divider" aria-hidden="true">•</span>
+      <span class="announcement-bar__item announcement-bar__item--promo">
+        <span class="announcement-bar__icon" aria-hidden="true">🎟️</span>
+        <span>Use code <strong>WELCOME10</strong> for 10% off</span>
+        <button type="button" class="announcement-bar__code-btn" id="announcement-copy-btn" onclick="copyAnnouncementPromo('WELCOME10')">Copy Code</button>
+      </span>
+    </div>
+    <button type="button" class="announcement-bar__close" id="announcement-close-btn" aria-label="Dismiss announcement" onclick="dismissAnnouncementBar()">✕</button>
+  </div>
+  <script>
+    function dismissAnnouncementBar() {
+      try {
+        sessionStorage.setItem('dismissed_announcement_v1', '1');
+      } catch (e) {}
+      var bar = document.getElementById('announcement-bar');
+      if (bar) {
+        bar.style.display = 'none';
+      }
+    }
+
+    var copyAnnouncementTimeout;
+    function copyAnnouncementPromo(code) {
+      function onSuccess() {
+        var btn = document.getElementById('announcement-copy-btn');
+        if (!btn) return;
+        btn.textContent = '✓ Copied!';
+        btn.classList.add('is-copied');
+        clearTimeout(copyAnnouncementTimeout);
+        copyAnnouncementTimeout = setTimeout(function() {
+          btn.textContent = 'Copy Code';
+          btn.classList.remove('is-copied');
+        }, 2000);
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(onSuccess).catch(function() {
+          fallbackCopyText(code, onSuccess);
+        });
+      } else {
+        fallbackCopyText(code, onSuccess);
+      }
+    }
+
+    function fallbackCopyText(text, cb) {
+      var textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.opacity = '0';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try {
+        var successful = document.execCommand('copy');
+        if (successful && cb) cb();
+      } catch (err) {}
+      document.body.removeChild(textArea);
+    }
+  </script>
+</aside>
+{{end}}
+{{define "announcement-bar"}}{{template "announcement_bar" .}}{{end}}
