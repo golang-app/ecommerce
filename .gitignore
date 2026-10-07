@@ -22,3 +22,7 @@ data/uploads/*
 !data/uploads/.gitkeep
 !data/uploads/seeds/
 !data/uploads/seeds/*
+
+# Git worktrees
+.worktrees/
+worktrees/
