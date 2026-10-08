@@ -79,3 +79,41 @@ func TestNewBanner_Validation(t *testing.T) {
 		})
 	}
 }
+
+func TestBanner_Validate(t *testing.T) {
+	b := domain.Banner{
+		ID:    "b-1",
+		Slot:  domain.SlotTopAnnouncement,
+		Title: "Valid Title",
+	}
+	if err := b.Validate(); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+
+	bNoID := b
+	bNoID.ID = ""
+	if err := bNoID.Validate(); err != domain.ErrEmptyID {
+		t.Fatalf("expected ErrEmptyID, got %v", err)
+	}
+
+	bBadSlot := b
+	bBadSlot.Slot = "invalid"
+	if err := bBadSlot.Validate(); err != domain.ErrInvalidSlot {
+		t.Fatalf("expected ErrInvalidSlot, got %v", err)
+	}
+
+	bNoTitle := b
+	bNoTitle.Title = "  "
+	if err := bNoTitle.Validate(); err != domain.ErrEmptyTitle {
+		t.Fatalf("expected ErrEmptyTitle, got %v", err)
+	}
+}
+
+func TestValidateSlot(t *testing.T) {
+	if err := domain.ValidateSlot(domain.SlotHomepageHero); err != nil {
+		t.Fatalf("expected nil for valid slot, got %v", err)
+	}
+	if err := domain.ValidateSlot("invalid"); err != domain.ErrInvalidSlot {
+		t.Fatalf("expected ErrInvalidSlot, got %v", err)
+	}
+}

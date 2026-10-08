@@ -27,7 +27,7 @@
             {{if $b.PromoCode}}
               <span class="announcement-bar__code-wrap">
                 <strong>{{$b.PromoCode}}</strong>
-                <button type="button" class="announcement-bar__code-btn" id="announcement-copy-btn" onclick="copyAnnouncementPromo('{{$b.PromoCode}}')">Copy Code</button>
+                <button type="button" class="announcement-bar__code-btn" onclick="copyAnnouncementPromo(this, '{{$b.PromoCode}}')">Copy Code</button>
               </span>
             {{end}}
           </span>
@@ -41,7 +41,7 @@
         <span class="announcement-bar__item announcement-bar__item--promo">
           <span class="announcement-bar__icon" aria-hidden="true">🎟️</span>
           <span>Use code <strong>WELCOME10</strong> for 10% off</span>
-          <button type="button" class="announcement-bar__code-btn" id="announcement-copy-btn" onclick="copyAnnouncementPromo('WELCOME10')">Copy Code</button>
+          <button type="button" class="announcement-bar__code-btn" onclick="copyAnnouncementPromo(this, 'WELCOME10')">Copy Code</button>
         </span>
       {{end}}
     </div>
@@ -59,9 +59,8 @@
     }
 
     var copyAnnouncementTimeout;
-    function copyAnnouncementPromo(code) {
+    function copyAnnouncementPromo(btn, code) {
       function onSuccess() {
-        var btn = document.getElementById('announcement-copy-btn');
         if (!btn) return;
         btn.textContent = '✓ Copied!';
         btn.classList.add('is-copied');

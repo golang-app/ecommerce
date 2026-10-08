@@ -57,6 +57,11 @@
     <div class="field">
       <label for="b-image-url">image url</label>
       <input id="b-image-url" type="text" name="image_url" value="{{.Banner.ImageURL}}">
+      {{if .Banner.ImageURL}}
+        <label class="form-check">
+          <input type="checkbox" name="remove_image" value="1"> Remove current image
+        </label>
+      {{end}}
       <p class="form__aside muted">Upload an image file, or provide an image URL. If both are provided, the upload wins.</p>
     </div>
 

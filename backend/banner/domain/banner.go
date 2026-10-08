@@ -21,6 +21,13 @@ var (
 	ErrBannerNotFound = errors.New("banner not found")
 )
 
+func ValidateSlot(s Slot) error {
+	if !s.IsValid() {
+		return ErrInvalidSlot
+	}
+	return nil
+}
+
 func (s Slot) IsValid() bool {
 	switch s {
 	case SlotTopAnnouncement, SlotHomepageHero, SlotProductGuarantee:
@@ -46,25 +53,31 @@ type Banner struct {
 	UpdatedAt    time.Time
 }
 
+func (b Banner) Validate() error {
+	if strings.TrimSpace(b.ID) == "" {
+		return ErrEmptyID
+	}
+	if err := ValidateSlot(b.Slot); err != nil {
+		return err
+	}
+	if strings.TrimSpace(b.Title) == "" {
+		return ErrEmptyTitle
+	}
+	return nil
+}
+
 func NewBanner(id string, slot Slot, title string, displayOrder int) (Banner, error) {
-	if strings.TrimSpace(id) == "" {
-		return Banner{}, ErrEmptyID
-	}
-	if !slot.IsValid() {
-		return Banner{}, ErrInvalidSlot
-	}
-	trimmedTitle := strings.TrimSpace(title)
-	if trimmedTitle == "" {
-		return Banner{}, ErrEmptyTitle
-	}
-	now := time.Now().UTC()
-	return Banner{
-		ID:           id,
+	b := Banner{
+		ID:           strings.TrimSpace(id),
 		Slot:         slot,
-		Title:        trimmedTitle,
+		Title:        strings.TrimSpace(title),
 		DisplayOrder: displayOrder,
 		IsActive:     true,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}, nil
+		CreatedAt:    time.Now().UTC(),
+		UpdatedAt:    time.Now().UTC(),
+	}
+	if err := b.Validate(); err != nil {
+		return Banner{}, err
+	}
+	return b, nil
 }

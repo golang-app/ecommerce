@@ -213,6 +213,85 @@ func TestAdminBanners_Update(t *testing.T) {
 	is.Equal(updated.DisplayOrder, 1)
 }
 
+func TestAdminBanners_Update_RemoveImage(t *testing.T) {
+	setupTestEnvironment(t)
+	is := is.New(t)
+
+	repo := banneradapter.NewInMemory()
+	srv := bannerapp.NewService(repo)
+
+	b, err := bannerdomain.NewBanner("b-img-1", bannerdomain.SlotHomepageHero, "Hero", 1)
+	is.NoErr(err)
+	b.ImageURL = "https://example.com/banner.jpg"
+	_ = srv.Create(context.Background(), b)
+
+	router := newBannerTestRouter(srv)
+
+	form := url.Values{}
+	form.Set("slot", "homepage_hero")
+	form.Set("title", "Hero Updated")
+	form.Set("image_url", "https://example.com/banner.jpg")
+	form.Set("remove_image", "1")
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/banners/b-img-1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setAdminSession(t, req)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	is.Equal(rec.Code, http.StatusSeeOther)
+	is.Equal(rec.Header().Get("Location"), "/admin/banners")
+
+	updated, err := srv.Get(context.Background(), "b-img-1")
+	is.NoErr(err)
+	is.Equal(updated.ImageURL, "")
+}
+
+func TestAdminBanners_Update_InvalidDomain(t *testing.T) {
+	setupTestEnvironment(t)
+	is := is.New(t)
+
+	repo := banneradapter.NewInMemory()
+	srv := bannerapp.NewService(repo)
+
+	b, err := bannerdomain.NewBanner("b-inv-1", bannerdomain.SlotHomepageHero, "Hero", 1)
+	is.NoErr(err)
+	_ = srv.Create(context.Background(), b)
+
+	router := newBannerTestRouter(srv)
+
+	// Test invalid slot
+	form := url.Values{}
+	form.Set("slot", "invalid_slot")
+	form.Set("title", "Updated Title")
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/banners/b-inv-1", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setAdminSession(t, req)
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	is.Equal(rec.Code, http.StatusSeeOther)
+	is.Equal(rec.Header().Get("Location"), "/admin/banners/b-inv-1/edit")
+
+	// Test empty title
+	formTitle := url.Values{}
+	formTitle.Set("slot", "homepage_hero")
+	formTitle.Set("title", "   ")
+
+	reqTitle := httptest.NewRequest(http.MethodPost, "/admin/banners/b-inv-1", strings.NewReader(formTitle.Encode()))
+	reqTitle.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setAdminSession(t, reqTitle)
+	recTitle := httptest.NewRecorder()
+
+	router.ServeHTTP(recTitle, reqTitle)
+
+	is.Equal(recTitle.Code, http.StatusSeeOther)
+	is.Equal(recTitle.Header().Get("Location"), "/admin/banners/b-inv-1/edit")
+}
+
 func TestAdminBanners_Toggle(t *testing.T) {
 	setupTestEnvironment(t)
 	is := is.New(t)

@@ -146,11 +146,6 @@ func (handler httpHandler) AdminUpdateBanner(w http.ResponseWriter, r *http.Requ
 
 	slot := bannerdomain.Slot(strings.TrimSpace(r.FormValue("slot")))
 	title := strings.TrimSpace(r.FormValue("title"))
-	if !slot.IsValid() || title == "" {
-		handler.flash(w, r, "Slot and title are required and must be valid", "error")
-		http.Redirect(w, r, "/admin/banners/"+id+"/edit", http.StatusSeeOther)
-		return
-	}
 
 	b.Slot = slot
 	b.Title = title
@@ -163,14 +158,24 @@ func (handler httpHandler) AdminUpdateBanner(w http.ResponseWriter, r *http.Requ
 	b.DisplayOrder = displayOrder
 	b.IsActive = r.FormValue("is_active") == "on" || r.FormValue("is_active") == "true" || r.FormValue("is_active") == "1"
 
-	imgURL, err := handler.resolveImage(r, "image_file", "image_url")
-	if err != nil {
-		handler.flash(w, r, "Image upload failed: "+err.Error(), "error")
+	if err := b.Validate(); err != nil {
+		handler.flash(w, r, "Invalid banner: "+err.Error(), "error")
 		http.Redirect(w, r, "/admin/banners/"+id+"/edit", http.StatusSeeOther)
 		return
 	}
-	if imgURL != "" {
-		b.ImageURL = imgURL
+
+	if r.FormValue("remove_image") == "1" {
+		b.ImageURL = ""
+	} else {
+		imgURL, err := handler.resolveImage(r, "image_file", "image_url")
+		if err != nil {
+			handler.flash(w, r, "Image upload failed: "+err.Error(), "error")
+			http.Redirect(w, r, "/admin/banners/"+id+"/edit", http.StatusSeeOther)
+			return
+		}
+		if imgURL != "" {
+			b.ImageURL = imgURL
+		}
 	}
 
 	if err := handler.bannerSrv.Update(r.Context(), b); err != nil {
