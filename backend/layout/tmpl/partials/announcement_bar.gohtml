@@ -12,16 +12,38 @@
   </script>
   <div class="shell announcement-bar__inner">
     <div class="announcement-bar__content">
-      <span class="announcement-bar__item announcement-bar__item--shipping">
-        <span class="announcement-bar__icon" aria-hidden="true">🚚</span>
-        <span>Free shipping on orders over $50</span>
-      </span>
-      <span class="announcement-bar__divider" aria-hidden="true">•</span>
-      <span class="announcement-bar__item announcement-bar__item--promo">
-        <span class="announcement-bar__icon" aria-hidden="true">🎟️</span>
-        <span>Use code <strong>WELCOME10</strong> for 10% off</span>
-        <button type="button" class="announcement-bar__code-btn" id="announcement-copy-btn" onclick="copyAnnouncementPromo('WELCOME10')">Copy Code</button>
-      </span>
+      {{if .TopAnnouncementBanners}}
+        {{range $index, $b := .TopAnnouncementBanners}}
+          {{if gt $index 0}}<span class="announcement-bar__divider" aria-hidden="true">•</span>{{end}}
+          <span class="announcement-bar__item">
+            {{if $b.Icon}}<span class="announcement-bar__icon" aria-hidden="true">{{$b.Icon}}</span>{{end}}
+            {{if $b.LinkURL}}
+              <a href="{{$b.LinkURL}}" class="announcement-bar__link">
+                <span>{{$b.Title}}</span>{{if $b.Body}} <span>{{$b.Body}}</span>{{end}}{{if $b.LinkText}} <strong>{{$b.LinkText}}</strong>{{end}}
+              </a>
+            {{else}}
+              <span>{{$b.Title}}</span>{{if $b.Body}} <span>{{$b.Body}}</span>{{end}}
+            {{end}}
+            {{if $b.PromoCode}}
+              <span class="announcement-bar__code-wrap">
+                <strong>{{$b.PromoCode}}</strong>
+                <button type="button" class="announcement-bar__code-btn" id="announcement-copy-btn" onclick="copyAnnouncementPromo('{{$b.PromoCode}}')">Copy Code</button>
+              </span>
+            {{end}}
+          </span>
+        {{end}}
+      {{else}}
+        <span class="announcement-bar__item announcement-bar__item--shipping">
+          <span class="announcement-bar__icon" aria-hidden="true">🚚</span>
+          <span>Free shipping on orders over $50</span>
+        </span>
+        <span class="announcement-bar__divider" aria-hidden="true">•</span>
+        <span class="announcement-bar__item announcement-bar__item--promo">
+          <span class="announcement-bar__icon" aria-hidden="true">🎟️</span>
+          <span>Use code <strong>WELCOME10</strong> for 10% off</span>
+          <button type="button" class="announcement-bar__code-btn" id="announcement-copy-btn" onclick="copyAnnouncementPromo('WELCOME10')">Copy Code</button>
+        </span>
+      {{end}}
     </div>
     <button type="button" class="announcement-bar__close" id="announcement-close-btn" aria-label="Dismiss announcement" onclick="dismissAnnouncementBar()">✕</button>
   </div>

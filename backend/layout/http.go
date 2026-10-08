@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	bannerdomain "github.com/bkielbasa/go-ecommerce/backend/banner/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
@@ -82,8 +83,24 @@ func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
 		handler.logger.WithError(err).Warn("cannot get newest products")
 		newest = nil
 	}
+	var heroBanners []bannerdomain.Banner
+	var trustBadges []bannerdomain.Banner
+	if handler.bannerSrv != nil {
+		if hb, err := handler.bannerSrv.ListActiveBySlot(r.Context(), bannerdomain.SlotHomepageHero); err != nil {
+			handler.logger.WithError(err).Warn("cannot list active homepage hero banners")
+		} else {
+			heroBanners = hb
+		}
+		if tb, err := handler.bannerSrv.ListActiveBySlot(r.Context(), bannerdomain.SlotProductGuarantee); err != nil {
+			handler.logger.WithError(err).Warn("cannot list active product guarantee banners")
+		} else {
+			trustBadges = tb
+		}
+	}
 	handler.renderTemplate(w, r, "home", map[string]any{
-		"Newest": newest,
+		"Newest":      newest,
+		"HeroBanners": heroBanners,
+		"TrustBadges": trustBadges,
 	})
 }
 
@@ -506,6 +523,18 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	if _, ok := data["SearchQuery"]; !ok {
 		data["SearchQuery"] = ""
 	}
+
+	var topAnnouncements []bannerdomain.Banner
+	if handler.bannerSrv != nil {
+		banners, err := handler.bannerSrv.ListActiveBySlot(r.Context(), bannerdomain.SlotTopAnnouncement)
+		if err != nil {
+			handler.logger.WithError(err).Warn("cannot list active top announcement banners")
+		} else {
+			topAnnouncements = banners
+		}
+	}
+	data["TopAnnouncementBanners"] = topAnnouncements
+
 	err = session.Save(r, w)
 	if err != nil {
 		handler.logger.WithError(err).Error("cannot save session")

@@ -2,10 +2,22 @@
 {{define "description"}}Newest products from our store.{{end}}
 
 {{define "main"}}
-  <div class="home-hero">
-    <h1 class="page-title">new arrivals</h1>
-    <a class="btn home-hero__shop" href="/products">shop all</a>
-  </div>
+  {{if .HeroBanners}}
+    {{range .HeroBanners}}
+      <div class="home-hero{{if .ImageURL}} home-hero--custom{{end}}" {{if .ImageURL}}style="background-image: url('{{.ImageURL}}');"{{end}}>
+        <h1 class="page-title">{{.Title}}</h1>
+        {{if .Body}}<p class="home-hero__subtitle">{{.Body}}</p>{{end}}
+        <a class="btn home-hero__shop" href="{{if .LinkURL}}{{.LinkURL}}{{else}}/products{{end}}">
+          {{if .LinkText}}{{.LinkText}}{{else if .LinkURL}}shop now{{else}}shop all{{end}}
+        </a>
+      </div>
+    {{end}}
+  {{else}}
+    <div class="home-hero">
+      <h1 class="page-title">new arrivals</h1>
+      <a class="btn home-hero__shop" href="/products">shop all</a>
+    </div>
+  {{end}}
 
   {{template "trust_badges" .}}
 
