@@ -1,0 +1,70 @@
+{{define "main"}}
+  <p class="crumbs"><a href="/admin/banners">banners</a> / {{if .IsNew}}new{{else}}edit{{end}}</p>
+  <h2 class="account-card__title">{{if .IsNew}}new banner{{else}}edit banner <code>{{.Banner.ID}}</code>{{end}}</h2>
+
+  <form class="form" method="post" action="{{if .IsNew}}/admin/banners{{else}}/admin/banners/{{.Banner.ID}}{{end}}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <div class="field">
+      <label for="b-slot">slot</label>
+      <select id="b-slot" name="slot" required>
+        <option value="top_announcement" {{if eq (printf "%s" .Banner.Slot) "top_announcement"}}selected{{end}}>Top Announcement Bar</option>
+        <option value="homepage_hero" {{if eq (printf "%s" .Banner.Slot) "homepage_hero"}}selected{{end}}>Homepage Hero Banner</option>
+        <option value="product_guarantee" {{if eq (printf "%s" .Banner.Slot) "product_guarantee"}}selected{{end}}>Product Guarantee / Trust Badge</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="b-title">title</label>
+      <input id="b-title" name="title" required value="{{.Banner.Title}}">
+    </div>
+
+    <div class="field">
+      <label for="b-body">body</label>
+      <textarea id="b-body" name="body">{{.Banner.Body}}</textarea>
+    </div>
+
+    <div class="field">
+      <label for="b-link-url">link url</label>
+      <input id="b-link-url" name="link_url" value="{{.Banner.LinkURL}}">
+    </div>
+
+    <div class="field">
+      <label for="b-link-text">link text</label>
+      <input id="b-link-text" name="link_text" value="{{.Banner.LinkText}}">
+    </div>
+
+    <div class="field">
+      <label for="b-promo-code">promo code</label>
+      <input id="b-promo-code" name="promo_code" value="{{.Banner.PromoCode}}">
+    </div>
+
+    <div class="field">
+      <label for="b-icon">icon</label>
+      <input id="b-icon" name="icon" value="{{.Banner.Icon}}">
+    </div>
+
+    <div class="field">
+      <label for="b-display-order">display order</label>
+      <input id="b-display-order" name="display_order" type="number" value="{{.Banner.DisplayOrder}}">
+    </div>
+
+    <div class="field">
+      <label for="b-image-file">image file</label>
+      <input id="b-image-file" type="file" name="image_file" accept="image/*">
+    </div>
+
+    <div class="field">
+      <label for="b-image-url">image url</label>
+      <input id="b-image-url" type="text" name="image_url" value="{{.Banner.ImageURL}}">
+      <p class="form__aside muted">Upload an image file, or provide an image URL. If both are provided, the upload wins.</p>
+    </div>
+
+    <div class="field field--check">
+      <label><input type="checkbox" name="is_active" {{if .Banner.IsActive}}checked{{end}}> active</label>
+    </div>
+
+    <button type="submit" class="btn">{{if .IsNew}}create banner{{else}}save changes{{end}}</button>
+    <p class="form__aside"><a href="/admin/banners">&larr; back to banners</a></p>
+  </form>
+{{end}}

@@ -25,7 +25,7 @@ const maxMultipartSize int64 = 6 << 20
 func (handler httpHandler) resolveImage(r *http.Request, fileField, urlField string) (string, error) {
 	f, fh, err := r.FormFile(fileField)
 	if err != nil {
-		if errors.Is(err, http.ErrMissingFile) {
+		if errors.Is(err, http.ErrMissingFile) || errors.Is(err, http.ErrNotMultipart) {
 			return strings.TrimSpace(r.FormValue(urlField)), nil
 		}
 		return "", err

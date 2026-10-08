@@ -373,6 +373,17 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/promo-codes/{code}/delete", observability.HTTPWrap(m.handler.AdminDeletePromoCode, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/promo-codes/{code}", observability.HTTPWrap(m.handler.AdminUpdatePromoCode, m.logger)).Methods("POST")
 
+	// Banners admin: list + create on /admin/banners; the specific
+	// sub-paths (/new, /{id}/edit, /{id}/toggle, /{id}/delete) are
+	// registered before the /{id} catch-all so the latter doesn't shadow them.
+	r.HandleFunc("/admin/banners", observability.HTTPWrap(m.handler.AdminBanners, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/banners", observability.HTTPWrap(m.handler.AdminCreateBanner, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/banners/new", observability.HTTPWrap(m.handler.AdminNewBanner, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/banners/{id}/edit", observability.HTTPWrap(m.handler.AdminEditBanner, m.logger)).Methods("GET")
+	r.HandleFunc("/admin/banners/{id}/toggle", observability.HTTPWrap(m.handler.AdminToggleBanner, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/banners/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteBanner, m.logger)).Methods("POST")
+	r.HandleFunc("/admin/banners/{id}", observability.HTTPWrap(m.handler.AdminUpdateBanner, m.logger)).Methods("POST")
+
 	// Stores admin: list + inline create on /admin/stores; the
 	// /{id}/edit and /{id}/delete sub-paths are registered before the
 	// /{id} catch-all so the latter doesn't shadow them.
