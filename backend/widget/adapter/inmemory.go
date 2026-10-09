@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"sync"
 
@@ -29,6 +30,7 @@ func (m *InMemory) Get(ctx context.Context, id string) (domain.Widget, error) {
 	if !ok {
 		return domain.Widget{}, domain.ErrWidgetNotFound
 	}
+	w.Config = copyConfig(w.Config)
 	w.Slides = m.copySlides(m.slides[id])
 	return w, nil
 }
@@ -39,6 +41,7 @@ func (m *InMemory) ListAll(ctx context.Context) ([]domain.Widget, error) {
 
 	var result []domain.Widget
 	for _, w := range m.widgets {
+		w.Config = copyConfig(w.Config)
 		w.Slides = m.copySlides(m.slides[w.ID])
 		result = append(result, w)
 	}
@@ -66,6 +69,7 @@ func (m *InMemory) ListActiveByPages(ctx context.Context, pages ...domain.Page) 
 	var result []domain.Widget
 	for _, w := range m.widgets {
 		if w.IsActive && pageMap[w.Page] {
+			w.Config = copyConfig(w.Config)
 			w.Slides = m.copySlides(m.slides[w.ID])
 			result = append(result, w)
 		}
@@ -83,6 +87,10 @@ func (m *InMemory) Store(ctx context.Context, w domain.Widget) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	w.Config = copyConfig(w.Config)
+	if len(w.Slides) > 0 {
+		m.slides[w.ID] = m.copySlides(w.Slides)
+	}
 	m.widgets[w.ID] = w
 	return nil
 }
@@ -93,6 +101,10 @@ func (m *InMemory) Update(ctx context.Context, w domain.Widget) error {
 
 	if _, ok := m.widgets[w.ID]; !ok {
 		return domain.ErrWidgetNotFound
+	}
+	w.Config = copyConfig(w.Config)
+	if len(w.Slides) > 0 {
+		m.slides[w.ID] = m.copySlides(w.Slides)
 	}
 	m.widgets[w.ID] = w
 	return nil
@@ -154,5 +166,17 @@ func (m *InMemory) copySlides(slides []domain.Slide) []domain.Slide {
 	}
 	cp := make([]domain.Slide, len(slides))
 	copy(cp, slides)
+	sort.Slice(cp, func(i, j int) bool {
+		return cp[i].DisplayOrder < cp[j].DisplayOrder
+	})
+	return cp
+}
+
+func copyConfig(cfg json.RawMessage) json.RawMessage {
+	if cfg == nil {
+		return nil
+	}
+	cp := make(json.RawMessage, len(cfg))
+	copy(cp, cfg)
 	return cp
 }
