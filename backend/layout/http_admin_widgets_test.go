@@ -692,3 +692,73 @@ func TestAdminWidgets_AddAndDeleteSlides(t *testing.T) {
 	is.Equal(len(wUpdated3.Slides), 1)
 	is.Equal(wUpdated3.Slides[0].Title, "File Upload Slide")
 }
+
+func TestAdminWidgets_ProductLimitCollision(t *testing.T) {
+	is := is.New(t)
+	setupTestEnvironment(t)
+
+	wSrv := newMockWidgetService()
+	router, _ := newTestWidgetApp(t, wSrv)
+
+	// Submit form where both new_arrivals_product_limit and category_products_product_limit (and fallback product_limit) are present
+	formCP := url.Values{
+		"page":                            {"category"},
+		"zone":                            {"body"},
+		"type":                            {"category_products"},
+		"title":                           {"Cat Products Widget"},
+		"display_order":                   {"1"},
+		"is_active":                       {"1"},
+		"category_id":                     {"cat-shoes"},
+		"new_arrivals_product_limit":     {"8"},  // from first block
+		"category_products_product_limit": {"15"}, // from second block
+		"product_limit":                   {"5"},  // legacy field
+	}
+	reqCP := httptest.NewRequest(http.MethodPost, "/admin/widgets", strings.NewReader(formCP.Encode()))
+	reqCP.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setAdminSession(t, reqCP)
+	recCP := httptest.NewRecorder()
+	router.ServeHTTP(recCP, reqCP)
+
+	is.Equal(recCP.Code, http.StatusSeeOther)
+	all, _ := wSrv.ListAll(context.Background())
+	is.Equal(len(all), 1)
+
+	var cpCfg widgetdomain.CategoryProductsConfig
+	err := json.Unmarshal(all[0].Config, &cpCfg)
+	is.NoErr(err)
+	is.Equal(cpCfg.ProductLimit, 15) // category_products_product_limit must take precedence over new_arrivals_product_limit and product_limit
+
+	// Verify new_arrivals widget properly parses new_arrivals_product_limit when category_products_product_limit is also present
+	formNA := url.Values{
+		"page":                            {"home"},
+		"zone":                            {"top"},
+		"type":                            {"new_arrivals"},
+		"title":                           {"New Arrivals Widget"},
+		"display_order":                   {"1"},
+		"is_active":                       {"1"},
+		"new_arrivals_product_limit":     {"20"},
+		"category_products_product_limit": {"10"},
+		"product_limit":                   {"5"},
+	}
+	reqNA := httptest.NewRequest(http.MethodPost, "/admin/widgets", strings.NewReader(formNA.Encode()))
+	reqNA.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	setAdminSession(t, reqNA)
+	recNA := httptest.NewRecorder()
+	router.ServeHTTP(recNA, reqNA)
+
+	is.Equal(recNA.Code, http.StatusSeeOther)
+	all2, _ := wSrv.ListAll(context.Background())
+	is.Equal(len(all2), 2)
+
+	var naWidget widgetdomain.Widget
+	for _, w := range all2 {
+		if w.Type == widgetdomain.TypeNewArrivals {
+			naWidget = w
+		}
+	}
+	var naCfg widgetdomain.NewArrivalsConfig
+	err = json.Unmarshal(naWidget.Config, &naCfg)
+	is.NoErr(err)
+	is.Equal(naCfg.ProductLimit, 20)
+}
+

@@ -106,7 +106,11 @@ func (handler httpHandler) AdminCreateWidget(w http.ResponseWriter, r *http.Requ
 		cfg := widgetdomain.BannerCarouselConfig{}
 		wDomain.Config, _ = json.Marshal(cfg)
 	case widgetdomain.TypeNewArrivals:
-		limit, _ := strconv.Atoi(r.FormValue("product_limit"))
+		limitVal := r.FormValue("new_arrivals_product_limit")
+		if limitVal == "" {
+			limitVal = r.FormValue("product_limit")
+		}
+		limit, _ := strconv.Atoi(limitVal)
 		if limit <= 0 {
 			limit = 8
 		}
@@ -114,7 +118,11 @@ func (handler httpHandler) AdminCreateWidget(w http.ResponseWriter, r *http.Requ
 		wDomain.Config, _ = json.Marshal(cfg)
 	case widgetdomain.TypeCategoryProducts:
 		catID := strings.TrimSpace(r.FormValue("category_id"))
-		limit, _ := strconv.Atoi(r.FormValue("product_limit"))
+		limitVal := r.FormValue("category_products_product_limit")
+		if limitVal == "" {
+			limitVal = r.FormValue("product_limit")
+		}
+		limit, _ := strconv.Atoi(limitVal)
 		if limit <= 0 {
 			limit = 8
 		}
@@ -219,7 +227,11 @@ func (handler httpHandler) AdminUpdateWidget(w http.ResponseWriter, r *http.Requ
 
 	switch wDomain.Type {
 	case widgetdomain.TypeNewArrivals:
-		limit, _ := strconv.Atoi(r.FormValue("product_limit"))
+		limitVal := r.FormValue("new_arrivals_product_limit")
+		if limitVal == "" {
+			limitVal = r.FormValue("product_limit")
+		}
+		limit, _ := strconv.Atoi(limitVal)
 		if limit <= 0 {
 			limit = 8
 		}
@@ -227,7 +239,11 @@ func (handler httpHandler) AdminUpdateWidget(w http.ResponseWriter, r *http.Requ
 		wDomain.Config, _ = json.Marshal(cfg)
 	case widgetdomain.TypeCategoryProducts:
 		catID := strings.TrimSpace(r.FormValue("category_id"))
-		limit, _ := strconv.Atoi(r.FormValue("product_limit"))
+		limitVal := r.FormValue("category_products_product_limit")
+		if limitVal == "" {
+			limitVal = r.FormValue("product_limit")
+		}
+		limit, _ := strconv.Atoi(limitVal)
 		if limit <= 0 {
 			limit = 8
 		}

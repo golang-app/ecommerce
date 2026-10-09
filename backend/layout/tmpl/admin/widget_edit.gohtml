@@ -56,15 +56,15 @@
     </div>
 
     {{/* Config fields for new_arrivals */}}
-    <div id="cfg-new_arrivals" style="display: {{if or .IsNew (eq (printf "%s" .Widget.Type) "new_arrivals")}}block{{else}}none{{end}};">
+    <div id="cfg-new_arrivals" style="display: {{if eq (printf "%s" .Widget.Type) "new_arrivals"}}block{{else}}none{{end}};">
       <div class="field">
         <label for="limit-na">product limit</label>
-        <input id="limit-na" name="product_limit" type="number" value="{{if .ProductLimit}}{{.ProductLimit}}{{else}}8{{end}}" min="1">
+        <input id="limit-na" name="new_arrivals_product_limit" type="number" value="{{if .ProductLimit}}{{.ProductLimit}}{{else}}8{{end}}" min="1">
       </div>
     </div>
 
     {{/* Config fields for category_products */}}
-    <div id="cfg-category_products" style="display: {{if and (not .IsNew) (eq (printf "%s" .Widget.Type) "category_products")}}block{{else}}none{{end}};">
+    <div id="cfg-category_products" style="display: {{if eq (printf "%s" .Widget.Type) "category_products"}}block{{else}}none{{end}};">
       <div class="field">
         <label for="cat-id">category</label>
         <select id="cat-id" name="category_id">
@@ -76,7 +76,7 @@
       </div>
       <div class="field">
         <label for="limit-cp">product limit</label>
-        <input id="limit-cp" name="product_limit" type="number" value="{{if .ProductLimit}}{{.ProductLimit}}{{else}}8{{end}}" min="1">
+        <input id="limit-cp" name="category_products_product_limit" type="number" value="{{if .ProductLimit}}{{.ProductLimit}}{{else}}8{{end}}" min="1">
       </div>
     </div>
 
@@ -90,8 +90,14 @@
         var t = document.getElementById('widget-type').value;
         var na = document.getElementById('cfg-new_arrivals');
         var cp = document.getElementById('cfg-category_products');
-        if (na) na.style.display = (t === 'new_arrivals') ? 'block' : 'none';
-        if (cp) cp.style.display = (t === 'category_products') ? 'block' : 'none';
+        if (na) {
+          na.style.display = (t === 'new_arrivals') ? 'block' : 'none';
+          na.querySelectorAll('input, select').forEach(function(el) { el.disabled = (t !== 'new_arrivals'); });
+        }
+        if (cp) {
+          cp.style.display = (t === 'category_products') ? 'block' : 'none';
+          cp.querySelectorAll('input, select').forEach(function(el) { el.disabled = (t !== 'category_products'); });
+        }
       }
       document.addEventListener('DOMContentLoaded', onTypeChange);
     </script>
