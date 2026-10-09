@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Source+Serif+Pro:wght@400;600&display=swap">
 
     <link rel="stylesheet" href="/static/main.css">
+    <script src="/static/carousel.js" defer></script>
     <script src="https://unpkg.com/htmx.org@1.9.5"></script>
     <script>
       // Stamp X-CSRF-Token on every HTMX-issued request. HTMX-driven
@@ -52,7 +53,7 @@
     </div>
     {{end}}
 
-    {{template "announcement_bar" .}}
+    {{template "widget-zone" .Widgets.Top}}
 
     <header class="site-header">
       <div class="shell site-header__inner">
@@ -109,6 +110,8 @@
         {{template "main" .}}
       </div>
     </main>
+
+    {{template "widget-zone" .Widgets.Bottom}}
 
     <footer class="site-footer">
       <div class="shell">

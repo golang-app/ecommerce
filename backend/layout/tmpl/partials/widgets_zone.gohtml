@@ -1,0 +1,88 @@
+{{define "widget-zone"}}
+  {{range .}}
+    {{if eq (printf "%s" .Widget.Type) "banner_carousel"}}
+      {{if eq (len .Widget.Slides) 1}}
+        {{/* 1 slide: Hero banner component */}}
+        {{$s := index .Widget.Slides 0}}
+        <section class="widget-hero" aria-label="{{.Widget.Title}}">
+          <div class="shell widget-hero__inner" {{if $s.ImageURL}}style="background-image: url('{{$s.ImageURL}}');"{{end}}>
+            {{if $s.Badge}}<span class="widget-hero__badge">{{$s.Badge}}</span>{{end}}
+            <h2 class="widget-hero__title">{{$s.Title}}</h2>
+            {{if $s.Subtitle}}<p class="widget-hero__subtitle">{{$s.Subtitle}}</p>{{end}}
+            {{if $s.PromoCode}}
+              <div class="widget-hero__promo">
+                <span>Use code <strong>{{$s.PromoCode}}</strong></span>
+                <button type="button" class="promo-code-btn" onclick="copySlidePromo(this, '{{$s.PromoCode}}')">copy</button>
+              </div>
+            {{end}}
+            {{if $s.LinkURL}}
+              <a class="btn widget-hero__btn" href="{{$s.LinkURL}}">
+                {{if $s.LinkText}}{{$s.LinkText}}{{else}}shop now{{end}}
+              </a>
+            {{end}}
+          </div>
+        </section>
+      {{else if gt (len .Widget.Slides) 1}}
+        {{/* 2+ slides: Accessible Interactive Carousel */}}
+        <section class="carousel-widget" id="widget-{{.Widget.ID}}" aria-label="{{.Widget.Title}}" data-autoplay="5000">
+          <div class="carousel-widget__viewport">
+            <div class="carousel-widget__track">
+              {{range $i, $s := .Widget.Slides}}
+                <div class="carousel-widget__slide{{if eq $i 0}} is-active{{end}}" data-index="{{$i}}" {{if $s.ImageURL}}style="background-image: url('{{$s.ImageURL}}');"{{end}}>
+                  <div class="carousel-widget__content">
+                    {{if $s.Badge}}<span class="widget-hero__badge">{{$s.Badge}}</span>{{end}}
+                    <h2 class="carousel-widget__title">{{$s.Title}}</h2>
+                    {{if $s.Subtitle}}<p class="carousel-widget__subtitle">{{$s.Subtitle}}</p>{{end}}
+                    {{if $s.PromoCode}}
+                      <div class="carousel-widget__promo">
+                        <span>Use code <strong>{{$s.PromoCode}}</strong></span>
+                        <button type="button" class="promo-code-btn" onclick="copySlidePromo(this, '{{$s.PromoCode}}')">copy</button>
+                      </div>
+                    {{end}}
+                    {{if $s.LinkURL}}
+                      <a class="btn carousel-widget__btn" href="{{$s.LinkURL}}">
+                        {{if $s.LinkText}}{{$s.LinkText}}{{else}}shop now{{end}}
+                      </a>
+                    {{end}}
+                  </div>
+                </div>
+              {{end}}
+            </div>
+          </div>
+          <button type="button" class="carousel-widget__arrow carousel-widget__arrow--prev" aria-label="Previous slide">&larr;</button>
+          <button type="button" class="carousel-widget__arrow carousel-widget__arrow--next" aria-label="Next slide">&rarr;</button>
+          <div class="carousel-widget__dots" role="tablist">
+            {{range $i, $s := .Widget.Slides}}
+              <button type="button" role="tab" class="carousel-widget__dot{{if eq $i 0}} is-active{{end}}" data-index="{{$i}}" aria-label="Go to slide {{add $i 1}}"></button>
+            {{end}}
+          </div>
+        </section>
+      {{end}}
+    {{else if or (eq (printf "%s" .Widget.Type) "new_arrivals") (eq (printf "%s" .Widget.Type) "category_products")}}
+      {{if .Products}}
+        <section class="widget-products" aria-label="{{.Widget.Title}}">
+          <div class="shell">
+            <div class="widget-products__header">
+              <h2 class="widget-products__title">{{.Widget.Title}}</h2>
+            </div>
+            <div class="product-grid">
+              {{range .Products}}
+                <a class="product-card" href="/product/{{.ID}}">
+                  {{if .Thumbnail}}
+                    <img class="product-card__image"
+                         src="{{.Thumbnail}}"
+                         alt="{{.Name}}"
+                         loading="lazy"
+                         width="800" height="800">
+                  {{end}}
+                  <h2 class="product-card__name">{{.Name}}</h2>
+                  <p class="product-card__price">{{if .HasPriceRange}}from {{end}}{{ money .PriceFrom.Amount }}</p>
+                </a>
+              {{end}}
+            </div>
+          </div>
+        </section>
+      {{end}}
+    {{end}}
+  {{end}}
+{{end}}
