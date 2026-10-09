@@ -364,6 +364,18 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/reviews/{id}/reject", observability.HTTPWrap(m.handler.AdminRejectReview, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/reviews/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteReview, m.logger)).Methods("POST")
 
+	// Widgets admin: list + create on /admin/widgets; specific sub-paths
+	// registered before catch-all.
+	r.HandleFunc("/admin/widgets", observability.HTTPWrap(m.handler.AdminWidgets, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/widgets", observability.HTTPWrap(m.handler.AdminCreateWidget, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/new", observability.HTTPWrap(m.handler.AdminNewWidget, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/widgets/{id}/edit", observability.HTTPWrap(m.handler.AdminEditWidget, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/widgets/{id}/toggle", observability.HTTPWrap(m.handler.AdminToggleWidget, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteWidget, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/{id}/slides/{slideID}/delete", observability.HTTPWrap(m.handler.AdminDeleteWidgetSlide, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/{id}/slides", observability.HTTPWrap(m.handler.AdminAddWidgetSlide, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/{id}", observability.HTTPWrap(m.handler.AdminUpdateWidget, m.logger)).Methods(http.MethodPost)
+
 	// Promo codes admin: list + inline create on /admin/promo-codes; the
 	// /{code}/edit and /{code}/delete sub-paths are registered before the
 	// /{code} catch-all so the latter doesn't shadow them.

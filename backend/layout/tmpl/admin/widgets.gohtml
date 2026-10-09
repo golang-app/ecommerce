@@ -1,0 +1,62 @@
+{{define "main"}}
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+    <div>
+      <h2 class="account-card__title">widgets</h2>
+      <p class="muted">Manage page widgets and layout positions across the store.</p>
+    </div>
+    <a href="/admin/widgets/new" class="btn">create new widget</a>
+  </div>
+
+  <div class="tabs" style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+    <a href="/admin/widgets" class="btn {{if or (eq .FilterPage "") (eq .FilterPage "all")}}btn--active{{else}}btn--secondary{{end}}">All</a>
+    <a href="/admin/widgets?page=global" class="btn {{if eq .FilterPage "global"}}btn--active{{else}}btn--secondary{{end}}">Global</a>
+    <a href="/admin/widgets?page=home" class="btn {{if eq .FilterPage "home"}}btn--active{{else}}btn--secondary{{end}}">Home</a>
+    <a href="/admin/widgets?page=product" class="btn {{if eq .FilterPage "product"}}btn--active{{else}}btn--secondary{{end}}">Product</a>
+    <a href="/admin/widgets?page=category" class="btn {{if eq .FilterPage "category"}}btn--active{{else}}btn--secondary{{end}}">Category</a>
+  </div>
+
+  {{if .Widgets}}
+    <table class="admin-table">
+      <thead>
+        <tr>
+          <th>page</th>
+          <th>zone</th>
+          <th>type</th>
+          <th>title</th>
+          <th>order</th>
+          <th>status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $w := .Widgets}}
+          <tr>
+            <td><code>{{$w.Page}}</code></td>
+            <td><code>{{$w.Zone}}</code></td>
+            <td><code>{{$w.Type}}</code></td>
+            <td>{{$w.Title}}</td>
+            <td>{{$w.DisplayOrder}}</td>
+            <td>
+              <form method="post" action="/admin/widgets/{{$w.ID}}/toggle" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="linkbtn {{if $w.IsActive}}linkbtn--success{{else}}linkbtn--muted{{end}}">
+                  {{if $w.IsActive}}active{{else}}inactive{{end}}
+                </button>
+              </form>
+            </td>
+            <td class="admin-table__actions">
+              <a href="/admin/widgets/{{$w.ID}}/edit">edit</a>
+              <form method="post" action="/admin/widgets/{{$w.ID}}/delete"
+                    onsubmit="return confirm('Delete this widget?');" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+              </form>
+            </td>
+          </tr>
+        {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <p class="muted">no widgets found.</p>
+  {{end}}
+{{end}}

@@ -1,0 +1,170 @@
+{{define "main"}}
+  <p class="crumbs"><a href="/admin/widgets">widgets</a> / {{if .IsNew}}new{{else}}edit{{end}}</p>
+  <h2 class="account-card__title">{{if .IsNew}}create widget{{else}}edit widget <code>{{.Widget.ID}}</code>{{end}}</h2>
+
+  <form class="form" method="post" action="{{if .IsNew}}/admin/widgets{{else}}/admin/widgets/{{.Widget.ID}}{{end}}">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <div class="field">
+      <label for="w-title">title</label>
+      <input id="w-title" name="title" required value="{{.Widget.Title}}" placeholder="e.g. Featured Banner">
+    </div>
+
+    <div class="field">
+      <label for="w-page">page</label>
+      <select id="w-page" name="page" required>
+        <option value="global" {{if eq (printf "%s" .Widget.Page) "global"}}selected{{end}}>Global</option>
+        <option value="home" {{if eq (printf "%s" .Widget.Page) "home"}}selected{{end}}>Home</option>
+        <option value="product" {{if eq (printf "%s" .Widget.Page) "product"}}selected{{end}}>Product</option>
+        <option value="category" {{if eq (printf "%s" .Widget.Page) "category"}}selected{{end}}>Category</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="w-zone">zone</label>
+      <select id="w-zone" name="zone" required>
+        <option value="top" {{if eq (printf "%s" .Widget.Zone) "top"}}selected{{end}}>Top</option>
+        <option value="body" {{if eq (printf "%s" .Widget.Zone) "body"}}selected{{end}}>Body</option>
+        <option value="bottom" {{if eq (printf "%s" .Widget.Zone) "bottom"}}selected{{end}}>Bottom</option>
+      </select>
+    </div>
+
+    {{if .IsNew}}
+      <div class="field">
+        <label for="widget-type">type</label>
+        <select id="widget-type" name="type" required onchange="onTypeChange()">
+          <option value="banner_carousel" {{if eq (printf "%s" .Widget.Type) "banner_carousel"}}selected{{end}}>Banner Carousel (Hero slider with promo slides)</option>
+          <option value="new_arrivals" {{if eq (printf "%s" .Widget.Type) "new_arrivals"}}selected{{end}}>New Arrivals (Grid of newly added products)</option>
+          <option value="category_products" {{if eq (printf "%s" .Widget.Type) "category_products"}}selected{{end}}>Category Products (Product grid scoped to a specific category)</option>
+        </select>
+      </div>
+    {{else}}
+      <input type="hidden" name="type" value="{{.Widget.Type}}">
+      <div class="field">
+        <label>type</label>
+        <input type="text" disabled value="{{.Widget.Type}}">
+      </div>
+    {{end}}
+
+    <div class="field">
+      <label for="w-display-order">display order</label>
+      <input id="w-display-order" name="display_order" type="number" value="{{.Widget.DisplayOrder}}" min="0" required>
+    </div>
+
+    <div class="field field--check">
+      <label><input type="checkbox" name="is_active" value="1" {{if .Widget.IsActive}}checked{{end}}> active</label>
+    </div>
+
+    {{/* Config fields for new_arrivals */}}
+    <div id="cfg-new_arrivals" style="display: {{if or .IsNew (eq (printf "%s" .Widget.Type) "new_arrivals")}}block{{else}}none{{end}};">
+      <div class="field">
+        <label for="limit-na">product limit</label>
+        <input id="limit-na" name="product_limit" type="number" value="{{if .ProductLimit}}{{.ProductLimit}}{{else}}8{{end}}" min="1">
+      </div>
+    </div>
+
+    {{/* Config fields for category_products */}}
+    <div id="cfg-category_products" style="display: {{if and (not .IsNew) (eq (printf "%s" .Widget.Type) "category_products")}}block{{else}}none{{end}};">
+      <div class="field">
+        <label for="cat-id">category</label>
+        <select id="cat-id" name="category_id">
+          <option value="">-- select category --</option>
+          {{range $c := .Categories}}
+            <option value="{{$c.ID}}" {{if eq $.CategoryID $c.ID}}selected{{end}}>{{$c.Name}}</option>
+          {{end}}
+        </select>
+      </div>
+      <div class="field">
+        <label for="limit-cp">product limit</label>
+        <input id="limit-cp" name="product_limit" type="number" value="{{if .ProductLimit}}{{.ProductLimit}}{{else}}8{{end}}" min="1">
+      </div>
+    </div>
+
+    <button type="submit" class="btn">{{if .IsNew}}create widget{{else}}save changes{{end}}</button>
+    <p class="form__aside"><a href="/admin/widgets">&larr; back to widgets</a></p>
+  </form>
+
+  {{if .IsNew}}
+    <script>
+      function onTypeChange() {
+        var t = document.getElementById('widget-type').value;
+        var na = document.getElementById('cfg-new_arrivals');
+        var cp = document.getElementById('cfg-category_products');
+        if (na) na.style.display = (t === 'new_arrivals') ? 'block' : 'none';
+        if (cp) cp.style.display = (t === 'category_products') ? 'block' : 'none';
+      }
+      document.addEventListener('DOMContentLoaded', onTypeChange);
+    </script>
+  {{end}}
+
+  {{if and (not .IsNew) (eq (printf "%s" .Widget.Type) "banner_carousel")}}
+    <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--border-color, #e5e7eb);">
+    <h3 class="account-card__title">slides</h3>
+
+    {{if .Widget.Slides}}
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>image</th>
+            <th>title</th>
+            <th>subtitle</th>
+            <th>link</th>
+            <th>promo code</th>
+            <th>order</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $s := .Widget.Slides}}
+            <tr>
+              <td>
+                {{if $s.ImageURL}}
+                  <img src="{{$s.ImageURL}}" style="max-height:40px; max-width:80px; object-fit:cover; border-radius:4px;">
+                {{else}}
+                  —
+                {{end}}
+              </td>
+              <td>{{$s.Title}}</td>
+              <td>{{$s.Subtitle}}</td>
+              <td>
+                {{if $s.LinkURL}}
+                  <a href="{{$s.LinkURL}}" target="_blank">{{if $s.LinkText}}{{$s.LinkText}}{{else}}{{$s.LinkURL}}{{end}}</a>
+                {{else}}
+                  —
+                {{end}}
+              </td>
+              <td>{{if $s.PromoCode}}<code>{{$s.PromoCode}}</code>{{else}}—{{end}}</td>
+              <td>{{$s.DisplayOrder}}</td>
+              <td class="admin-table__actions">
+                <form method="post" action="/admin/widgets/{{$.Widget.ID}}/slides/{{$s.ID}}/delete"
+                      onsubmit="return confirm('Delete this slide?');" style="display:inline;">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                  <button type="submit" class="linkbtn linkbtn--danger">delete</button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+        </tbody>
+      </table>
+    {{else}}
+      <p class="muted">no slides added yet.</p>
+    {{end}}
+
+    <section class="admin-form" style="margin-top:1.5rem;">
+      <h4 class="account-card__title">add slide</h4>
+      <form class="form" method="post" action="/admin/widgets/{{.Widget.ID}}/slides" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="field"><label for="s-title">title</label><input id="s-title" name="title"></div>
+        <div class="field"><label for="s-subtitle">subtitle</label><input id="s-subtitle" name="subtitle"></div>
+        <div class="field"><label for="s-image-file">image file</label><input id="s-image-file" type="file" name="image_file" accept="image/*"></div>
+        <div class="field"><label for="s-image-url">or image URL</label><input id="s-image-url" name="image_url" placeholder="https://..."></div>
+        <div class="field"><label for="s-link-url">link URL</label><input id="s-link-url" name="link_url" placeholder="/category/shoes"></div>
+        <div class="field"><label for="s-link-text">link text</label><input id="s-link-text" name="link_text" placeholder="Shop Now"></div>
+        <div class="field"><label for="s-promo-code">promo code</label><input id="s-promo-code" name="promo_code"></div>
+        <div class="field"><label for="s-badge">badge</label><input id="s-badge" name="badge" placeholder="NEW"></div>
+        <div class="field"><label for="s-display-order">display order</label><input id="s-display-order" name="display_order" type="number" value="1" min="0"></div>
+        <button type="submit" class="btn">add slide</button>
+      </form>
+    </section>
+  {{end}}
+{{end}}
