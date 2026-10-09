@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	bannerdomain "github.com/bkielbasa/go-ecommerce/backend/banner/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
@@ -58,7 +57,7 @@ type httpHandler struct {
 	promoSrv       promoService
 	searchSrv      searchService
 	storeSrv       storeService
-	bannerSrv      bannerService
+	widgetSrv      widgetService
 	imageStore     imagestore.Store
 	paymentsSrv    paymentsService
 	mailer         mailer.Mailer
@@ -83,24 +82,8 @@ func (handler httpHandler) HomePage(w http.ResponseWriter, r *http.Request) {
 		handler.logger.WithError(err).Warn("cannot get newest products")
 		newest = nil
 	}
-	var heroBanners []bannerdomain.Banner
-	var trustBadges []bannerdomain.Banner
-	if handler.bannerSrv != nil {
-		if hb, err := handler.bannerSrv.ListActiveBySlot(r.Context(), bannerdomain.SlotHomepageHero); err != nil {
-			handler.logger.WithError(err).Warn("cannot list active homepage hero banners")
-		} else {
-			heroBanners = hb
-		}
-		if tb, err := handler.bannerSrv.ListActiveBySlot(r.Context(), bannerdomain.SlotProductGuarantee); err != nil {
-			handler.logger.WithError(err).Warn("cannot list active product guarantee banners")
-		} else {
-			trustBadges = tb
-		}
-	}
 	handler.renderTemplate(w, r, "home", map[string]any{
-		"Newest":      newest,
-		"HeroBanners": heroBanners,
-		"TrustBadges": trustBadges,
+		"Newest": newest,
 	})
 }
 
@@ -390,17 +373,6 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/promo-codes/{code}/delete", observability.HTTPWrap(m.handler.AdminDeletePromoCode, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/promo-codes/{code}", observability.HTTPWrap(m.handler.AdminUpdatePromoCode, m.logger)).Methods("POST")
 
-	// Banners admin: list + create on /admin/banners; the specific
-	// sub-paths (/new, /{id}/edit, /{id}/toggle, /{id}/delete) are
-	// registered before the /{id} catch-all so the latter doesn't shadow them.
-	r.HandleFunc("/admin/banners", observability.HTTPWrap(m.handler.AdminBanners, m.logger)).Methods("GET")
-	r.HandleFunc("/admin/banners", observability.HTTPWrap(m.handler.AdminCreateBanner, m.logger)).Methods("POST")
-	r.HandleFunc("/admin/banners/new", observability.HTTPWrap(m.handler.AdminNewBanner, m.logger)).Methods("GET")
-	r.HandleFunc("/admin/banners/{id}/edit", observability.HTTPWrap(m.handler.AdminEditBanner, m.logger)).Methods("GET")
-	r.HandleFunc("/admin/banners/{id}/toggle", observability.HTTPWrap(m.handler.AdminToggleBanner, m.logger)).Methods("POST")
-	r.HandleFunc("/admin/banners/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteBanner, m.logger)).Methods("POST")
-	r.HandleFunc("/admin/banners/{id}", observability.HTTPWrap(m.handler.AdminUpdateBanner, m.logger)).Methods("POST")
-
 	// Stores admin: list + inline create on /admin/stores; the
 	// /{id}/edit and /{id}/delete sub-paths are registered before the
 	// /{id} catch-all so the latter doesn't shadow them.
@@ -523,17 +495,6 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	if _, ok := data["SearchQuery"]; !ok {
 		data["SearchQuery"] = ""
 	}
-
-	var topAnnouncements []bannerdomain.Banner
-	if handler.bannerSrv != nil {
-		banners, err := handler.bannerSrv.ListActiveBySlot(r.Context(), bannerdomain.SlotTopAnnouncement)
-		if err != nil {
-			handler.logger.WithError(err).Warn("cannot list active top announcement banners")
-		} else {
-			topAnnouncements = banners
-		}
-	}
-	data["TopAnnouncementBanners"] = topAnnouncements
 
 	err = session.Save(r, w)
 	if err != nil {

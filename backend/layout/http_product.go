@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	bannerdomain "github.com/bkielbasa/go-ecommerce/backend/banner/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/cart/domain"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/https"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
@@ -244,15 +243,6 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		inWishlist = saved
 	}
 
-	var trustBadges []bannerdomain.Banner
-	if handler.bannerSrv != nil {
-		if tb, err := handler.bannerSrv.ListActiveBySlot(r.Context(), bannerdomain.SlotProductGuarantee); err != nil {
-			handler.logger.WithError(err).Warn("cannot list active product guarantee banners")
-		} else {
-			trustBadges = tb
-		}
-	}
-
 	handler.renderTemplate(w, r, "productCatalog/show", map[string]any{
 		"Product":         product,
 		"Variant":         variant,
@@ -261,7 +251,6 @@ func (handler httpHandler) Product(w http.ResponseWriter, r *http.Request) {
 		"CanReview":       canReview,
 		"AlreadyReviewed": alreadyReviewed,
 		"InWishlist":      inWishlist,
-		"TrustBadges":     trustBadges,
 	})
 }
 
