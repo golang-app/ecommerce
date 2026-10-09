@@ -709,7 +709,7 @@ func TestAdminWidgets_ProductLimitCollision(t *testing.T) {
 		"display_order":                   {"1"},
 		"is_active":                       {"1"},
 		"category_id":                     {"cat-shoes"},
-		"new_arrivals_product_limit":     {"8"},  // from first block
+		"new_arrivals_product_limit":      {"8"},  // from first block
 		"category_products_product_limit": {"15"}, // from second block
 		"product_limit":                   {"5"},  // legacy field
 	}
@@ -736,7 +736,7 @@ func TestAdminWidgets_ProductLimitCollision(t *testing.T) {
 		"title":                           {"New Arrivals Widget"},
 		"display_order":                   {"1"},
 		"is_active":                       {"1"},
-		"new_arrivals_product_limit":     {"20"},
+		"new_arrivals_product_limit":      {"20"},
 		"category_products_product_limit": {"10"},
 		"product_limit":                   {"5"},
 	}
@@ -761,4 +761,3 @@ func TestAdminWidgets_ProductLimitCollision(t *testing.T) {
 	is.NoErr(err)
 	is.Equal(naCfg.ProductLimit, 20)
 }
-

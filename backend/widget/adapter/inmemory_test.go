@@ -78,4 +78,3 @@ func TestInMemory_InitialSlidesAndConfigCloning(t *testing.T) {
 		t.Fatalf("expected 3 slides after update, got %d", len(got3.Slides))
 	}
 }
-

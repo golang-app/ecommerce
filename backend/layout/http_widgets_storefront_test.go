@@ -37,9 +37,9 @@ func (dummyReviewsService) HasReviewed(ctx context.Context, productID, customerI
 func (dummyReviewsService) Submit(ctx context.Context, productID, customerID, body string, rating int) error {
 	return nil
 }
-func (dummyReviewsService) Delete(ctx context.Context, id string) error { return nil }
+func (dummyReviewsService) Delete(ctx context.Context, id string) error  { return nil }
 func (dummyReviewsService) Approve(ctx context.Context, id string) error { return nil }
-func (dummyReviewsService) Reject(ctx context.Context, id string) error { return nil }
+func (dummyReviewsService) Reject(ctx context.Context, id string) error  { return nil }
 func (dummyReviewsService) ListPending(ctx context.Context, limit int) ([]reviewsDomain.Review, error) {
 	return nil, nil
 }
