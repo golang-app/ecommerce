@@ -2,10 +2,7 @@
 {{define "description"}}Newest products from our store.{{end}}
 
 {{define "main"}}
-  <div class="home-hero">
-    <h1 class="page-title">new arrivals</h1>
-    <a class="btn home-hero__shop" href="/products">shop all</a>
-  </div>
+  {{template "widget-zone" .Widgets.Body}}
 
   {{if .Newest}}
     <div class="product-grid">

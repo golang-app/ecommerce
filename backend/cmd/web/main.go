@@ -46,6 +46,7 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/search"
 	"github.com/bkielbasa/go-ecommerce/backend/shippinginfo"
 	"github.com/bkielbasa/go-ecommerce/backend/store"
+	"github.com/bkielbasa/go-ecommerce/backend/widget"
 	"github.com/bkielbasa/go-ecommerce/backend/wishlist"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
@@ -233,6 +234,7 @@ func main() {
 	// layout (the per-request middleware + admin CRUD + footer
 	// switcher); no other context depends on it.
 	storeBD, storeSrv := store.New(db)
+	widgetBD, widgetSrv := widget.New(db)
 
 	// Repricing Process Manager: owns the bulk "reprice every
 	// product in a category by N%" saga. It depends on the
@@ -575,7 +577,7 @@ func main() {
 
 	limiter := ratelimit.NewPostgres(db, ratelimit.DefaultRules(), logger)
 
-	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, repricingSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates, cfg.StripeWebhookSecret, paymentsSrv, limiter, cfg.TrustedProxies, cfg.AppDemo))
+	app.AddBoundedContext(layout.New(logger, cartSrv, catalogService, authService, adminAuthService, checkoutSrv, checkoutQry, fulfillmentSrv, repricingSrv, shipSrv, reviewsSrv, wishlistSrv, promoSrv, searchSrv, storeSrv, widgetSrv, imgStore, cfg.UploadsDir, []byte(cfg.SessionSecret), cfg.CookieSecure, cfg.CSRFEnabled, mailerSrv, cfg.BaseURL, fxRates, cfg.StripeWebhookSecret, paymentsSrv, limiter, cfg.TrustedProxies, cfg.AppDemo))
 	// StoreMiddleware resolves the active store per request and binds
 	// it on the request context. It MUST run before the CSRF middleware
 	// so the store is available to every handler/template — including
@@ -594,6 +596,7 @@ func main() {
 	app.AddBoundedContext(promoBD)
 	app.AddBoundedContext(searchBD)
 	app.AddBoundedContext(storeBD)
+	app.AddBoundedContext(widgetBD)
 	app.AddBoundedContext(paymentsBD)
 	app.AddBoundedContext(repricingBD)
 

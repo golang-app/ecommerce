@@ -15,15 +15,16 @@ import (
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
+	paymentsDomain "github.com/bkielbasa/go-ecommerce/backend/payments/domain"
 	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
-	paymentsDomain "github.com/bkielbasa/go-ecommerce/backend/payments/domain"
 	promodomain "github.com/bkielbasa/go-ecommerce/backend/promo/domain"
 	repricingDomain "github.com/bkielbasa/go-ecommerce/backend/repricing/domain"
 	reviewsDomain "github.com/bkielbasa/go-ecommerce/backend/reviews/domain"
 	searchapp "github.com/bkielbasa/go-ecommerce/backend/search/app"
 	shipDomain "github.com/bkielbasa/go-ecommerce/backend/shippinginfo/domain"
 	storeDomain "github.com/bkielbasa/go-ecommerce/backend/store/domain"
+	widgetdomain "github.com/bkielbasa/go-ecommerce/backend/widget/domain"
 	wishlistDomain "github.com/bkielbasa/go-ecommerce/backend/wishlist/domain"
 	"github.com/sirupsen/logrus"
 )
@@ -228,6 +229,20 @@ type storeService interface {
 	Delete(ctx context.Context, id string) error
 }
 
+// widgetService is the narrow seam the layout package needs from the
+// widget bounded context.
+type widgetService interface {
+	ListAll(ctx context.Context) ([]widgetdomain.Widget, error)
+	ListActiveByPages(ctx context.Context, pages ...widgetdomain.Page) ([]widgetdomain.Widget, error)
+	Get(ctx context.Context, id string) (widgetdomain.Widget, error)
+	Create(ctx context.Context, w widgetdomain.Widget) error
+	Update(ctx context.Context, w widgetdomain.Widget) error
+	Delete(ctx context.Context, id string) error
+	ToggleActive(ctx context.Context, id string) error
+	AddSlide(ctx context.Context, s widgetdomain.Slide) error
+	DeleteSlide(ctx context.Context, widgetID, slideID string) error
+}
+
 // checkoutQueries is the read side of the checkout context (CQRS); it returns
 // dedicated read models, not the write aggregate.
 type checkoutQueries interface {
@@ -268,7 +283,7 @@ type paymentsService interface {
 // POST /webhooks/payments endpoint and the payment provider admin UI.
 // Pass an empty secret OR a nil service to skip the webhook registration entirely —
 // tests that don't care about webhooks then don't need to provide either.
-func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService, limiter rateLimiter, trustedProxiesConfig string, demoMode bool) application.BoundedContext {
+func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogService, authSrv authService, adminAuthSrv adminAuthService, checkoutSrv checkoutCommands, checkoutQry checkoutQueries, fulfillmentSrv fulfillmentService, repricingSrv repricingService, shipSrv shippingService, reviewsSrv reviewsService, wishlistSrv wishlistService, promoSrv promoService, searchSrv searchService, storeSrv storeService, widgetSrv widgetService, imageStore imagestore.Store, uploadsDir string, sessionSecret []byte, cookieSecure, csrfEnabled bool, mailerSrv mailer.Mailer, baseURL string, rates fx.Rates, paymentsWebhookSecret string, paymentsSrv paymentsService, limiter rateLimiter, trustedProxiesConfig string, demoMode bool) application.BoundedContext {
 	store = newCookieStore(sessionSecret, cookieSecure)
 	setCSRFEnabled(csrfEnabled)
 	parsedProxies := parseTrustedProxies(trustedProxiesConfig)
@@ -288,6 +303,7 @@ func New(logger logrus.FieldLogger, cartSrv cartService, catalogSrv catalogServi
 			promoSrv:       promoSrv,
 			searchSrv:      searchSrv,
 			storeSrv:       storeSrv,
+			widgetSrv:      widgetSrv,
 			imageStore:     imageStore,
 			paymentsSrv:    paymentsSrv,
 			mailer:         mailerSrv,

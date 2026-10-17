@@ -2,18 +2,23 @@ package layout
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/bkielbasa/go-ecommerce/backend/internal/fx"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/imagestore"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/mailer"
 	"github.com/bkielbasa/go-ecommerce/backend/internal/observability"
+	pcapp "github.com/bkielbasa/go-ecommerce/backend/productcatalog/app"
 	pcdomain "github.com/bkielbasa/go-ecommerce/backend/productcatalog/domain"
+	widgetdomain "github.com/bkielbasa/go-ecommerce/backend/widget/domain"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/sirupsen/logrus"
@@ -57,6 +62,7 @@ type httpHandler struct {
 	promoSrv       promoService
 	searchSrv      searchService
 	storeSrv       storeService
+	widgetSrv      widgetService
 	imageStore     imagestore.Store
 	paymentsSrv    paymentsService
 	mailer         mailer.Mailer
@@ -363,6 +369,18 @@ func (m boundedContext) MuxRegister(r *mux.Router) {
 	r.HandleFunc("/admin/reviews/{id}/reject", observability.HTTPWrap(m.handler.AdminRejectReview, m.logger)).Methods("POST")
 	r.HandleFunc("/admin/reviews/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteReview, m.logger)).Methods("POST")
 
+	// Widgets admin: list + create on /admin/widgets; specific sub-paths
+	// registered before catch-all.
+	r.HandleFunc("/admin/widgets", observability.HTTPWrap(m.handler.AdminWidgets, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/widgets", observability.HTTPWrap(m.handler.AdminCreateWidget, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/new", observability.HTTPWrap(m.handler.AdminNewWidget, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/widgets/{id}/edit", observability.HTTPWrap(m.handler.AdminEditWidget, m.logger)).Methods(http.MethodGet)
+	r.HandleFunc("/admin/widgets/{id}/toggle", observability.HTTPWrap(m.handler.AdminToggleWidget, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/{id}/delete", observability.HTTPWrap(m.handler.AdminDeleteWidget, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/{id}/slides/{slideID}/delete", observability.HTTPWrap(m.handler.AdminDeleteWidgetSlide, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/{id}/slides", observability.HTTPWrap(m.handler.AdminAddWidgetSlide, m.logger)).Methods(http.MethodPost)
+	r.HandleFunc("/admin/widgets/{id}", observability.HTTPWrap(m.handler.AdminUpdateWidget, m.logger)).Methods(http.MethodPost)
+
 	// Promo codes admin: list + inline create on /admin/promo-codes; the
 	// /{code}/edit and /{code}/delete sub-paths are registered before the
 	// /{code} catch-all so the latter doesn't shadow them.
@@ -494,6 +512,20 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 	if _, ok := data["SearchQuery"]; !ok {
 		data["SearchQuery"] = ""
 	}
+
+	if _, ok := data["Widgets"]; !ok {
+		page := widgetdomain.PageGlobal
+		switch templateName {
+		case "home":
+			page = widgetdomain.PageHome
+		case "productCatalog/show":
+			page = widgetdomain.PageProduct
+		case "productCatalog/catalog":
+			page = widgetdomain.PageCategory
+		}
+		data["Widgets"] = handler.resolvePageWidgets(r.Context(), page)
+	}
+
 	err = session.Save(r, w)
 	if err != nil {
 		handler.logger.WithError(err).Error("cannot save session")
@@ -505,6 +537,99 @@ func (handler httpHandler) renderTemplate(w http.ResponseWriter, r *http.Request
 		handler.logger.WithError(err).Error("cannot execute template")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
+}
+
+type RenderedWidget struct {
+	Widget   widgetdomain.Widget
+	Products []pcdomain.Product
+}
+
+type PageWidgets struct {
+	Top    []RenderedWidget
+	Body   []RenderedWidget
+	Bottom []RenderedWidget
+}
+
+func (handler httpHandler) resolvePageWidgets(ctx context.Context, page widgetdomain.Page) PageWidgets {
+	var pw PageWidgets
+	if handler.widgetSrv == nil {
+		return pw
+	}
+
+	widgets, err := handler.widgetSrv.ListActiveByPages(ctx, widgetdomain.PageGlobal, page)
+	if err != nil {
+		handler.logger.WithError(err).Warn("cannot list active widgets for page")
+		return pw
+	}
+
+	sort.SliceStable(widgets, func(i, j int) bool {
+		return widgets[i].DisplayOrder < widgets[j].DisplayOrder
+	})
+
+	for _, w := range widgets {
+		rw := RenderedWidget{Widget: w}
+		switch w.Type {
+		case widgetdomain.TypeBannerCarousel:
+			// Slides are already populated on w.Slides
+		case widgetdomain.TypeNewArrivals:
+			if handler.catalogSrv != nil {
+				var cfg widgetdomain.NewArrivalsConfig
+				_ = json.Unmarshal(w.Config, &cfg)
+				limit := cfg.ProductLimit
+				if limit <= 0 {
+					limit = 8
+				}
+				prods, err := handler.catalogSrv.Newest(ctx, limit)
+				if err != nil {
+					handler.logger.WithError(err).Warn("cannot fetch newest products for widget")
+				} else {
+					rw.Products = prods
+				}
+			}
+		case widgetdomain.TypeCategoryProducts:
+			if handler.catalogSrv != nil {
+				var cfg widgetdomain.CategoryProductsConfig
+				_ = json.Unmarshal(w.Config, &cfg)
+				limit := cfg.ProductLimit
+				if limit <= 0 {
+					limit = 8
+				}
+				var categorySlug string
+				if cfg.CategoryID != "" {
+					cats, err := handler.catalogSrv.Categories(ctx)
+					if err == nil {
+						for _, c := range cats {
+							if c.ID() == cfg.CategoryID {
+								categorySlug = c.Slug()
+								break
+							}
+						}
+					}
+				}
+				if categorySlug != "" {
+					prods, err := handler.catalogSrv.List(ctx, pcapp.ProductQuery{CategorySlug: categorySlug})
+					if err != nil {
+						handler.logger.WithError(err).Warn("cannot fetch category products for widget")
+					} else {
+						if limit > 0 && len(prods) > limit {
+							prods = prods[:limit]
+						}
+						rw.Products = prods
+					}
+				}
+			}
+		}
+
+		switch w.Zone {
+		case widgetdomain.ZoneTop:
+			pw.Top = append(pw.Top, rw)
+		case widgetdomain.ZoneBody:
+			pw.Body = append(pw.Body, rw)
+		case widgetdomain.ZoneBottom:
+			pw.Bottom = append(pw.Bottom, rw)
+		}
+	}
+	return pw
 }
 
 // renderAdminTemplate mirrors renderTemplate but renders inside the dedicated

@@ -126,7 +126,7 @@ func TestDemoMode_FullLifecycle_E2E(t *testing.T) {
 
 	bcDemo := layout.New(
 		logger,
-		cartSrv, catalogSrv, nil, adminAuth, mockCmds, guardsCheckoutQry{}, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		cartSrv, catalogSrv, nil, adminAuth, mockCmds, guardsCheckoutQry{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		"", []byte("secret-key-32-bytes-long-12345"), false, false, nil, "", fx.Rates{}, "", nil, nil, "",
 		true, // demoMode = true
 	)
@@ -216,7 +216,7 @@ func TestDemoMode_FullLifecycle_E2E(t *testing.T) {
 
 	bcNoDemo := layout.New(
 		logger,
-		cartSrv, catalogSrvNoDemo, nil, adminAuthNoDemo, mockCmds, guardsCheckoutQry{}, nil, nil, nil, nil, nil, nil, nil, nil, nil,
+		cartSrv, catalogSrvNoDemo, nil, adminAuthNoDemo, mockCmds, guardsCheckoutQry{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 		"", []byte("secret-key-32-bytes-long-12345"), false, false, nil, "", fx.Rates{}, "", nil, nil, "",
 		false, // demoMode = false
 	)

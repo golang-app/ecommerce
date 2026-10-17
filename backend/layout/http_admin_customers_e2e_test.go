@@ -367,6 +367,7 @@ func setupAdminCustomersE2E(t *testing.T) (*mux.Router, *adminCustomersE2EMailer
 		nil, // promoSrv
 		nil, // searchSrv
 		nil, // storeSrv
+		nil, // bannerSrv
 		nil, // imageStore
 		"",  // uploadsDir
 		[]byte("test-secret-12345678901234567890"),
