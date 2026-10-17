@@ -10,9 +10,13 @@
             <h2 class="widget-hero__title">{{$s.Title}}</h2>
             {{if $s.Subtitle}}<p class="widget-hero__subtitle">{{$s.Subtitle}}</p>{{end}}
             {{if $s.PromoCode}}
-              <div class="widget-hero__promo">
+              <div class="widget-hero__promo" x-data="{ copied: false }">
                 <span>Use code <strong>{{$s.PromoCode}}</strong></span>
-                <button type="button" class="promo-code-btn" onclick="copySlidePromo(this, '{{$s.PromoCode}}')">copy</button>
+                <button type="button"
+                        class="promo-code-btn"
+                        :class="{ 'is-copied': copied }"
+                        @click="if (navigator.clipboard) { navigator.clipboard.writeText('{{$s.PromoCode}}'); } copied = true; setTimeout(() => copied = false, 2000)"
+                        x-text="copied ? 'copied!' : 'copy'">copy</button>
               </div>
             {{end}}
             {{if $s.LinkURL}}
@@ -23,20 +27,88 @@
           </div>
         </section>
       {{else if gt (len .Widget.Slides) 1}}
-        {{/* 2+ slides: Accessible Interactive Carousel */}}
-        <section class="carousel-widget" id="widget-{{.Widget.ID}}" aria-label="{{.Widget.Title}}" data-autoplay="5000">
+        {{/* 2+ slides: Accessible Interactive Carousel with Alpine.js */}}
+        <section class="carousel-widget"
+                 id="widget-{{.Widget.ID}}"
+                 aria-label="{{.Widget.Title}}"
+                 x-data="{
+                   current: 0,
+                   total: {{len .Widget.Slides}},
+                   timer: null,
+                   touchStartX: 0,
+                   touchEndX: 0,
+                   startAutoplay() {
+                     if (!this.timer) {
+                       this.timer = setInterval(() => this.next(), 5000);
+                     }
+                   },
+                   stopAutoplay() {
+                     if (this.timer) {
+                       clearInterval(this.timer);
+                       this.timer = null;
+                     }
+                   },
+                   resetAutoplay() {
+                     this.stopAutoplay();
+                     this.startAutoplay();
+                   },
+                   next() {
+                     this.current = (this.current + 1) % this.total;
+                   },
+                   prev() {
+                     this.current = (this.current - 1 + this.total) % this.total;
+                   },
+                   goTo(idx) {
+                     this.current = idx;
+                     this.resetAutoplay();
+                   },
+                   handleTouchStart(e) {
+                     if (e.touches && e.touches.length > 0) {
+                       this.touchStartX = e.touches[0].clientX;
+                     }
+                   },
+                   handleTouchEnd(e) {
+                     if (e.changedTouches && e.changedTouches.length > 0) {
+                       this.touchEndX = e.changedTouches[0].clientX;
+                       const diff = this.touchStartX - this.touchEndX;
+                       if (Math.abs(diff) >= 40) {
+                         if (diff > 0) {
+                           this.next();
+                         } else {
+                           this.prev();
+                         }
+                         this.resetAutoplay();
+                       }
+                     }
+                   }
+                 }"
+                 x-init="startAutoplay()"
+                 @mouseenter="stopAutoplay()"
+                 @mouseleave="startAutoplay()"
+                 @focusin="stopAutoplay()"
+                 @focusout="startAutoplay()"
+                 @touchstart.passive="handleTouchStart($event)"
+                 @touchend.passive="handleTouchEnd($event)">
           <div class="carousel-widget__viewport">
-            <div class="carousel-widget__track">
+            <div class="carousel-widget__track"
+                 :style="'transform: translateX(-' + (current * 100) + '%)'">
               {{range $i, $s := .Widget.Slides}}
-                <div class="carousel-widget__slide{{if eq $i 0}} is-active{{end}}" data-index="{{$i}}" {{if $s.ImageURL}}style="background-image: url('{{$s.ImageURL}}');"{{end}}>
+                <div class="carousel-widget__slide{{if eq $i 0}} is-active{{end}}"
+                     :class="{ 'is-active': current === {{$i}} }"
+                     data-index="{{$i}}"
+                     {{if $s.ImageURL}}style="background-image: url('{{$s.ImageURL}}');"{{end}}>
                   <div class="carousel-widget__content">
                     {{if $s.Badge}}<span class="widget-hero__badge">{{$s.Badge}}</span>{{end}}
                     <h2 class="carousel-widget__title">{{$s.Title}}</h2>
                     {{if $s.Subtitle}}<p class="carousel-widget__subtitle">{{$s.Subtitle}}</p>{{end}}
                     {{if $s.PromoCode}}
-                      <div class="carousel-widget__promo">
+                      <div class="carousel-widget__promo" x-data="{ copied: false }">
                         <span>Use code <strong>{{$s.PromoCode}}</strong></span>
-                        <button type="button" class="promo-code-btn" onclick="copySlidePromo(this, '{{$s.PromoCode}}')">copy</button>
+                        <button type="button"
+                                class="promo-code-btn"
+                                :class="{ 'is-copied': copied }"
+                                @click="if (navigator.clipboard) { navigator.clipboard.writeText('{{$s.PromoCode}}'); } copied = true; setTimeout(() => copied = false, 2000)"
+                                x-text="copied ? 'copied!' : 'copy'">copy</button>
                       </div>
                     {{end}}
                     {{if $s.LinkURL}}
@@ -49,11 +121,24 @@
               {{end}}
             </div>
           </div>
-          <button type="button" class="carousel-widget__arrow carousel-widget__arrow--prev" aria-label="Previous slide">&larr;</button>
-          <button type="button" class="carousel-widget__arrow carousel-widget__arrow--next" aria-label="Next slide">&rarr;</button>
+          <button type="button"
+                  class="carousel-widget__arrow carousel-widget__arrow--prev"
+                  aria-label="Previous slide"
+                  @click="prev(); resetAutoplay();">&larr;</button>
+          <button type="button"
+                  class="carousel-widget__arrow carousel-widget__arrow--next"
+                  aria-label="Next slide"
+                  @click="next(); resetAutoplay();">&rarr;</button>
           <div class="carousel-widget__dots" role="tablist">
             {{range $i, $s := .Widget.Slides}}
-              <button type="button" role="tab" class="carousel-widget__dot{{if eq $i 0}} is-active{{end}}" data-index="{{$i}}" aria-label="Go to slide {{add $i 1}}"></button>
+              <button type="button"
+                      role="tab"
+                      class="carousel-widget__dot{{if eq $i 0}} is-active{{end}}"
+                      :class="{ 'is-active': current === {{$i}} }"
+                      :aria-selected="current === {{$i}} ? 'true' : 'false'"
+                      data-index="{{$i}}"
+                      aria-label="Go to slide {{add $i 1}}"
+                      @click="goTo({{$i}})"></button>
             {{end}}
           </div>
         </section>
